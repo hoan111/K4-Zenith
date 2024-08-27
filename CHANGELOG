@@ -20,6 +20,9 @@
 
 before release:
   - Ha database nincs, akkor nem találja a shared-et, pluginba rakni a megtalálást stb logolással a modulokba
+  - Global module services a modulokba?
+  - Example files
+  - Ha nem global wgy storage gagy config akkor irja hogy nem global ne azt hogy nem talalta 
 
  release:
   - admin system
