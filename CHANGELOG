@@ -1,0 +1,10 @@
+before release:
+  - Ha database nincs, akkor nem találja a shared-et, pluginba rakni a megtalálást stb logolással a modulokba
+
+ release:
+  - admin system
+  - ban system
+  - flag clantags + chattags
+  - toplist ranks
+  - game management system
+  - more commands?

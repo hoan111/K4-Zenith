@@ -1,0 +1,23 @@
+{
+  "k4.general.prefix": "{silver}- {gold}+ Zenith + {silver}- ",
+
+  "k4.tag.all": "{white}[ALL] ",
+  "k4.tag.dead": "{grey}[DEAD] ",
+  "k4.tag.team.ct": "{lightblue}[CT] ",
+  "k4.tag.team.t": "{yellow}[T] ",
+  "k4.tag.team.spectator": "{white}[SPEC] ",
+  "k4.tag.team.unassigned": "{white}[UNASSIGNED] ",
+
+  "k4.command.help": "{silver}Expected Usage: {lime}!{0} {1}",
+  "k4.command.no-permission": "{lightred}You do not have permission to use this command.",
+  "k4.command.server-only": "{lightred}This command can only be used by the server.",
+  "k4.command.client-only": "{lightred}This command can only be used by clients.",
+
+  "k4.settings.title": " + Settings +",
+  "k4.settings.disabled": "Disabled",
+  "k4.settings.enabled": "Enabled",
+  "k4.settings.invalid-input": "Invalid input. Please enter a valid integer.",
+
+  "settings.ShowClanTags": "Display Clan Tag",
+  "settings.ShowChatTags": "Display Chat Tag"
+}

@@ -1,0 +1,13 @@
+{
+  "timestats.notification": "{silver}Your total playtime on the server is {gold}{0} days{silver}, {gold}{1} hours{silver}, and {gold}{2} minutes{silver}. We appreciate your time spent with us!",
+  "timestats.center.title": "+ Playtime Statistics +",
+  "timestats.center.total.label": "Total:",
+  "timestats.center.teams.label": "Teams:",
+  "timestats.center.teams.value": "T: {0} | CT: {1}",
+  "timestats.center.spectator.label": "Spectator:",
+  "timestats.center.status.label": "Status:",
+  "timestats.center.status.value": "Alive: {0} | Dead: {1}",
+  "timestats.time.format": "{0}d {1}h {2}m",
+
+  "settings.ShowPlaytime": "PlayTime Notifications"
+}
