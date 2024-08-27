@@ -5,25 +5,18 @@ using MySqlConnector;
 
 namespace Zenith.Models;
 
-public partial class Database
+public partial class Database(Plugin plugin)
 {
-	private readonly Plugin _plugin;
-
-	public Database(Plugin plugin)
-	{
-		_plugin = plugin;
-	}
-
 	public MySqlConnection CreateConnection()
 	{
 		MySqlConnectionStringBuilder builder = new MySqlConnectionStringBuilder
 		{
-			Server = _plugin.GetCoreConfig<string>("Database", "Hostname"),
-			UserID = _plugin.GetCoreConfig<string>("Database", "Username"),
-			Password = _plugin.GetCoreConfig<string>("Database", "Password"),
-			Database = _plugin.GetCoreConfig<string>("Database", "Database"),
-			Port = _plugin.GetCoreConfig<uint>("Database", "Port"),
-			SslMode = Enum.Parse<MySqlSslMode>(_plugin.GetCoreConfig<string>("Database", "Sslmode"), true),
+			Server = plugin.GetCoreConfig<string>("Database", "Hostname"),
+			UserID = plugin.GetCoreConfig<string>("Database", "Username"),
+			Password = plugin.GetCoreConfig<string>("Database", "Password"),
+			Database = plugin.GetCoreConfig<string>("Database", "Database"),
+			Port = plugin.GetCoreConfig<uint>("Database", "Port"),
+			SslMode = Enum.Parse<MySqlSslMode>(plugin.GetCoreConfig<string>("Database", "Sslmode"), true),
 		};
 
 		return new MySqlConnection(builder.ToString());
@@ -60,7 +53,7 @@ public partial class Database
                 WHERE `last_online` < DATE_SUB(NOW(), INTERVAL @PurgeDays DAY);";
 
 			var affectedRows = await connection.ExecuteAsync(query, new { PurgeDays = TablePurgeDays });
-			_plugin.Logger.LogInformation($"Purged {affectedRows} rows older than {TablePurgeDays} days from {table} table.");
+			plugin.Logger.LogInformation($"Purged {affectedRows} rows older than {TablePurgeDays} days from {table} table.");
 		}
 	}
 
@@ -69,7 +62,7 @@ public partial class Database
 		DateTime now = DateTime.Now;
 		TimeSpan timeUntilMidnight = now.Date.AddDays(1) - now;
 
-		_plugin.AddTimer((float)timeUntilMidnight.TotalSeconds, () =>
+		plugin.AddTimer((float)timeUntilMidnight.TotalSeconds, () =>
 		{
 			Task.Run(async () =>
 			{
@@ -79,7 +72,7 @@ public partial class Database
 				}
 				catch (Exception ex)
 				{
-					_plugin.Logger.LogError($"Midnight data purge failed: {ex.Message}");
+					plugin.Logger.LogError($"Midnight data purge failed: {ex.Message}");
 				}
 				finally
 				{
@@ -89,7 +82,7 @@ public partial class Database
 		});
 	}
 
-	public string TablePrefix => _plugin.GetCoreConfig<string>("Database", "TablePrefix");
-	public int TablePurgeDays => _plugin.GetCoreConfig<int>("Database", "TablePurgeDays");
+	public string TablePrefix => plugin.GetCoreConfig<string>("Database", "TablePrefix");
+	public int TablePurgeDays => plugin.GetCoreConfig<int>("Database", "TablePurgeDays");
 	public string GetConnectionString() => CreateConnection().ConnectionString;
 }

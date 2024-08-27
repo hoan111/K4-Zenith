@@ -37,7 +37,8 @@ namespace Zenith
 			char namecolor = enabledChatModifier ? player.GetNameColor() : ChatColors.ForTeam(player.Controller!.Team);
 			char chatcolor = enabledChatModifier ? player.GetChatColor() : ChatColors.Default;
 
-			string formattedMessage = FormatMessage(dead, team, tag, namecolor, chatcolor, playername, message, player.Controller!.Team);
+			string formattedMessage = ReplaceTags($" {dead}{team}{tag}{namecolor}{playername}{Localizer["k4.tag.separator"]}{chatcolor}{message}", player.Controller!.Team);
+
 			um.SetString("messagename", formattedMessage);
 			return HookResult.Changed;
 
@@ -58,11 +59,6 @@ namespace Zenith
 					CsTeam.CounterTerrorist => Localizer["k4.tag.team.ct"],
 					_ => Localizer["k4.tag.team.unassigned"],
 				};
-			}
-
-			static string FormatMessage(string deadIcon, string teamname, string tag, char namecolor, char chatcolor, string playername, string message, CsTeam team)
-			{
-				return ReplaceTags($" {deadIcon}{teamname}{tag}{namecolor}{playername}{ChatColors.Default}: {chatcolor}{message}", team);
 			}
 		}
 

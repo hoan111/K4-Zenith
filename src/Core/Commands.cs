@@ -30,34 +30,17 @@ namespace Zenith
 
 			RegisterZenithCommand("css_placeholderlist", "List all active placeholders in Zenith", (CCSPlayerController? player, CommandInfo command) =>
 			{
-				_pluginPlayerPlaceholders.ToList().ForEach(placeholder =>
-				{
-					if (player == null)
-					{
-						Server.PrintToConsole($"Plugin: {placeholder.Key}");
-					}
-					else
-					{
-						player.PrintToConsole($"Plugin: {placeholder.Key}");
-					}
+				ListAllPlaceholders(player: player);
+			}, CommandUsage.CLIENT_AND_SERVER, permission: "@zenith/admin");
 
-					placeholder.Value.ToList().ForEach(placeholder =>
-					{
-						if (player == null)
-						{
-							Server.PrintToConsole($"  {placeholder.Key}");
-						}
-						else
-						{
-							player.PrintToConsole($"  {placeholder.Key}");
-						}
-					});
+			RegisterZenithCommand("css_commandlist", "List all active commands in Zenith", (CCSPlayerController? player, CommandInfo command) =>
+			{
+				ListAllCommands(player: player);
+			}, CommandUsage.CLIENT_AND_SERVER, permission: "@zenith/admin");
 
-					if (player != null)
-					{
-						Player.Find(player)?.Print("All available placeholders have been printed to your console.");
-					}
-				});
+			RegisterZenithCommand("css_zreload", "Reload Zenith configurations manually", (CCSPlayerController? player, CommandInfo command) =>
+			{
+				ConfigManager.ReloadAllConfigs();
 			}, CommandUsage.CLIENT_AND_SERVER, permission: "@zenith/admin");
 		}
 	}

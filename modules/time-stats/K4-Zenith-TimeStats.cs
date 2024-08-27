@@ -184,13 +184,17 @@ public class Plugin : BasePlugin
 
 	private void CheckAndSendNotification(IPlayerServices playerServices)
 	{
+		int interval = _coreAccessor.GetValue<int>("Config", "NotificationInterval");
+		if (interval <= 0)
+			return;
+
 		bool showPlaytime = playerServices.GetSetting<bool>("ShowPlaytime");
 		if (!showPlaytime) return;
 
 		long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 		long lastNotification = playerServices.GetStorage<long>("LastNotification");
 
-		if (currentTime - lastNotification >= _coreAccessor.GetValue<int>("Config", "NotificationInterval"))
+		if (currentTime - lastNotification >= interval)
 		{
 			SendPlaytimeNotification(playerServices);
 			playerServices.SetStorage("LastNotification", currentTime);
@@ -236,7 +240,7 @@ public class Plugin : BasePlugin
 		<font color='#FF6666' class='fontSize-sm'>{Localizer["timestats.center.spectator.label"]}</font> <font color='#FFFFFF' class='fontSize-s'>{FormatTime(spectatorPlaytime)}</font><br>
 		<font color='#FF6666' class='fontSize-sm'>{Localizer["timestats.center.status.label"]}</font> <font color='#FFFFFF' class='fontSize-s'>{Localizer["timestats.center.status.value", FormatTime(alivePlaytime), FormatTime(deadPlaytime)]}</font>";
 
-		playerServices.PrintToCenter(htmlMessage, 10, ActionPriority.Low);
+		playerServices.PrintToCenter(htmlMessage, _coreAccessor.GetValue<int>("Core", "CenterMessageTime"), ActionPriority.Low);
 	}
 
 	private string FormatTime(long seconds)

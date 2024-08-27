@@ -1,6 +1,5 @@
 namespace Zenith
 {
-	using System.Reflection;
 	using CounterStrikeSharp.API;
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Core.Attributes;
@@ -44,6 +43,8 @@ namespace Zenith
 
 			Menu = new Menu.KitsuneMenu(this);
 
+			ValidateGeoLiteDatabase();
+
 			Initialize_API();
 			Initialize_Events();
 			Initialize_Settings();
@@ -64,12 +65,6 @@ namespace Zenith
 						player.ShowCenterMessage();
 				});
 			});
-
-			string databasePath = Path.Combine(ModuleDirectory, "GeoLite2-Country.mmdb");
-			if (!File.Exists(databasePath))
-			{
-				Logger.LogWarning("GeoLite2-Country.mmdb not found. Download the database from https://github.com/P3TERX/GeoLite.mmdb/releases/latest and place it in the module directory to enable country-based features.");
-			}
 
 			if (hotReload)
 			{

@@ -774,13 +774,18 @@ public class Plugin : BasePlugin
 
 			foreach (var playerStats in _plugin._playerStats.Values)
 			{
+				CsTeam team = playerStats.ZenithPlayer.Controller.Team;
+
 				playerStats.RoundsOverall++;
-				if (playerStats.ZenithPlayer.Controller.Team == CsTeam.Terrorist)
+				if (team == CsTeam.Terrorist)
 					playerStats.RoundsT++;
-				else if (playerStats.ZenithPlayer.Controller.Team == CsTeam.CounterTerrorist)
+				else if (team == CsTeam.CounterTerrorist)
 					playerStats.RoundsCT++;
 
-				if (playerStats.ZenithPlayer.Controller.TeamNum == @event.Winner)
+				if (team <= CsTeam.Spectator)
+					continue;
+
+				if ((int)team == @event.Winner)
 					playerStats.RoundWin++;
 				else
 					playerStats.RoundLose++;

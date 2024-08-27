@@ -18,7 +18,7 @@ public sealed partial class Plugin : BasePlugin
         string defaultRanksContent = @"[
     {
         ""Name"": ""Silver I"",
-        ""Point"": 1000, // From this amount of experience, the player is Silver I
+        ""Point"": 0, // From this amount of experience, the player is Silver I, if its 0, this will be the default rank
         ""ChatColor"": ""grey"", // Color code for the rank. Find color names here: https://github.com/roflmuffin/CounterStrikeSharp/blob/main/managed/CounterStrikeSharp.API/Modules/Utils/ChatColors.cs
         ""HexColor"": ""#C0C0C0"", // Hexadecimal color code for the rank
         ""Permissions"": [ // You can add permissions to the rank. If you don't want to add any, remove this array

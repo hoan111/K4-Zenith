@@ -55,6 +55,12 @@ namespace Zenith
 			public bool IsAlive
 				=> _player.IsAlive;
 
+			public bool IsVIP
+				=> _player.IsVIP;
+
+			public bool IsAdmin
+				=> _player.IsAdmin;
+
 			public void Print(string message)
 				=> _player.Print(message);
 
@@ -156,16 +162,16 @@ namespace Zenith
 				=> _plugin.RegisterZenithServerPlaceholder(key, valueFunc);
 
 			public void RegisterModuleConfig<T>(string groupName, string configName, string description, T defaultValue, ConfigFlag flags = ConfigFlag.None) where T : notnull
-				=> _plugin.RegisterModuleConfig(groupName, configName, description, defaultValue, flags);
+				=> Plugin.RegisterModuleConfig(groupName, configName, description, defaultValue, flags);
 
 			public T GetModuleConfigValue<T>(string groupName, string configName) where T : notnull
-				=> _plugin.GetModuleConfigValue<T>(groupName, configName);
+				=> Plugin.GetModuleConfigValue<T>(groupName, configName);
 
 			public void SetModuleConfigValue<T>(string groupName, string configName, T value) where T : notnull
-				=> _plugin.SetModuleConfigValue(groupName, configName, value);
+				=> Plugin.SetModuleConfigValue(groupName, configName, value);
 
 			public IModuleConfigAccessor GetModuleConfigAccessor()
-				=> _plugin.GetModuleConfigAccessor(this);
+				=> _plugin.GetModuleConfigAccessor();
 
 			public void DisposeModule()
 				=> _plugin.DisposeModule();

@@ -7,6 +7,7 @@
   "k4.tag.team.t": "{yellow}[T] ",
   "k4.tag.team.spectator": "{white}[SPEC] ",
   "k4.tag.team.unassigned": "{white}[UNASSIGNED] ",
+  "k4.tag.separator": "{default}: ",
 
   "k4.command.help": "{silver}Expected Usage: {lime}!{0} {1}",
   "k4.command.no-permission": "{lightred}You do not have permission to use this command.",

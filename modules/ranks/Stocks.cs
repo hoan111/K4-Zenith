@@ -39,10 +39,16 @@ public sealed partial class Plugin : BasePlugin
 		}
 	}
 
-	public void ModifyPlayerPoints(IPlayerServices player, decimal points, string eventKey, string? extraInfo = null)
+	public void ModifyPlayerPoints(IPlayerServices player, int points, string eventKey, string? extraInfo = null)
 	{
+		if (points == 0)
+			return;
+
+		if (player.IsVIP && points > 0)
+			points = (int)(points * (decimal)_configAccessor.GetValue<double>("Settings", "VipMultiplier"));
+
 		long currentPoints = player.GetStorage<long>("Points");
-		long newPoints = (long)(currentPoints + (points * (decimal)_configAccessor.GetValue<double>("Settings", "VipMultiplier")));
+		long newPoints = currentPoints + points;
 		player.SetStorage("Points", newPoints);
 
 		if (_configAccessor.GetValue<bool>("Settings", "ScoreboardScoreSync"))
@@ -56,11 +62,14 @@ public sealed partial class Plugin : BasePlugin
 			string eventReason = Localizer[eventKey];
 			string message = Localizer[pointChangePhrase, newPoints, Math.Abs(points), extraInfo ?? eventReason];
 
-			player.Print(message);
+			Server.NextFrame(() => player.Print(message));
 		}
 		else
 		{
-			_roundPoints[player.Controller] += (int)points;
+			if (!_roundPoints.ContainsKey(player.Controller))
+				_roundPoints[player.Controller] = 0;
+
+			_roundPoints[player.Controller] += points;
 		}
 	}
 
@@ -98,7 +107,7 @@ public sealed partial class Plugin : BasePlugin
 			<font color='{colorCode}' class='fontSize-m'>{Localizer[messageKey]}</font><br>
 			<font color='#FFFFFF' class='fontSize-m'>{Localizer["k4.phrases.newrank", rankName]}</font>";
 
-			player.PrintToCenter(htmlMessage, 5, ActionPriority.Normal);
+			player.PrintToCenter(htmlMessage, _configAccessor.GetValue<int>("Core", "CenterAlertTime"), ActionPriority.Normal);
 		}
 	}
 
@@ -142,7 +151,7 @@ public sealed partial class Plugin : BasePlugin
 		return (currentRank, nextRank);
 	}
 
-	public decimal CalculateDynamicPoints(IPlayerServices attacker, IPlayerServices victim, decimal basePoints)
+	public int CalculateDynamicPoints(IPlayerServices attacker, IPlayerServices victim, int basePoints)
 	{
 		if (!_configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints"))
 			return basePoints;
@@ -156,8 +165,8 @@ public sealed partial class Plugin : BasePlugin
 		if (attackerPoints <= 0 || victimPoints <= 0)
 			return basePoints;
 
-		double pointsRatio = Math.Clamp((double)victimPoints / attackerPoints, _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMinMultiplier"), _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMaxMultiplier"));
-		double result = pointsRatio * (double)basePoints;
-		return (decimal)Math.Round(result);
+		double pointsRatio = Math.Clamp(victimPoints / attackerPoints, _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMinMultiplier"), _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMaxMultiplier"));
+		double result = pointsRatio * basePoints;
+		return (int)Math.Round(result);
 	}
 }

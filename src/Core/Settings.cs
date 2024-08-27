@@ -36,7 +36,7 @@ namespace Zenith
 							object? defaultValue = setting.Value;
 							object? currentValue = zenithPlayer.GetSetting<object>(key);
 
-							if (currentValue == null) currentValue = defaultValue;
+							currentValue ??= defaultValue;
 
 							string displayName = moduleLocalizer != null ? $"{moduleLocalizer[$"settings.{key}"]}: " : $"{moduleID}.{key}: ";
 

@@ -125,41 +125,53 @@ namespace Zenith
 			Player.DisposeModuleData(this, callingPlugin);
 		}
 
-		public void ListAllPlaceholders(string? pluginName = null)
+		public void ListAllPlaceholders(string? pluginName = null, CCSPlayerController? player = null)
 		{
 			if (pluginName != null)
 			{
-				ListPlaceholdersForPlugin(pluginName);
+				ListPlaceholdersForPlugin(pluginName, player);
 			}
 			else
 			{
 				foreach (var plugin in _pluginPlayerPlaceholders.Keys.Union(_pluginServerPlaceholders.Keys).Distinct())
 				{
-					ListPlaceholdersForPlugin(plugin);
+					ListPlaceholdersForPlugin(plugin, player);
 				}
 			}
 		}
 
-		private void ListPlaceholdersForPlugin(string pluginName)
+		private void ListPlaceholdersForPlugin(string pluginName, CCSPlayerController? player = null)
 		{
-			Logger.LogInformation($"Placeholders for plugin '{pluginName}':");
+			PrintToConsole($"Placeholders for plugin '{pluginName}':", player);
 
 			if (_pluginPlayerPlaceholders.TryGetValue(pluginName, out var playerPlaceholders))
 			{
-				Logger.LogInformation("  Player placeholders:");
+				PrintToConsole("  Player placeholders:", player);
 				foreach (var placeholder in playerPlaceholders.Keys)
 				{
-					Logger.LogInformation($"    - {placeholder}");
+					PrintToConsole($"    - {placeholder}", player);
 				}
 			}
 
 			if (_pluginServerPlaceholders.TryGetValue(pluginName, out var serverPlaceholders))
 			{
-				Logger.LogInformation("  Server placeholders:");
+				PrintToConsole("  Server placeholders:", player);
 				foreach (var placeholder in serverPlaceholders.Keys)
 				{
-					Logger.LogInformation($"    - {placeholder}");
+					PrintToConsole($"    - {placeholder}", player);
 				}
+			}
+		}
+
+		public static void PrintToConsole(string text, CCSPlayerController? player)
+		{
+			if (player == null)
+			{
+				Server.PrintToConsole(text);
+			}
+			else
+			{
+				player.PrintToConsole(text);
 			}
 		}
 
@@ -182,15 +194,13 @@ namespace Zenith
 
 			try
 			{
-				using (var reader = new DatabaseReader(databasePath))
-				{
-					var response = reader.Country(ipAddress);
+				using var reader = new DatabaseReader(databasePath);
+				var response = reader.Country(ipAddress);
 
-					string shortName = response.Country.IsoCode ?? "??";
-					string longName = response.Country.Name ?? "Unknown";
+				string shortName = response.Country.IsoCode ?? "??";
+				string longName = response.Country.Name ?? "Unknown";
 
-					return (shortName, longName);
-				}
+				return (shortName, longName);
 			}
 			catch (Exception ex)
 			{

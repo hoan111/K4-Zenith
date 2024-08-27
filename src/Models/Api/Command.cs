@@ -65,31 +65,31 @@ namespace Zenith
 			}
 		}
 
-		public void ListAllCommands(string? pluginName = null)
+		public void ListAllCommands(string? pluginName = null, CCSPlayerController? player = null)
 		{
 			if (pluginName != null)
 			{
 				if (_pluginCommands.TryGetValue(pluginName, out var pluginCommandDict))
 				{
-					Logger.LogInformation($"Commands for plugin '{pluginName}':");
+					PrintToConsole($"Commands for plugin '{pluginName}':", player);
 					foreach (var command in pluginCommandDict.Keys)
 					{
-						Logger.LogInformation($"  - {command}");
+						PrintToConsole($"  - {command}", player);
 					}
 				}
 				else
 				{
-					Logger.LogWarning($"No commands found for plugin '{pluginName}'.");
+					PrintToConsole($"No commands found for plugin '{pluginName}'.", player);
 				}
 			}
 			else
 			{
 				foreach (var pluginEntry in _pluginCommands)
 				{
-					Logger.LogInformation($"Commands for plugin '{pluginEntry.Key}':");
+					PrintToConsole($"Commands for plugin '{pluginEntry.Key}':", player);
 					foreach (var command in pluginEntry.Value.Keys)
 					{
-						Logger.LogInformation($"  - {command}");
+						PrintToConsole($"  - {command}", player);
 					}
 				}
 			}

@@ -12,7 +12,7 @@ namespace Zenith_Ranks
 	public sealed partial class Plugin : BasePlugin
 	{
 		private EventManager? _eventManager;
-		Dictionary<string, (string targetProperty, decimal points)> _experienceEvents = new();
+		Dictionary<string, (string targetProperty, int points)> _experienceEvents = new();
 
 		private void Initialize_Events()
 		{
@@ -50,21 +50,21 @@ namespace Zenith_Ranks
 							case 2:
 								{
 									player.Controller.CompetitiveRankType = 12;
-									player.Controller.CompetitiveRanking = rankId >= 19 ? 18 : rankId - 1;
+									player.Controller.CompetitiveRanking = rankId >= 19 ? 18 : rankId;
 									break;
 								}
 							// Wingman
 							case 3:
 								{
 									player.Controller.CompetitiveRankType = 7;
-									player.Controller.CompetitiveRanking = rankId >= 19 ? 18 : rankId - 1;
+									player.Controller.CompetitiveRanking = rankId >= 19 ? 18 : rankId;
 									break;
 								}
 							// Danger Zone (!! DOES NOT WORK !!)
 							case 4:
 								{
 									player.Controller.CompetitiveRankType = 10;
-									player.Controller.CompetitiveRanking = rankId >= 16 ? 15 : rankId - 1;
+									player.Controller.CompetitiveRanking = rankId >= 16 ? 15 : rankId;
 									break;
 								}
 							// Custom Rank
@@ -74,7 +74,7 @@ namespace Zenith_Ranks
 									int rankBase = _configAccessor.GetValue<int>("Settings", "RankBase");
 									int rankMargin = _configAccessor.GetValue<int>("Settings", "RankMargin");
 
-									int rank = rankId > rankMax ? rankBase + rankMax - rankMargin : rankBase + (rankId - rankMargin - 1);
+									int rank = rankId > rankMax ? rankBase + rankMax - rankMargin : rankBase + (rankId - rankMargin);
 
 									player.Controller.CompetitiveRankType = 12;
 
@@ -207,7 +207,7 @@ namespace Zenith_Ranks
 				return HookResult.Continue;
 			}
 
-			private void HandleEvent<T>(string eventName, T gameEvent, decimal points) where T : GameEvent
+			private void HandleEvent<T>(string eventName, T gameEvent, int points) where T : GameEvent
 			{
 				if (eventName == "EventRoundEnd")
 				{
@@ -229,9 +229,13 @@ namespace Zenith_Ranks
 				{
 					foreach (var player in _plugin.GetValidPlayers())
 					{
-						bool isWinner = player.Controller.TeamNum == roundEndEvent.Winner;
-						decimal points = isWinner ? _plugin._configAccessor.GetValue<int>("Points", "RoundWin") : _plugin._configAccessor.GetValue<int>("Points", "RoundLose");
-						_plugin.ModifyPlayerPoints(player, points, isWinner ? "k4.events.roundwin" : "k4.events.roundloss");
+						int teamNum = player.Controller.TeamNum;
+						if (teamNum <= (int)CsTeam.Spectator)
+							continue;
+
+						bool isWinner = teamNum == roundEndEvent.Winner;
+						int points = isWinner ? _plugin._configAccessor.GetValue<int>("Points", "RoundWin") : _plugin._configAccessor.GetValue<int>("Points", "RoundLose");
+						_plugin.ModifyPlayerPoints(player, points, isWinner ? "k4.events.roundwin" : "k4.events.roundlose");
 					}
 				}
 			}
@@ -245,7 +249,7 @@ namespace Zenith_Ranks
 
 					if (victim != null)
 					{
-						if (attacker == null || attacker.Controller.SteamID == victim.Controller.SteamID)
+						if (deathEvent.Attacker == null || deathEvent.Attacker.SteamID == victim.Controller.SteamID)
 						{
 							_plugin.ModifyPlayerPoints(victim, _plugin._configAccessor.GetValue<int>("Points", "Suicide"), "k4.events.suicide");
 						}
@@ -254,10 +258,10 @@ namespace Zenith_Ranks
 							if (!_plugin._configAccessor.GetValue<bool>("Settings", "PointsForBots") && deathEvent.Userid?.IsBot == true)
 								goto AttackerDeathEvent;
 
-							string? eventInfo = _plugin._configAccessor.GetValue<bool>("Settings", "ExtendedDeathMessages")
+							string? eventInfo = attacker != null && _plugin._configAccessor.GetValue<bool>("Settings", "ExtendedDeathMessages")
 								? _plugin.Localizer["k4.phrases.death-extended", attacker.Name, attacker.GetStorage<long>("Points")] ?? string.Empty
 								: null;
-							_plugin.ModifyPlayerPoints(victim, _plugin._configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints") ? _plugin.CalculateDynamicPoints(attacker, victim, _plugin._configAccessor.GetValue<int>("Points", "Death")) : _plugin._configAccessor.GetValue<int>("Points", "Death"), "k4.events.playerdeath", eventInfo);
+							_plugin.ModifyPlayerPoints(victim, attacker != null && _plugin._configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints") ? _plugin.CalculateDynamicPoints(attacker, victim, _plugin._configAccessor.GetValue<int>("Points", "Death")) : _plugin._configAccessor.GetValue<int>("Points", "Death"), "k4.events.playerdeath", eventInfo);
 						}
 
 						ResetKillStreak(victim);
@@ -376,7 +380,7 @@ namespace Zenith_Ranks
 					killStreak++;
 					_playerKillStreaks[steamId] = (killStreak, currentTime);
 
-					decimal streakPoints = GetKillStreakPoints(killStreak);
+					int streakPoints = GetKillStreakPoints(killStreak);
 					if (streakPoints != 0)
 					{
 						_plugin.ModifyPlayerPoints(attacker, streakPoints, $"k4.events.killstreak{killStreak}");
@@ -388,7 +392,7 @@ namespace Zenith_Ranks
 				}
 			}
 
-			private decimal GetKillStreakPoints(int killStreak)
+			private int GetKillStreakPoints(int killStreak)
 			{
 				return killStreak switch
 				{
@@ -413,7 +417,7 @@ namespace Zenith_Ranks
 				_playerKillStreaks.Remove(steamId);
 			}
 
-			private void HandleRegularEvent<T>(string eventName, string targetProperty, T gameEvent, decimal points) where T : GameEvent
+			private void HandleRegularEvent<T>(string eventName, string targetProperty, T gameEvent, int points) where T : GameEvent
 			{
 				var targetProp = typeof(T).GetProperty(targetProperty);
 				if (targetProp != null)
@@ -445,7 +449,7 @@ namespace Zenith_Ranks
 				}
 			}
 
-			private void RewardTeam(CsTeam team, decimal points, string eventKey)
+			private void RewardTeam(CsTeam team, int points, string eventKey)
 			{
 				foreach (var player in _plugin.GetValidPlayers())
 				{

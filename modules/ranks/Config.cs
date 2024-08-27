@@ -6,7 +6,7 @@ namespace Zenith_Ranks;
 
 public sealed partial class Plugin : BasePlugin
 {
-	private IModuleConfigAccessor _configAccessor = null!;
+	public IModuleConfigAccessor _configAccessor = null!;
 
 	private void RegisterConfigs(IModuleServices _moduleServices)
 	{

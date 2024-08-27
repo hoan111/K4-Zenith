@@ -9,7 +9,7 @@ namespace Zenith
 
 		private void RegisterCoreConfigs()
 		{
-			_coreAccessor = GetModuleConfigAccessor(this);
+			_coreAccessor = GetModuleConfigAccessor();
 
 			// Database settings
 			RegisterModuleConfig("Database", "Hostname", "The IP address or hostname of the database", "localhost", ConfigFlag.Protected | ConfigFlag.Locked);
@@ -35,6 +35,8 @@ namespace Zenith
 			RegisterModuleConfig("Core", "AutoReload", "Whether to enable auto-reload of configurations. When config values are changed in a file, they are automatically changed on the server.", true);
 			RegisterModuleConfig("Core", "FreezeInMenu", "Whether to freeze the player when opening the menu.", true, ConfigFlag.Global);
 			RegisterModuleConfig("Core", "ShowDevelopers", "Support the developers by showing their names in the menu.", true, ConfigFlag.Global);
+			RegisterModuleConfig("Core", "CenterMessageTime", "The time in seconds for how long the center message is displayed by default.", 10, ConfigFlag.Global);
+			RegisterModuleConfig("Core", "CenterAlertTime", "The time in seconds for how long the center alert is displayed by default.", 5, ConfigFlag.Global);
 
 			// Apply global settings
 			ConfigManager.GlobalChangeTracking = GetModuleConfigValue<bool>("Core", "GlobalChangeTracking");

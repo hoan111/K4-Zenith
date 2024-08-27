@@ -88,6 +88,7 @@ public sealed partial class Plugin : BasePlugin
 			if (playerServices == null) return;
 
 			var (determinedRank, _) = DetermineRanks(playerServices.GetStorage<int>("Points"));
+			playerServices.SetStorage("Rank", determinedRank?.Name);
 
 			playerServices.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
 		}

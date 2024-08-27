@@ -1,3 +1,23 @@
+-- 2024.08.27 - 1.0.1
+  - feat: Option to change center alert time globally
+  - feat: Option to change center message time globally
+  - feat: Added css_zreload command to reload all module settings manually
+  - feat: Added possibility to modify chat separator (customise : between name and message)
+  - feat: Added css_commandlist to list all available commands in Zenith and modules
+  - feat: Added automation to download GeoLite2-Country.mmdb if not exists
+  - fix: Round lose translation was wrongly set
+  - fix: Round lose rank event triggered for spectators
+  - fix: Round lose stats event triggered for spectators
+  - fix: Rank VIP multiplier was applied to all modify
+  - fix: Rank VIP multiplier was applied to negative points aswell
+  - fix: Point modify displayed points, but not the VIP multiplier applied points
+  - fix: Scoreboard shown a lower rank than the player had
+  - fix: TimeStats notifications now can be disabled with 0 and -1 aswell
+  - fix: Added NextFrame to rank event point messages to fix some not showing up
+  - fix: Rank event point set to null shows the change messages
+  - fix: Rank modify points round summary error log
+  - optimise: Changed some functions to use less code
+
 before release:
   - Ha database nincs, akkor nem találja a shared-et, pluginba rakni a megtalálást stb logolással a modulokba
 

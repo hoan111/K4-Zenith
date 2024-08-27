@@ -34,6 +34,6 @@ public sealed partial class Plugin : BasePlugin
 			<font color='#FF6666' class='fontSize-sm'>{Localizer["k4.ranks.info.pointstonext"]}</font> <font color='#FFFFFF' class='fontSize-s'>{pointsToNextRank}</font>";
 		}
 
-		playerServices.PrintToCenter(htmlMessage, 10, ActionPriority.Low);
+		playerServices.PrintToCenter(htmlMessage, _configAccessor.GetValue<int>("Core", "CenterMessageTime"), ActionPriority.Low);
 	}
 }

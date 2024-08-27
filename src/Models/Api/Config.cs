@@ -32,37 +32,37 @@ namespace Zenith
 			}
 		}
 
-		public ModuleConfigAccessor GetModuleConfigAccessor(object moduleInstance)
+		public ModuleConfigAccessor GetModuleConfigAccessor()
 		{
 			string callerPlugin = CallerIdentifier.GetCallingPluginName();
 
 			Logger.LogInformation($"Module {callerPlugin} requested config accessor.");
 
-			return _configManager.GetModuleAccessor(callerPlugin, moduleInstance);
+			return _configManager.GetModuleAccessor(callerPlugin);
 		}
 
-		public void RegisterModuleConfig<T>(string groupName, string configName, string description, T defaultValue, ConfigFlag flags = ConfigFlag.None) where T : notnull
+		public static void RegisterModuleConfig<T>(string groupName, string configName, string description, T defaultValue, ConfigFlag flags = ConfigFlag.None) where T : notnull
 		{
 			string callerPlugin = CallerIdentifier.GetCallingPluginName();
-			_configManager.RegisterConfig(callerPlugin, groupName, configName, description, defaultValue, flags);
+			ConfigManager.RegisterConfig(callerPlugin, groupName, configName, description, defaultValue, flags);
 		}
 
-		public T GetModuleConfigValue<T>(string groupName, string configName) where T : notnull
+		public static T GetModuleConfigValue<T>(string groupName, string configName) where T : notnull
 		{
 			string callerPlugin = CallerIdentifier.GetCallingPluginName();
-			return _configManager.GetConfigValue<T>(callerPlugin, groupName, configName);
+			return ConfigManager.GetConfigValue<T>(callerPlugin, groupName, configName);
 		}
 
-		public void SetModuleConfigValue<T>(string groupName, string configName, T value) where T : notnull
+		public static void SetModuleConfigValue<T>(string groupName, string configName, T value) where T : notnull
 		{
 			string callerPlugin = CallerIdentifier.GetCallingPluginName();
-			_configManager.SetConfigValue(callerPlugin, groupName, configName, value);
+			ConfigManager.SetConfigValue(callerPlugin, groupName, configName, value);
 		}
 
-		public bool IsModuleConfigPrimitive(string groupName, string configName)
+		public static bool IsModuleConfigPrimitive(string groupName, string configName)
 		{
 			string callerPlugin = CallerIdentifier.GetCallingPluginName();
-			return _configManager.IsPrimitiveConfig(callerPlugin, groupName, configName);
+			return ConfigManager.IsPrimitiveConfig(callerPlugin, groupName, configName);
 		}
 	}
 
@@ -79,12 +79,12 @@ namespace Zenith
 
 		public T GetValue<T>(string groupName, string configName) where T : notnull
 		{
-			return _configManager.GetConfigValue<T>(_moduleName, groupName, configName);
+			return ConfigManager.GetConfigValue<T>(_moduleName, groupName, configName);
 		}
 
 		public void SetValue<T>(string groupName, string configName, T value) where T : notnull
 		{
-			_configManager.SetConfigValue(_moduleName, groupName, configName, value);
+			ConfigManager.SetConfigValue(_moduleName, groupName, configName, value);
 		}
 	}
 
@@ -136,7 +136,7 @@ namespace Zenith
 			SetupFileWatcher();
 		}
 
-		public ModuleConfigAccessor GetModuleAccessor(string moduleName, object moduleInstance)
+		public ModuleConfigAccessor GetModuleAccessor(string moduleName)
 		{
 			return new ModuleConfigAccessor(moduleName, this);
 		}
@@ -145,7 +145,7 @@ namespace Zenith
 		{
 			_watcher = new FileSystemWatcher(_baseConfigDirectory)
 			{
-				NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName,
+				NotifyFilter = NotifyFilters.LastWrite,
 				Filter = "*.yaml",
 				IncludeSubdirectories = true,
 				EnableRaisingEvents = GlobalAutoReloadEnabled
@@ -166,6 +166,9 @@ namespace Zenith
 
 		private static void OnConfigFileChanged(object sender, FileSystemEventArgs e)
 		{
+			if (!GlobalAutoReloadEnabled)
+				return;
+
 			var relativePath = Path.GetRelativePath(_baseConfigDirectory, e.FullPath);
 			var pathParts = relativePath.Split(Path.DirectorySeparatorChar);
 			if (pathParts.Length >= 2 && pathParts[0] == "modules")
@@ -179,28 +182,42 @@ namespace Zenith
 			}
 		}
 
-		private static void ReloadModuleConfig(string moduleName)
+		private static void ReloadModuleConfig(string moduleName, bool force = false)
 		{
-			if (_moduleConfigs.TryGetValue(moduleName, out var moduleConfig) && moduleConfig.AutoReload)
-			{
+			if (!GlobalAutoReloadEnabled)
+				return;
+
+			if (!force)
 				Logger.LogInformation($"Reloading config for module {moduleName}");
 
-				var newConfig = LoadModuleConfig(moduleName);
-				_moduleConfigs[moduleName] = newConfig;
+			var newConfig = LoadModuleConfig(moduleName);
+			_moduleConfigs[moduleName] = newConfig;
 
-				foreach (var group in newConfig.Groups)
+			foreach (var group in newConfig.Groups)
+			{
+				foreach (var config in group.Items)
 				{
-					foreach (var config in group.Items)
-					{
-						_cachedValues[$"{moduleName}:{group.Name}:{config.Name}"] = config.CurrentValue;
-					}
+					_cachedValues[$"{moduleName}:{group.Name}:{config.Name}"] = config.CurrentValue;
 				}
-
-				Logger.LogInformation($"Config reloaded for module {moduleName}");
 			}
+
+			if (!force)
+				Logger.LogInformation($"Config reloaded for module {moduleName}");
 		}
 
-		public void RegisterConfig<T>(string moduleName, string groupName, string configName, string description, T defaultValue, ConfigFlag flags) where T : notnull
+		public static void ReloadAllConfigs()
+		{
+			Logger.LogWarning("Reloading all Zenith configurations...");
+
+			foreach (var moduleName in _moduleConfigs.Keys)
+			{
+				ReloadModuleConfig(moduleName, true);
+			}
+
+			Logger.LogInformation("All Zenith configurations reloaded.");
+		}
+
+		public static void RegisterConfig<T>(string moduleName, string groupName, string configName, string description, T defaultValue, ConfigFlag flags) where T : notnull
 		{
 			var moduleConfig = _moduleConfigs.GetOrAdd(moduleName, k => LoadModuleConfig(moduleName));
 
@@ -244,12 +261,10 @@ namespace Zenith
 
 			_cachedValues[$"{moduleName}:{groupName}:{configName}"] = existingConfig?.CurrentValue ?? defaultValue;
 
-			moduleConfig.AutoReload |= flags.HasFlag(ConfigFlag.AutoReload);
-
 			SaveModuleConfig(moduleName);
 		}
 
-		public T GetConfigValue<T>(string callerModule, string groupName, string configName) where T : notnull
+		public static T GetConfigValue<T>(string callerModule, string groupName, string configName) where T : notnull
 		{
 			string cacheKey = $"{callerModule}:{groupName}:{configName}";
 			if (_cachedValues.TryGetValue(cacheKey, out var cachedValue) && cachedValue != null)
@@ -302,7 +317,7 @@ namespace Zenith
 			throw new KeyNotFoundException($"Configuration '{groupName}.{configName}' not found for module '{callerModule}'");
 		}
 
-		public void SetConfigValue<T>(string callerModule, string groupName, string configName, T value) where T : notnull
+		public static void SetConfigValue<T>(string callerModule, string groupName, string configName, T value) where T : notnull
 		{
 			foreach (var moduleConfig in _moduleConfigs.Values)
 			{
@@ -627,7 +642,7 @@ namespace Zenith
 			}
 		}
 
-		public bool IsPrimitiveConfig(string callerModule, string groupName, string configName)
+		public static bool IsPrimitiveConfig(string callerModule, string groupName, string configName)
 		{
 			foreach (var moduleConfig in _moduleConfigs.Values)
 			{

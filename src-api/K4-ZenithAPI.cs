@@ -41,6 +41,16 @@ namespace ZenithAPI
 		bool IsAlive { get; }
 
 		/// <summary>
+		/// Checks if the player is a VIP.
+		/// </summary>
+		bool IsVIP { get; }
+
+		/// <summary>
+		/// Checks if the player is an admin.
+		/// </summary>
+		bool IsAdmin { get; }
+
+		/// <summary>
 		/// Prints a message to the player's chat.
 		/// </summary>
 		/// <param name="message">The message to print.</param>
