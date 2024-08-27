@@ -1,17 +1,19 @@
 #
-# The file was created by KitsuneLab - Entity (@Sples1)
+# The file was created by KitsuneLab - K4ryuu
 #
 ### KitsuneLab ###
 # Folders
-.build/
-.vanish/
-
-# SourcePawn
-*.smx
+bin/
+obj/
+Zenith/
 
 # Others
 *.exe
 *.dat
+*.yaml
+*.zip
+*.rar
+*.sln
 
 ### VisualStudioCode ###
 .vscode/
@@ -56,8 +58,3 @@ $RECYCLE.BIN/
 .DS_Store
 .AppleDouble/
 __MACOSX/
-
-# Remove dotnet normal build
-bin/
-obj/
-*.sln
