@@ -18,6 +18,9 @@ namespace Zenith
 
 		public HookResult OnMessage(UserMessage um)
 		{
+			if (!GetCoreConfig<bool>("Core", "HookChatMessages"))
+				return HookResult.Continue;
+
 			int entity = um.ReadInt("entityindex");
 
 			Player? player = Player.Find(Utilities.GetPlayerFromIndex(entity));
@@ -33,7 +36,7 @@ namespace Zenith
 			char namecolor = enabledChatModifier ? player.GetNameColor() : ChatColors.ForTeam(player.Controller!.Team);
 			char chatcolor = enabledChatModifier ? player.GetChatColor() : ChatColors.Default;
 
-			um.SetString("messagename", FormatMessage(player.Controller!, $" {dead}{team}{tag}{namecolor}{um.ReadString("param1")}{Localizer["k4.tag.separator"]}{chatcolor}{um.ReadString("param2")}"));
+			um.SetString("messagename", FormatMessage(player.Controller!, $" {dead}{team}{tag}{namecolor}{um.ReadString("param1")}{RemoveLeadingSpaceBeforeColorCode(Localizer["k4.tag.separator"])}{chatcolor}{um.ReadString("param2")}"));
 			return HookResult.Changed;
 
 			static string FormatMessage(CCSPlayerController player, string message)

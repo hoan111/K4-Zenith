@@ -13,8 +13,8 @@ namespace Zenith
 	{
 		public ModuleServices? _moduleServices;
 
-		public static PlayerCapability<IPlayerServices> Capability_PlayerServices { get; } = new("zenith:player-services");
-		public static PluginCapability<IModuleServices> Capability_ModuleServices { get; } = new("zenith:module-services");
+		public PlayerCapability<IPlayerServices> Capability_PlayerServices { get; } = new("zenith:player-services");
+		public PluginCapability<IModuleServices> Capability_ModuleServices { get; } = new("zenith:module-services");
 
 		public void Initialize_API()
 		{

@@ -189,16 +189,9 @@ public sealed partial class Player
 	public void EnforcePluginValues()
 	{
 		if (!GetSetting<bool>("ShowClanTags"))
-		{
 			return;
-		}
 
-		string? clanTag = _clanTag?.Item1;
-		if (clanTag == null)
-		{
-			clanTag = IsAdmin ? _plugin.GetCoreConfig<string>("Modular", "AdminClantagFormat") : IsVIP ? _plugin.GetCoreConfig<string>("Modular", "VIPClantagFormat") : _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat");
-		}
-
+		string? clanTag = (_clanTag?.Item1) ?? (IsAdmin ? _plugin.GetCoreConfig<string>("Modular", "AdminClantagFormat") : IsVIP ? _plugin.GetCoreConfig<string>("Modular", "VIPClantagFormat") : _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat"));
 		if (clanTag != null)
 		{
 			Controller!.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);

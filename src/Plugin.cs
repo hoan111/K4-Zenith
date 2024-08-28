@@ -74,19 +74,30 @@ namespace Zenith
 					.Where(d => Path.GetFileName(d).ToLower().Contains("zenith") && d != ModuleDirectory)
 					.ToArray();
 
-				if (directories.Length > 0)
-					foreach (var directory in directories)
-						Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(directory)}");
-
 				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player => new Player(this, player, true));
 				Player.LoadAllOnlinePlayerData(this);
 
+				// ? As css_plugins reload dont find plugin by name, we update their last updated time which triggers hotReload if enabled.
+				// ? If hotReload is disabled, then the core wont be reloaded aswell so wont trigger at all.
 				AddTimer(2.0f, () =>
 				{
-					if (directories.Length > 0)
-						foreach (var directory in directories)
-							Server.ExecuteCommand($"css_plugins load {Path.GetFileNameWithoutExtension(directory)}");
-				}, TimerFlags.STOP_ON_MAPCHANGE);
+					foreach (var dir in directories)
+					{
+						string dllPath = Path.Combine(dir, $"{Path.GetFileNameWithoutExtension(dir)}.dll");
+						if (File.Exists(dllPath))
+						{
+							try
+							{
+								File.SetLastWriteTime(dllPath, DateTime.Now);
+							}
+							catch (Exception ex)
+							{
+								Logger.LogError($"Failed to update {dllPath}: {ex.Message}");
+							}
+						}
+						Server.ExecuteCommand($"css_plugins restart {Path.GetFileNameWithoutExtension(dir)}");
+					}
+				});
 
 				AddTimer(3.0f, () =>
 				{
@@ -103,6 +114,7 @@ namespace Zenith
 		{
 			Player.Dispose(this);
 			RemoveAllCommands();
+			RemoveModulePlaceholders();
 			ConfigManager.Dispose();
 		}
 	}

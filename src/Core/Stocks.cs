@@ -5,13 +5,14 @@ using Microsoft.Extensions.Logging;
 using MaxMind.GeoIP2;
 using Zenith.Models;
 using System.Reflection;
+using CounterStrikeSharp.API.Modules.Utils;
 
 namespace Zenith
 {
 	public sealed partial class Plugin : BasePlugin
 	{
-		private readonly Dictionary<string, Dictionary<string, Func<CCSPlayerController, string>>> _pluginPlayerPlaceholders = new();
-		private readonly Dictionary<string, Dictionary<string, Func<string>>> _pluginServerPlaceholders = new();
+		private readonly Dictionary<string, Dictionary<string, Func<CCSPlayerController, string>>> _pluginPlayerPlaceholders = [];
+		private readonly Dictionary<string, Dictionary<string, Func<string>>> _pluginServerPlaceholders = [];
 
 		private void Initialize_Placeholders()
 		{
@@ -61,14 +62,35 @@ namespace Zenith
 			return text;
 		}
 
+		public string RemoveLeadingSpaceBeforeColorCode(string input)
+		{
+			if (string.IsNullOrEmpty(input) || input.Length < 2)
+				return input;
+
+			if (input[0] == ' ' && IsColorCode(input[1]))
+				return input.Substring(1);
+
+			return input;
+		}
+
+		private bool IsColorCode(char c)
+		{
+			return typeof(ChatColors)
+				.GetFields(BindingFlags.Public | BindingFlags.Static)
+				.Where(f => f.FieldType == typeof(char))
+				.Select(f => (char?)f.GetValue(null))
+				.Contains(c);
+		}
+
 		public void RegisterZenithPlayerPlaceholder(string key, Func<CCSPlayerController, string> valueFunc)
 		{
 			string callingPlugin = CallerIdentifier.GetCallingPluginName();
 
 			if (!_pluginPlayerPlaceholders.TryGetValue(callingPlugin, out var placeholders))
 			{
-				placeholders = new Dictionary<string, Func<CCSPlayerController, string>>();
+				placeholders = [];
 				_pluginPlayerPlaceholders[callingPlugin] = placeholders;
+				return;
 			}
 
 			if (placeholders.ContainsKey(key))
@@ -85,7 +107,7 @@ namespace Zenith
 
 			if (!_pluginServerPlaceholders.TryGetValue(callingPlugin, out var placeholders))
 			{
-				placeholders = new Dictionary<string, Func<string>>();
+				placeholders = [];
 				_pluginServerPlaceholders[callingPlugin] = placeholders;
 			}
 
@@ -97,10 +119,18 @@ namespace Zenith
 			placeholders[key] = valueFunc;
 		}
 
-		public void RemoveModulePlaceholders(string callingPlugin)
+		public void RemoveModulePlaceholders(string? callingPlugin = null)
 		{
-			_pluginPlayerPlaceholders.Remove(callingPlugin);
-			_pluginServerPlaceholders.Remove(callingPlugin);
+			if (callingPlugin != null)
+			{
+				_pluginPlayerPlaceholders.Remove(callingPlugin);
+				_pluginServerPlaceholders.Remove(callingPlugin);
+			}
+			else
+			{
+				_pluginPlayerPlaceholders.Clear();
+				_pluginServerPlaceholders.Clear();
+			}
 		}
 
 		public void DisposeModule()

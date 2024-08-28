@@ -551,20 +551,6 @@ public class Plugin : BasePlugin
 
 	private void ShowWeaponDetails(CCSPlayerController player, WeaponStats weaponStat)
 	{
-		Logger.LogCritical($"Weapon Stats for {weaponStat.Weapon}:");
-		Logger.LogCritical($"Kills: {weaponStat.Kills:N0}");
-		Logger.LogCritical($"Shoots: {weaponStat.Shots:N0}");
-		Logger.LogCritical($"Hits Given: {weaponStat.Hits:N0}");
-		Logger.LogCritical($"Accuracy: {(weaponStat.Shots > 0 ? Math.Min((float)weaponStat.Hits / weaponStat.Shots * 100, 100) : 0):F2}%");
-		Logger.LogCritical($"Headshots: {weaponStat.Headshots:N0}");
-		Logger.LogCritical($"Chest Hits: {weaponStat.ChestHits:N0}");
-		Logger.LogCritical($"Stomach Hits: {weaponStat.StomachHits:N0}");
-		Logger.LogCritical($"Left Arm Hits: {weaponStat.LeftArmHits:N0}");
-		Logger.LogCritical($"Right Arm Hits: {weaponStat.RightArmHits:N0}");
-		Logger.LogCritical($"Left Leg Hits: {weaponStat.LeftLegHits:N0}");
-		Logger.LogCritical($"Right Leg Hits: {weaponStat.RightLegHits:N0}");
-		Logger.LogCritical($"Neck Hits: {weaponStat.NeckHits:N0}");
-
 		List<MenuItem> items = new List<MenuItem>
 		{
 			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kills"]}:</font> {weaponStat.Kills:N0}")),
@@ -1220,7 +1206,6 @@ public class Plugin : BasePlugin
 		public void AddWeaponShot(string weapon)
 		{
 			weapon = NormalizeWeaponName(weapon);
-			_plugin.Logger.LogCritical($"Weapon: {weapon}");
 
 			if (weapon == "world")
 				return;
@@ -1236,7 +1221,6 @@ public class Plugin : BasePlugin
 		public void AddWeaponHit(string weapon, int hitgroup)
 		{
 			weapon = NormalizeWeaponName(weapon);
-			_plugin.Logger.LogCritical($"Weapon: {weapon}, Hitgroup: {hitgroup}");
 
 			if (weapon == "world")
 				return;

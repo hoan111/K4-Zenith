@@ -37,6 +37,7 @@ namespace Zenith
 			RegisterModuleConfig("Core", "ShowDevelopers", "Support the developers by showing their names in the menu.", true, ConfigFlag.Global);
 			RegisterModuleConfig("Core", "CenterMessageTime", "The time in seconds for how long the center message is displayed by default.", 10, ConfigFlag.Global);
 			RegisterModuleConfig("Core", "CenterAlertTime", "The time in seconds for how long the center alert is displayed by default.", 5, ConfigFlag.Global);
+			RegisterModuleConfig("Core", "HookChatMessages", "Whether to hook chat messages to modify them.", true, ConfigFlag.Global);
 
 			// Apply global settings
 			ConfigManager.GlobalChangeTracking = GetModuleConfigValue<bool>("Core", "GlobalChangeTracking");

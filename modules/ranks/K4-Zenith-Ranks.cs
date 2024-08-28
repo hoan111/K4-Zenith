@@ -28,6 +28,8 @@ public sealed partial class Plugin : BasePlugin
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
+		Logger.LogInformation($"OnAllPluginsLoaded called. Hot Reload: {hotReload}");
+
 		try
 		{
 			_playerServicesCapability = new PlayerCapability<IPlayerServices>("zenith:player-services");
@@ -84,11 +86,11 @@ public sealed partial class Plugin : BasePlugin
 		if (hotReload)
 			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
 
-		if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
+		AddTimer(3.0f, () =>
 		{
-			AddTimer(3.0f, () =>
+			_moduleServices.LoadAllOnlinePlayerData();
+			if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
 			{
-				_moduleServices.LoadAllOnlinePlayerData();
 				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
 				{
 					IPlayerServices? playerServices = GetZenithPlayer(player);
@@ -99,8 +101,8 @@ public sealed partial class Plugin : BasePlugin
 
 					playerServices.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
 				});
-			});
-		}
+			}
+		});
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}

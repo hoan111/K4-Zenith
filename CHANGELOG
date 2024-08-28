@@ -1,7 +1,14 @@
+# 2024.08.29 - 1.0.6
+
+- feat: Added option to not to hook chat manager
+- fix: Module dispose of placeholders
+- fix: Extra space before separator in chat
+- fix: Reloading core didnt register placeholders back from modules
+- fix: RReloading core unloaded and loaded plugin instead of reload
+
 # 2024.08.28 - 1.0.5
 
 - fix: Hit groups not registered properly after one shot one hit fix
-- fix: M4a1 and M4a1-s registered under same weapon
 - fix: Usp-s registered under hkp sometimes
 - fix: M4a1-s registered under m4a1 sometimes
 
