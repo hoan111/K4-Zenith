@@ -1,11 +1,11 @@
 namespace Zenith
 {
+	using System.Reflection;
 	using CounterStrikeSharp.API;
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Modules.Commands;
 	using CounterStrikeSharp.API.Modules.Utils;
 	using Zenith.Models;
-	using ZenithAPI;
 
 	public sealed partial class Plugin : BasePlugin
 	{
@@ -42,6 +42,22 @@ namespace Zenith
 			{
 				ConfigManager.ReloadAllConfigs();
 			}, CommandUsage.CLIENT_AND_SERVER, permission: "@zenith/admin");
+
+			RegisterZenithCommand("css_colortest", "Loop all color and print them to a message", (CCSPlayerController? player, CommandInfo command) =>
+			{
+				var chatColors = typeof(ChatColors).GetFields()
+					.Select(f => new { f.Name, Value = f.GetValue(null)?.ToString() })
+					.OrderByDescending(c => c.Name.Length);
+
+				foreach (var color in chatColors)
+				{
+					if (color.Value != null)
+					{
+						var coloredMessage = $"{color.Value}{color.Name}{ChatColors.Default}";
+						Server.PrintToChatAll(coloredMessage);
+					}
+				}
+			}, CommandUsage.CLIENT_AND_SERVER);
 		}
 	}
 }

@@ -156,25 +156,25 @@ namespace Zenith
 			}
 
 			var migrateQuery = $@"
-                INSERT INTO `{Database.TablePrefix}{Player.TABLE_PLAYER_STORAGE}` (`steam_id`, `last_online`, `K4-Zenith-TimeStats.storage`)
-                SELECT
-                    t.`steam_id`,
-                    t.`lastseen`,
-                    JSON_OBJECT(
-                        'TotalPlaytime', t.`all`,
-                        'TerroristPlaytime', t.`t`,
-                        'CounterTerroristPlaytime', t.`ct`,
-                        'SpectatorPlaytime', t.`spec`,
-                        'AlivePlaytime', t.`alive`,
-                        'DeadPlaytime', t.`dead`,
-                        'LastNotification', UNIX_TIMESTAMP(t.`lastseen`)
-                    )
-                FROM
-                    `k4times` t
-                ON DUPLICATE KEY UPDATE
-                    `K4-Zenith-TimeStats.storage` = IF(`K4-Zenith-TimeStats.storage` IS NULL,
-                        VALUES(`K4-Zenith-TimeStats.storage`),
-                        `K4-Zenith-TimeStats.storage`)";
+				INSERT INTO `{Database.TablePrefix}{Player.TABLE_PLAYER_STORAGE}` (`steam_id`, `last_online`, `K4-Zenith-TimeStats.storage`)
+				SELECT
+					t.`steam_id`,
+					t.`lastseen`,
+					JSON_OBJECT(
+						'TotalPlaytime', ROUND(t.`all` / 60, 1),
+						'TerroristPlaytime', ROUND(t.`t` / 60, 1),
+						'CounterTerroristPlaytime', ROUND(t.`ct` / 60, 1),
+						'SpectatorPlaytime', ROUND(t.`spec` / 60, 1),
+						'AlivePlaytime', ROUND(t.`alive` / 60, 1),
+						'DeadPlaytime', ROUND(t.`dead` / 60, 1),
+						'LastNotification', UNIX_TIMESTAMP(t.`lastseen`)
+					)
+				FROM
+					`k4times` t
+				ON DUPLICATE KEY UPDATE
+					`K4-Zenith-TimeStats.storage` = IF(`K4-Zenith-TimeStats.storage` IS NULL,
+						VALUES(`K4-Zenith-TimeStats.storage`),
+						`K4-Zenith-TimeStats.storage`)";
 
 			var affectedRows = await connection.ExecuteAsync(migrateQuery);
 			Logger.LogInformation($"Migrated {affectedRows} rows from k4times table.");

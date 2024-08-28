@@ -20,6 +20,8 @@ namespace Zenith_Ranks
 
 			RegisterListener<Listeners.OnMapStart>((mapName) =>
 			{
+				_isGameEnd = false;
+
 				AddTimer(1.0f, () =>
 				{
 					GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
@@ -115,7 +117,14 @@ namespace Zenith_Ranks
 
 			RegisterEventHandler((EventRoundPrestart @event, GameEventInfo info) =>
 			{
+				_isGameEnd = false; // ? In case new round start without map start (reset map or so)
 				playerSpawned.Clear();
+				return HookResult.Continue;
+			});
+
+			RegisterEventHandler((EventCsWinPanelMatch @event, GameEventInfo info) =>
+			{
+				_isGameEnd = true;
 				return HookResult.Continue;
 			});
 
@@ -263,14 +272,15 @@ namespace Zenith_Ranks
 			{
 				if (deathEvent != null)
 				{
-					IPlayerServices? victim = _plugin.GetZenithPlayer(deathEvent.Userid);
-					IPlayerServices? attacker = _plugin.GetZenithPlayer(deathEvent.Attacker);
+					IPlayerServices? victim = GetZenithPlayer(deathEvent.Userid);
+					IPlayerServices? attacker = GetZenithPlayer(deathEvent.Attacker);
 
 					if (victim != null)
 					{
 						if (deathEvent.Attacker == null || deathEvent.Attacker.SteamID == victim.Controller.SteamID)
 						{
-							_plugin.ModifyPlayerPoints(victim, _plugin._configAccessor.GetValue<int>("Points", "Suicide"), "k4.events.suicide");
+							if (!_plugin._isGameEnd)
+								_plugin.ModifyPlayerPoints(victim, _plugin._configAccessor.GetValue<int>("Points", "Suicide"), "k4.events.suicide");
 						}
 						else
 						{
@@ -278,7 +288,7 @@ namespace Zenith_Ranks
 								goto AttackerDeathEvent;
 
 							string? eventInfo = attacker != null && _plugin._configAccessor.GetValue<bool>("Settings", "ExtendedDeathMessages")
-								? _plugin.Localizer["k4.phrases.death-extended", attacker.Name, attacker.GetStorage<long>("Points")] ?? string.Empty
+								? _plugin.Localizer["k4.phrases.death-extended", attacker.Name, $"{attacker.GetStorage<long>("Points"):N0}"] ?? string.Empty
 								: null;
 							_plugin.ModifyPlayerPoints(victim, attacker != null && _plugin._configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints") ? _plugin.CalculateDynamicPoints(attacker, victim, _plugin._configAccessor.GetValue<int>("Points", "Death")) : _plugin._configAccessor.GetValue<int>("Points", "Death"), "k4.events.playerdeath", eventInfo);
 						}
@@ -304,7 +314,7 @@ namespace Zenith_Ranks
 
 				AssisterDeathEvent:
 
-					IPlayerServices? assister = _plugin.GetZenithPlayer(deathEvent.Assister);
+					IPlayerServices? assister = GetZenithPlayer(deathEvent.Assister);
 					if (assister != null && assister.Controller.SteamID != deathEvent.Userid?.SteamID)
 					{
 						if (!_plugin._configAccessor.GetValue<bool>("Settings", "FFAMode") && attacker?.Controller.Team == deathEvent.Userid?.Team && assister.Controller.Team == deathEvent.Userid?.Team)
@@ -318,7 +328,7 @@ namespace Zenith_Ranks
 						else
 						{
 							string? eventInfo = victim != null && _plugin._configAccessor.GetValue<bool>("Settings", "ExtendedDeathMessages")
-								? _plugin.Localizer["k4.phrases.assist-extended", victim.Name, victim.GetStorage<long>("Points")] ?? string.Empty
+								? _plugin.Localizer["k4.phrases.assist-extended", victim.Name, $"{victim.GetStorage<long>("Points"):N0}"] ?? string.Empty
 								: null;
 							_plugin.ModifyPlayerPoints(assister, _plugin._configAccessor.GetValue<int>("Points", "Assist"), "k4.events.assist", eventInfo);
 							if (deathEvent.Assistedflash)
@@ -334,7 +344,7 @@ namespace Zenith_Ranks
 			private void HandleKillEvent(IPlayerServices attacker, IPlayerServices? victim, EventPlayerDeath deathEvent)
 			{
 				string? eventInfo = victim != null && _plugin._configAccessor.GetValue<bool>("Settings", "ExtendedDeathMessages")
-								? _plugin.Localizer["k4.phrases.kill-extended", victim.Name, victim.GetStorage<long>("Points")] ?? string.Empty
+								? _plugin.Localizer["k4.phrases.kill-extended", victim.Name, $"{victim.GetStorage<long>("Points"):N0}"] ?? string.Empty
 								: null;
 				_plugin.ModifyPlayerPoints(attacker, _plugin._configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints") && victim != null ? _plugin.CalculateDynamicPoints(attacker, victim, _plugin._configAccessor.GetValue<int>("Points", "Kill")) : _plugin._configAccessor.GetValue<int>("Points", "Kill"), "k4.events.kill", eventInfo);
 
@@ -444,7 +454,7 @@ namespace Zenith_Ranks
 					object? targetValue = targetProp.GetValue(gameEvent);
 					if (targetValue is CCSPlayerController playerController)
 					{
-						var player = _plugin.GetZenithPlayer(playerController);
+						var player = GetZenithPlayer(playerController);
 						if (player != null)
 						{
 							string eventKey = $"k4.events.{eventName.ToLower().Replace("event", "")}";

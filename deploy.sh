@@ -52,7 +52,7 @@ print_message "${YELLOW}" "Copying Ranks module..."
 cp -R ./modules/ranks/bin/K4-Zenith-Ranks ./Zenith/plugins/ 2>/dev/null
 
 print_message "${YELLOW}" "Copying Statistics module..."
-cp -R ./modules/statistics/bin/K4-Zenith-Stats ./Zenith/plugins/ 2>/dev/null
+rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modules/statistics/bin/K4-Zenith-Stats/ ./Zenith/plugins/K4-Zenith-Stats/
 
 # Delete files with a specific extension from Zenith and sub-folders
 print_message "${BLUE}" "Cleaning up unnecessary files..."

@@ -1,45 +1,73 @@
--- 2024.08.27 - 1.0.2
-  - feat: Option to change center alert time globally
-  - feat: Option to change center message time globally
-  - feat: Added css_zreload command to reload all module settings manually
-  - feat: Added possibility to modify chat separator (customise : between name and message)
-  - feat: Added css_commandlist to list all available commands in Zenith and modules
-  - feat: Added automation to download GeoLite2-Country.mmdb if not exists
-  - feat: Added warning log about unauthorized access to a config value (non-global)
-  - feat: Core reload trigger reload to all modules aswell that use the APIs
-  - feat: Added Accuracy, KDR, KD and KDA to the statistics
-  - feat: Added hit groups to weapon stats
-  - fix: Round lose translation was wrongly set
-  - fix: Round lose rank event triggered for spectators
-  - fix: Round lose stats event triggered for spectators
-  - fix: Rank VIP multiplier was applied to all modify
-  - fix: Rank VIP multiplier was applied to negative points aswell
-  - fix: Point modify displayed points, but not the VIP multiplier applied points
-  - fix: Scoreboard shown a lower rank than the player had
-  - fix: TimeStats notifications now can be disabled with 0 and -1 aswell
-  - fix: Added NextFrame to rank event point messages to fix some not showing up
-  - fix: Rank event point set to null shows the change messages
-  - fix: Rank modify points round summary error log
-  - fix: Ignore values in the config files that not used by plugin
-  - fix: Weapon stats not loaded to server upon player join
-  - fix: Stats did not track at all
-  - fix: Rank points capped to 0, no negative points
-  - fix: Rank module round win/lose triggered for people not spawned in round
-  - fix: Stats module round win/lose triggered for people not spawned in round
-  - fix: ClanTag enforcement stopped after first enforcement
-  - fix: Accuracy capped to max 100%
-  - fix: Now one shot - one hit (shotguns and burst fire wont register multiple hits)
-  - **fix: Plugin was not able to hotReload**
-  - optimise: Changed some functions to use less code
-  - optimise: Added global capability variables
+# 2024.08.28 - 1.0.5
 
-before release:
-  - Example files
+- fix: Hit groups not registered properly after one shot one hit fix
+- fix: M4a1 and M4a1-s registered under same weapon
+- fix: Usp-s registered under hkp sometimes
+- fix: M4a1-s registered under m4a1 sometimes
 
- release:
-  - admin system
-  - ban system
-  - flag clantags + chattags
-  - toplist ranks
-  - game management system
-  - more commands?
+# 2024.08.28 - 1.0.4
+
+- upgrade: Changed time-stat to save by minutes instead of seconds
+- upgrade: Stat and rank1 values now dotted for better visualisation
+- fix: Mapchange didn't save properly
+- fix: Menu error spam after map change
+- fix: Core reload didnt load player storage for modules
+- optimise: Map change loads and saves optimise
+
+# 2024.08.27 - 1.0.3
+
+- fix: Crash on map changes
+- fix: World registered as player weapon stats
+- fix: API PlayerUnloaded didnt forward the player data properly
+- fix: WeaponStats duplicated in mysql on every relog
+- fix: MapStats duplicated in mysql on every relog
+- fix: Knife types registered as different weapons
+- fix: Point removal after game end if bomb explodes and kill player
+
+# 2024.08.27 - 1.0.2
+- feat: Option to change center alert time globally
+- feat: Option to change center message time globally
+- feat: Added css_zreload command to reload all module settings manually
+- feat: Added possibility to modify chat separator to customise ':' between name and message
+- feat: Added css_commandlist to list all available commands in Zenith and modules
+- feat: Added automation to download GeoLite2-Country.mmdb if not exists
+- feat: Added warning log about unauthorized access to a config value (non-global)
+- feat: Core reload trigger reload to all modules aswell that use the APIs
+- feat: Added Accuracy, KDR, KD and KDA to the statistics
+- feat: Added hit groups to weapon stats
+- fix: Round lose translation was wrongly set
+- fix: Round lose rank event triggered for spectators
+- fix: Round lose stats event triggered for spectators
+- fix: Rank VIP multiplier was applied to all modify
+- fix: Rank VIP multiplier was applied to negative points aswell
+- fix: Point modify displayed points, but not the VIP multiplier applied points
+- fix: Scoreboard shown a lower rank than the player had
+- fix: TimeStats notifications now can be disabled with 0 and -1 aswell
+- fix: Added NextFrame to rank event point messages to fix some not showing up
+- fix: Rank event point set to null shows the change messages
+- fix: Rank modify points round summary error log
+- fix: Ignore values in the config files that not used by plugin
+- fix: Weapon stats not loaded to server upon player join
+- fix: Stats did not track at all
+- fix: Rank points capped to 0, no negative points
+- fix: Rank module round win/lose triggered for people not spawned in round
+- fix: Stats module round win/lose triggered for people not spawned in round
+- fix: ClanTag enforcement stopped after first enforcement
+- fix: Accuracy capped to max 100%
+- fix: Now one shot - one hit (shotguns and burst fire wont register multiple hits)
+- fix: Plugin was not able to hotReload
+- optimise: Changed some functions to use less code
+- optimise: Added global capability variables
+
+# before release:
+- Example files
+- Core reload module player not loaded
+
+# release:
+- wall toplists and custom data using placeholders
+- admin system
+- ban system
+- flag clantags + chattags
+- toplist ranks
+- game management system
+- more commands?

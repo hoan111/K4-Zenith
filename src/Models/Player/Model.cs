@@ -70,7 +70,7 @@ public sealed partial class Player
 	// +--------------------+
 
 	public bool IsValid
-		=> Controller?.IsValid == true && Controller.PlayerPawn?.IsValid == true && Controller.Connected == PlayerConnectedState.PlayerConnected;
+		=> Controller?.IsValid == true && Controller.PlayerPawn?.IsValid == true;
 	public bool IsPlayer
 		=> Controller?.IsBot == false && Controller.IsHLTV == false;
 	public bool IsAlive
@@ -212,6 +212,8 @@ public sealed partial class Player
 
 	public void Dispose()
 	{
+		_plugin._moduleServices?.InvokeZenithPlayerUnloaded(Controller!);
+
 		Task.Run(async () =>
 		{
 			try
@@ -224,11 +226,7 @@ public sealed partial class Player
 			}
 			finally
 			{
-				Server.NextFrame(() =>
-				{
-					_plugin._moduleServices?.InvokeZenithPlayerUnloaded(Controller!);
-					List.Remove(this);
-				});
+				List.Remove(this);
 			}
 		});
 	}

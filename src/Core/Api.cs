@@ -125,16 +125,16 @@ namespace Zenith
 				_plugin = plugin;
 			}
 
-			public event EventHandler<CCSPlayerController>? OnZenithPlayerLoaded;
-			public event EventHandler<CCSPlayerController>? OnZenithPlayerUnloaded;
+			public event Action<CCSPlayerController>? OnZenithPlayerLoaded;
+			public event Action<CCSPlayerController>? OnZenithPlayerUnloaded;
 
 			public IZenithEvents GetEventHandler() => this;
 
-			public void InvokeZenithPlayerLoaded(CCSPlayerController player)
-				=> OnZenithPlayerLoaded?.Invoke(this, player);
+			internal void InvokeZenithPlayerLoaded(CCSPlayerController player)
+				=> OnZenithPlayerLoaded?.Invoke(player);
 
-			public void InvokeZenithPlayerUnloaded(CCSPlayerController player)
-				=> OnZenithPlayerUnloaded?.Invoke(this, player);
+			internal void InvokeZenithPlayerUnloaded(CCSPlayerController player)
+				=> OnZenithPlayerUnloaded?.Invoke(player);
 
 			public string GetConnectionString()
 				=> _plugin.Database.GetConnectionString();

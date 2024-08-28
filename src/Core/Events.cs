@@ -6,6 +6,7 @@ namespace Zenith
 	using CounterStrikeSharp.API.Core.Translations;
 	using CounterStrikeSharp.API.Modules.UserMessages;
 	using CounterStrikeSharp.API.Modules.Utils;
+	using Microsoft.Extensions.Logging;
 	using Zenith.Models;
 
 	public sealed partial class Plugin : BasePlugin
@@ -32,13 +33,13 @@ namespace Zenith
 			char namecolor = enabledChatModifier ? player.GetNameColor() : ChatColors.ForTeam(player.Controller!.Team);
 			char chatcolor = enabledChatModifier ? player.GetChatColor() : ChatColors.Default;
 
-			um.SetString("messagename", FormatMessage($" {dead}{team}{tag}{namecolor}{um.ReadString("param1")}{Localizer["k4.tag.separator"]}{chatcolor}{um.ReadString("param2")}", player.Controller!.Team));
+			um.SetString("messagename", FormatMessage(player.Controller!, $" {dead}{team}{tag}{namecolor}{um.ReadString("param1")}{Localizer["k4.tag.separator"]}{chatcolor}{um.ReadString("param2")}"));
 			return HookResult.Changed;
 
-			static string FormatMessage(string message, CsTeam team)
+			static string FormatMessage(CCSPlayerController player, string message)
 			{
 				string modifiedValue = StringExtensions.ReplaceColorTags(message)
-					.Replace("{team}", ChatColors.ForTeam(team).ToString());
+					.Replace("{team}", ChatColors.ForPlayer(player).ToString());
 
 				return modifiedValue;
 			}
@@ -69,11 +70,10 @@ namespace Zenith
 			return HookResult.Continue;
 		}
 
-		[GameEventHandler]
+		[GameEventHandler(HookMode.Post)]
 		public HookResult OnPlayerDisconnect(EventPlayerDisconnect @event, GameEventInfo info)
 		{
-			if (@event.Reason != 1)
-				Player.Find(@event.Userid)?.Dispose();
+			Player.Find(@event.Userid)?.Dispose();
 			return HookResult.Continue;
 		}
 

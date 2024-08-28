@@ -11,7 +11,7 @@ public partial class Database
 
 	private readonly Dictionary<string, List<string>> _migrations = new()
 	{
-		{ "1.2", new List<string>{"CREATE TABLE IF NOT EXISTS zenith_weapon_stats_temp (id INT); ALTER TABLE zenith_weapon_stats ADD COLUMN IF NOT EXISTS chest_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS stomach_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS left_arm_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS right_arm_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS left_leg_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS right_leg_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS neck_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS gear_hits INT NOT NULL DEFAULT 0; DROP TABLE IF EXISTS zenith_weapon_stats_temp;"} },
+		//{ "1.2", new List<string>{@"query here"} },
 	};
 
 	private async Task<string> GetCurrentDatabaseVersionAsync(MySqlConnection connection)

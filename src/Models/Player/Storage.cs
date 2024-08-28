@@ -563,14 +563,17 @@ public sealed partial class Player
 				}
 			}
 
-			foreach (var player in List)
+			if (dipose)
 			{
-				player.Settings.Clear();
-				player.Storage.Clear();
-			}
+				foreach (var player in List)
+				{
+					player.Settings.Clear();
+					player.Storage.Clear();
+				}
 
-			moduleDefaultSettings.Clear();
-			moduleDefaultStorage.Clear();
+				moduleDefaultSettings.Clear();
+				moduleDefaultStorage.Clear();
+			}
 		});
 	}
 

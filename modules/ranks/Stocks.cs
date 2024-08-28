@@ -64,7 +64,7 @@ public sealed partial class Plugin : BasePlugin
 		{
 			string pointChangePhrase = points >= 0 ? "k4.phrases.gain" : "k4.phrases.loss";
 			string eventReason = Localizer[eventKey];
-			string message = Localizer[pointChangePhrase, newPoints, Math.Abs(points), extraInfo ?? eventReason];
+			string message = Localizer[pointChangePhrase, $"{newPoints:N0}", Math.Abs(points), extraInfo ?? eventReason];
 
 			Server.NextFrame(() => player.Print(message));
 		}

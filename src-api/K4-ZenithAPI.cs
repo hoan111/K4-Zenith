@@ -319,12 +319,12 @@ namespace ZenithAPI
 		/// <summary>
 		/// Occurs when a player is loaded and their data is downloaded.
 		/// </summary>
-		event EventHandler<CCSPlayerController> OnZenithPlayerLoaded;
+		event Action<CCSPlayerController> OnZenithPlayerLoaded;
 
 		/// <summary>
 		/// Occurs when a player is unloaded and their data is saved.
 		/// </summary>
-		event EventHandler<CCSPlayerController> OnZenithPlayerUnloaded;
+		event Action<CCSPlayerController> OnZenithPlayerUnloaded;
 	}
 
 	public enum ActionPriority

@@ -1,5 +1,5 @@
 {
-  "timestats.notification": "{silver}Your total playtime on the server is {gold}{0} days{silver}, {gold}{1} hours{silver}, and {gold}{2} minutes{silver}. We appreciate your time spent with us!",
+  "timestats.notification": "{silver}Your total playtime on the server is {gold}{0}{silver}. We appreciate your time spent with us!",
   "timestats.center.title": "+ Playtime Statistics +",
   "timestats.center.total.label": "Total:",
   "timestats.center.teams.label": "Teams:",

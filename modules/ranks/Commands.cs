@@ -25,13 +25,13 @@ public sealed partial class Plugin : BasePlugin
 		string htmlMessage = $@"
 		<font color='#ff3333' class='fontSize-m'>{Localizer["k4.ranks.info.title"]}</font><br>
 		<font color='#FF6666' class='fontSize-sm'>{Localizer["k4.ranks.info.current"]}</font> <font color='{currentRank?.HexColor ?? "#FFFFFF"}' class='fontSize-s'>{currentRank?.Name ?? Localizer["k4.phrases.rank.none"]}</font><br>
-		<font color='#FF6666' class='fontSize-sm'>{Localizer["k4.ranks.info.points"]}</font> <font color='#FFFFFF' class='fontSize-s'>{points}</font>";
+		<font color='#FF6666' class='fontSize-sm'>{Localizer["k4.ranks.info.points"]}</font> <font color='#FFFFFF' class='fontSize-s'>{points:N0}</font>";
 
 		if (nextRank != null)
 		{
 			htmlMessage += $@"
 			<br><font color='#FF6666' class='fontSize-sm'>{Localizer["k4.ranks.info.next"]}</font> <font color='{nextRank.HexColor}' class='fontSize-s'>{nextRank.Name}</font><br>
-			<font color='#FF6666' class='fontSize-sm'>{Localizer["k4.ranks.info.pointstonext"]}</font> <font color='#FFFFFF' class='fontSize-s'>{pointsToNextRank}</font>";
+			<font color='#FF6666' class='fontSize-sm'>{Localizer["k4.ranks.info.pointstonext"]}</font> <font color='#FFFFFF' class='fontSize-s'>{pointsToNextRank:N0}</font>";
 		}
 
 		playerServices.PrintToCenter(htmlMessage, _configAccessor.GetValue<int>("Core", "CenterMessageTime"), ActionPriority.Low);

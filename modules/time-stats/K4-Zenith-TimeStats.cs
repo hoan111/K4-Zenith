@@ -64,12 +64,12 @@ public class Plugin : BasePlugin
 
 		_moduleServices.RegisterModuleStorage(new Dictionary<string, object?>
 		{
-			{ "TotalPlaytime", 0L },
-			{ "TerroristPlaytime", 0L },
-			{ "CounterTerroristPlaytime", 0L },
-			{ "SpectatorPlaytime", 0L },
-			{ "AlivePlaytime", 0L },
-			{ "DeadPlaytime", 0L },
+			{ "TotalPlaytime", 0.0 },
+			{ "TerroristPlaytime", 0.0 },
+			{ "CounterTerroristPlaytime", 0.0 },
+			{ "SpectatorPlaytime", 0.0 },
+			{ "AlivePlaytime", 0.0 },
+			{ "DeadPlaytime", 0.0 },
 			{ "LastNotification", 0L }
 		});
 
@@ -92,43 +92,34 @@ public class Plugin : BasePlugin
 
 		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "PlaytimeCommands"), "Show the playtime informations.", OnPlaytimeCommand, CommandUsage.CLIENT_ONLY);
 
-		if (hotReload)
+		AddTimer(3.0f, () =>
 		{
 			_moduleServices.LoadAllOnlinePlayerData();
-			AddTimer(3.0f, () =>
+			Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
 			{
-				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
+				_playerTimes[player.SteamID] = new PlayerTimeData
 				{
-					_playerTimes[player.SteamID] = new PlayerTimeData
-					{
-						LastUpdateTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-						CurrentTeam = player.Team,
-						IsAlive = player.PlayerPawn.Value?.Health > 0
-					};
-				});
+					LastUpdateTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+					CurrentTeam = player.Team,
+					IsAlive = player.PlayerPawn.Value?.Health > 0
+				};
 			});
-		}
+		});
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
 
-	private void OnZenithPlayerLoaded(object? sender, CCSPlayerController player)
+	private void OnZenithPlayerLoaded(CCSPlayerController player)
 	{
-		_playerTimes[player.SteamID] = new PlayerTimeData
+		var zenithPlayer = GetZenithPlayer(player);
+		if (zenithPlayer is null) return;
+
+		_playerTimes[zenithPlayer.SteamID] = new PlayerTimeData
 		{
 			LastUpdateTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
 			CurrentTeam = CsTeam.Spectator,
 			IsAlive = false
 		};
-	}
-
-	private void OnZenithPlayerUnloaded(object? sender, CCSPlayerController player)
-	{
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer is null) return;
-
-		UpdatePlaytime(zenithPlayer);
-		_playerTimes.Remove(player.SteamID);
 	}
 
 	private HookResult OnPlayerSpawn(EventPlayerSpawn @event, GameEventInfo info)
@@ -142,6 +133,15 @@ public class Plugin : BasePlugin
 			timeData.IsAlive = true;
 		}
 		return HookResult.Continue;
+	}
+
+	private void OnZenithPlayerUnloaded(CCSPlayerController player)
+	{
+		var zenithPlayer = GetZenithPlayer(player);
+		if (zenithPlayer is null) return;
+
+		UpdatePlaytime(zenithPlayer);
+		_playerTimes.Remove(zenithPlayer.SteamID);
 	}
 
 	private HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
@@ -190,10 +190,10 @@ public class Plugin : BasePlugin
 			return;
 
 		long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-		long sessionDuration = currentTime - timeData.LastUpdateTime;
+		double sessionDurationMinutes = Math.Round((currentTime - timeData.LastUpdateTime) / 60.0, 1);
 
-		long totalPlaytime = playerServices.GetStorage<long>("TotalPlaytime");
-		totalPlaytime += sessionDuration;
+		double totalPlaytime = playerServices.GetStorage<double>("TotalPlaytime");
+		totalPlaytime += sessionDurationMinutes;
 		playerServices.SetStorage("TotalPlaytime", totalPlaytime);
 
 		string teamKey = timeData.CurrentTeam switch
@@ -202,13 +202,13 @@ public class Plugin : BasePlugin
 			CsTeam.CounterTerrorist => "CounterTerroristPlaytime",
 			_ => "SpectatorPlaytime"
 		};
-		long teamPlaytime = playerServices.GetStorage<long>(teamKey);
-		teamPlaytime += sessionDuration;
+		double teamPlaytime = playerServices.GetStorage<double>(teamKey);
+		teamPlaytime += sessionDurationMinutes;
 		playerServices.SetStorage(teamKey, teamPlaytime);
 
 		string lifeStatusKey = timeData.IsAlive ? "AlivePlaytime" : "DeadPlaytime";
-		long lifeStatusPlaytime = playerServices.GetStorage<long>(lifeStatusKey);
-		lifeStatusPlaytime += sessionDuration;
+		double lifeStatusPlaytime = playerServices.GetStorage<double>(lifeStatusKey);
+		lifeStatusPlaytime += sessionDurationMinutes;
 		playerServices.SetStorage(lifeStatusKey, lifeStatusPlaytime);
 
 		timeData.LastUpdateTime = currentTime;
@@ -235,13 +235,10 @@ public class Plugin : BasePlugin
 
 	private void SendPlaytimeNotification(IPlayerServices playerServices)
 	{
-		long totalPlaytime = playerServices.GetStorage<long>("TotalPlaytime");
-		TimeSpan playtime = TimeSpan.FromSeconds(totalPlaytime);
+		double totalPlaytime = playerServices.GetStorage<double>("TotalPlaytime");
+		string formattedTime = FormatTime(totalPlaytime);
 
-		string message = Localizer["timestats.notification",
-			playtime.Days,
-			playtime.Hours,
-			playtime.Minutes];
+		string message = Localizer["timestats.notification", formattedTime];
 
 		playerServices.Print(message);
 	}
@@ -258,12 +255,12 @@ public class Plugin : BasePlugin
 
 	private void SendDetailedPlaytimeStats(IPlayerServices playerServices)
 	{
-		long totalPlaytime = playerServices.GetStorage<long>("TotalPlaytime");
-		long terroristPlaytime = playerServices.GetStorage<long>("TerroristPlaytime");
-		long ctPlaytime = playerServices.GetStorage<long>("CounterTerroristPlaytime");
-		long spectatorPlaytime = playerServices.GetStorage<long>("SpectatorPlaytime");
-		long alivePlaytime = playerServices.GetStorage<long>("AlivePlaytime");
-		long deadPlaytime = playerServices.GetStorage<long>("DeadPlaytime");
+		double totalPlaytime = playerServices.GetStorage<double>("TotalPlaytime");
+		double terroristPlaytime = playerServices.GetStorage<double>("TerroristPlaytime");
+		double ctPlaytime = playerServices.GetStorage<double>("CounterTerroristPlaytime");
+		double spectatorPlaytime = playerServices.GetStorage<double>("SpectatorPlaytime");
+		double alivePlaytime = playerServices.GetStorage<double>("AlivePlaytime");
+		double deadPlaytime = playerServices.GetStorage<double>("DeadPlaytime");
 
 		string htmlMessage = $@"
 		<font color='#ff3333' class='fontSize-m'>{Localizer["timestats.center.title"]}</font><br>
@@ -275,10 +272,14 @@ public class Plugin : BasePlugin
 		playerServices.PrintToCenter(htmlMessage, _coreAccessor.GetValue<int>("Core", "CenterMessageTime"), ActionPriority.Low);
 	}
 
-	private string FormatTime(long seconds)
+	private string FormatTime(double minutes)
 	{
-		TimeSpan time = TimeSpan.FromSeconds(seconds);
-		return Localizer["timestats.time.format", time.Days, time.Hours, time.Minutes];
+		int totalMinutes = (int)Math.Floor(minutes);
+		int days = totalMinutes / 1440;
+		int hours = (totalMinutes % 1440) / 60;
+		int mins = totalMinutes % 60;
+
+		return Localizer["timestats.time.format", days, hours, mins];
 	}
 
 	public override void Unload(bool hotReload)

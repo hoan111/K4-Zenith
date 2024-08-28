@@ -75,19 +75,18 @@ namespace Zenith
 					.ToArray();
 
 				if (directories.Length > 0)
-				{
 					foreach (var directory in directories)
-					{
-						var pluginName = Path.GetFileNameWithoutExtension(directory);
-						Server.ExecuteCommand($"css_plugins unload {pluginName}");
-						Server.ExecuteCommand($"css_plugins load {pluginName}");
-
-						// ? Reload not finds them sadly
-					}
-				}
+						Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(directory)}");
 
 				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player => new Player(this, player, true));
 				Player.LoadAllOnlinePlayerData(this);
+
+				AddTimer(2.0f, () =>
+				{
+					if (directories.Length > 0)
+						foreach (var directory in directories)
+							Server.ExecuteCommand($"css_plugins load {Path.GetFileNameWithoutExtension(directory)}");
+				}, TimerFlags.STOP_ON_MAPCHANGE);
 
 				AddTimer(3.0f, () =>
 				{

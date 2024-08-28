@@ -24,6 +24,7 @@ public sealed partial class Plugin : BasePlugin
 	private IZenithEvents? _zenithEvents;
 	private IModuleServices? _moduleServices;
 	private readonly List<CCSPlayerController> playerSpawned = [];
+	private bool _isGameEnd = false;
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
@@ -74,7 +75,6 @@ public sealed partial class Plugin : BasePlugin
 		if (_zenithEvents != null)
 		{
 			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
-			_zenithEvents.OnZenithPlayerUnloaded += OnZenithPlayerUnloaded;
 		}
 		else
 		{
@@ -82,26 +82,24 @@ public sealed partial class Plugin : BasePlugin
 		}
 
 		if (hotReload)
-		{
 			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
 
-			if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
+		if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
+		{
+			AddTimer(3.0f, () =>
 			{
 				_moduleServices.LoadAllOnlinePlayerData();
-				AddTimer(3.0f, () =>
+				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
 				{
-					Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
-					{
-						IPlayerServices? playerServices = GetZenithPlayer(player);
-						if (playerServices == null) return;
+					IPlayerServices? playerServices = GetZenithPlayer(player);
+					if (playerServices == null) return;
 
-						var (determinedRank, _) = DetermineRanks(playerServices.GetStorage<int>("Points"));
-						playerServices.SetStorage("Rank", determinedRank?.Name);
+					var (determinedRank, _) = DetermineRanks(playerServices.GetStorage<int>("Points"));
+					playerServices.SetStorage("Rank", determinedRank?.Name);
 
-						playerServices.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
-					});
+					playerServices.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
 				});
-			}
+			});
 		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
@@ -116,26 +114,21 @@ public sealed partial class Plugin : BasePlugin
 		moduleServices.DisposeModule(this.GetType().Assembly);
 	}
 
-	private void OnZenithPlayerLoaded(object? sender, CCSPlayerController player)
+	private void OnZenithPlayerLoaded(CCSPlayerController player)
 	{
 		if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
 		{
-			IPlayerServices? playerServices = GetZenithPlayer(player);
-			if (playerServices == null) return;
+			var zenithPlayer = GetZenithPlayer(player);
+			if (zenithPlayer is null) return;
 
-			var (determinedRank, _) = DetermineRanks(playerServices.GetStorage<int>("Points"));
-			playerServices.SetStorage("Rank", determinedRank?.Name);
+			var (determinedRank, _) = DetermineRanks(zenithPlayer.GetStorage<int>("Points"));
+			zenithPlayer.SetStorage("Rank", determinedRank?.Name);
 
-			playerServices.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
+			zenithPlayer.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
 		}
 	}
 
-	private void OnZenithPlayerUnloaded(object? sender, CCSPlayerController player)
-	{
-		// Do anything if needed
-	}
-
-	public IPlayerServices? GetZenithPlayer(CCSPlayerController? player)
+	public static IPlayerServices? GetZenithPlayer(CCSPlayerController? player)
 	{
 		if (player == null) return null;
 		try { return _playerServicesCapability?.Get(player); }
