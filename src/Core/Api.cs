@@ -130,15 +130,11 @@ namespace Zenith
 
 			public IZenithEvents GetEventHandler() => this;
 
-			internal void InvokeZenithPlayerLoaded(CCSPlayerController player)
-			{
-				OnZenithPlayerLoaded?.Invoke(this, player);
-			}
+			public void InvokeZenithPlayerLoaded(CCSPlayerController player)
+				=> OnZenithPlayerLoaded?.Invoke(this, player);
 
-			internal void InvokeZenithPlayerUnloaded(CCSPlayerController player)
-			{
-				OnZenithPlayerUnloaded?.Invoke(this, player);
-			}
+			public void InvokeZenithPlayerUnloaded(CCSPlayerController player)
+				=> OnZenithPlayerUnloaded?.Invoke(this, player);
 
 			public string GetConnectionString()
 				=> _plugin.Database.GetConnectionString();
@@ -164,6 +160,9 @@ namespace Zenith
 			public void RegisterModuleConfig<T>(string groupName, string configName, string description, T defaultValue, ConfigFlag flags = ConfigFlag.None) where T : notnull
 				=> Plugin.RegisterModuleConfig(groupName, configName, description, defaultValue, flags);
 
+			public bool HasModuleConfigValue(string groupName, string configName)
+				=> Plugin.HasModuleConfigValue(groupName, configName);
+
 			public T GetModuleConfigValue<T>(string groupName, string configName) where T : notnull
 				=> Plugin.GetModuleConfigValue<T>(groupName, configName);
 
@@ -172,6 +171,12 @@ namespace Zenith
 
 			public IModuleConfigAccessor GetModuleConfigAccessor()
 				=> _plugin.GetModuleConfigAccessor();
+
+			public void LoadAllOnlinePlayerData()
+				=> Player.LoadAllOnlinePlayerData(_plugin, true);
+
+			public void SaveAllOnlinePlayerData()
+				=> Player.SaveAllOnlinePlayerData(_plugin, false);
 
 			public void DisposeModule()
 				=> _plugin.DisposeModule();

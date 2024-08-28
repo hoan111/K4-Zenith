@@ -60,7 +60,7 @@ public static class CallerIdentifier
 			if (assemblyName == "CounterStrikeSharp.API")
 				break;
 
-			if (assemblyName != CurrentPluginName && assemblyName != null)
+			if (assemblyName != CurrentPluginName && assemblyName != null && !assemblyName.StartsWith("System."))
 			{
 				callingPlugin = assemblyName;
 				break;

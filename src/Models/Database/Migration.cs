@@ -11,9 +11,7 @@ public partial class Database
 
 	private readonly Dictionary<string, List<string>> _migrations = new()
 	{
-		// Add your versioned migrations here...
-		// { "1.1", new List<string> { "SQL_STATEMENT1;", "SQL_STATEMENT2;" } },
-		// { "1.2", new List<string> { "SQL_STATEMENT3;" } },
+		{ "1.2", new List<string>{"CREATE TABLE IF NOT EXISTS zenith_weapon_stats_temp (id INT); ALTER TABLE zenith_weapon_stats ADD COLUMN IF NOT EXISTS chest_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS stomach_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS left_arm_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS right_arm_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS left_leg_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS right_leg_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS neck_hits INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS gear_hits INT NOT NULL DEFAULT 0; DROP TABLE IF EXISTS zenith_weapon_stats_temp;"} },
 	};
 
 	private async Task<string> GetCurrentDatabaseVersionAsync(MySqlConnection connection)
@@ -23,16 +21,7 @@ public partial class Database
 			$"SELECT value FROM {TablePrefix}{INFO_TABLE} WHERE `key` = @Key",
 			new { Key = VERSION_KEY }
 		);
-		return result ?? "1.0";
-	}
-
-	private async Task SetDatabaseVersionAsync(MySqlConnection connection, string version)
-	{
-		await connection.ExecuteAsync(
-			$"INSERT INTO {TablePrefix}{INFO_TABLE} (`key`, value) VALUES (@Key, @Value) " +
-			"ON DUPLICATE KEY UPDATE value = @Value",
-			new { Key = VERSION_KEY, Value = version }
-		);
+		return result ?? "1.0.0";
 	}
 
 	private async Task EnsureVersionTableExistsAsync(MySqlConnection connection)
@@ -45,26 +34,39 @@ public partial class Database
         ");
 	}
 
-	private async Task CreateDatabaseBackupAsync(MySqlConnection connection)
+	private async Task CreateDatabaseBackupAsync()
 	{
-		var backupFilePath = Path.Combine(_plugin.ModuleDirectory, $"db_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.sql");
-		_plugin.Logger.LogInformation($"Creating database backup: {backupFilePath}");
+		var backupFilePath = Path.Combine(plugin.ModuleDirectory, $"db_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.sql");
+		plugin.Logger.LogInformation($"Creating database backup: {backupFilePath}");
 
-		using var cmd = new MySqlCommand("SHOW TABLES", connection);
-		using var reader = await cmd.ExecuteReaderAsync();
 		using var writer = new StreamWriter(backupFilePath);
 
-		while (await reader.ReadAsync())
+		using (var connection = CreateConnection())
 		{
-			var tableName = reader.GetString(0);
-			await BackupTableAsync(connection, tableName, writer);
+			await connection.OpenAsync();
+			using var cmd = new MySqlCommand("SHOW TABLES", connection);
+			using var reader = await cmd.ExecuteReaderAsync();
+
+			var tables = new List<string>();
+			while (await reader.ReadAsync())
+			{
+				tables.Add(reader.GetString(0));
+			}
+
+			foreach (var tableName in tables)
+			{
+				await BackupTableAsync(tableName, writer);
+			}
 		}
 
-		_plugin.Logger.LogInformation("Database backup completed successfully.");
+		plugin.Logger.LogInformation("Database backup completed successfully.");
 	}
 
-	private async Task BackupTableAsync(MySqlConnection connection, string tableName, StreamWriter writer)
+	private async Task BackupTableAsync(string tableName, StreamWriter writer)
 	{
+		using var connection = CreateConnection();
+		await connection.OpenAsync();
+
 		// Write table creation script
 		var createTableCmd = new MySqlCommand($"SHOW CREATE TABLE `{tableName}`", connection);
 		var createTableResult = (await createTableCmd.ExecuteScalarAsync())?.ToString();
@@ -88,10 +90,12 @@ public partial class Database
 
 	public async Task MigrateDatabaseAsync()
 	{
-		using var connection = CreateConnection();
-		await connection.OpenAsync();
-
-		var currentVersion = await GetCurrentDatabaseVersionAsync(connection);
+		string currentVersion;
+		using (var connection = CreateConnection())
+		{
+			await connection.OpenAsync();
+			currentVersion = await GetCurrentDatabaseVersionAsync(connection);
+		}
 
 		var pendingMigrations = _migrations
 			.Where(m => string.Compare(m.Key, currentVersion, StringComparison.Ordinal) > 0)
@@ -99,37 +103,75 @@ public partial class Database
 			.ToList();
 
 		if (!pendingMigrations.Any())
+		{
+			plugin.Logger.LogInformation("No pending migrations.");
 			return;
+		}
 
-		_plugin.Logger.LogInformation($"Starting database migration to version {_plugin.ModuleVersion} from {currentVersion}");
+		plugin.Logger.LogInformation($"Starting database migration from version {currentVersion} to {plugin.ModuleVersion}");
 
-		await CreateDatabaseBackupAsync(connection);
+		await CreateDatabaseBackupAsync();
+
+		string latestAppliedVersion = currentVersion;
 
 		foreach (var migration in pendingMigrations)
 		{
-			_plugin.Logger.LogInformation($"Applying migration: {migration.Key}");
-
-			using var transaction = await connection.BeginTransactionAsync();
-			try
+			const int maxRetries = 3;
+			for (int retry = 0; retry < maxRetries; retry++)
 			{
-				foreach (var sql in migration.Value)
+				using (var connection = CreateConnection())
 				{
-					var formattedSql = string.Format(sql, TablePrefix);
-					await connection.ExecuteAsync(formattedSql, transaction: transaction);
-				}
+					await connection.OpenAsync();
+					using var transaction = await connection.BeginTransactionAsync();
+					try
+					{
+						foreach (var sql in migration.Value)
+						{
+							var formattedSql = string.Format(sql, TablePrefix);
+							var statements = formattedSql.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+							foreach (var statement in statements)
+							{
+								if (!string.IsNullOrWhiteSpace(statement))
+								{
+									var trimmedStatement = statement.Trim();
+									plugin.Logger.LogDebug($"Executing SQL: {trimmedStatement}");
+									await connection.ExecuteAsync(trimmedStatement, transaction: transaction);
+								}
+							}
+						}
 
-				await SetDatabaseVersionAsync(connection, migration.Key);
-				await transaction.CommitAsync();
-				_plugin.Logger.LogInformation($"Migration {migration.Key} applied successfully.");
-			}
-			catch (Exception ex)
-			{
-				_plugin.Logger.LogError($"Migration {migration.Key} failed: {ex.Message}");
-				await transaction.RollbackAsync();
-				throw;
+						await SetDatabaseVersionAsync(connection, migration.Key, transaction);
+						await transaction.CommitAsync();
+						latestAppliedVersion = migration.Key;
+						break; // Success, exit retry loop
+					}
+					catch (Exception ex)
+					{
+						await transaction.RollbackAsync();
+						if (retry == maxRetries - 1)
+						{
+							plugin.Logger.LogError($"Migration {migration.Key} failed after {maxRetries} attempts: {ex.Message}");
+							throw;
+						}
+						plugin.Logger.LogWarning($"Migration {migration.Key} failed (attempt {retry + 1}): {ex.Message}. Retrying...");
+						await Task.Delay(1000 * (retry + 1)); // Exponential backoff
+					}
+				}
 			}
 		}
 
-		_plugin.Logger.LogInformation($"Database migration completed. Current version: {_plugin.ModuleVersion}");
+		plugin.Logger.LogInformation($"Database migration completed. Current version: {latestAppliedVersion}");
 	}
+
+	private async Task SetDatabaseVersionAsync(MySqlConnection connection, string version, MySqlTransaction? transaction = null)
+	{
+		var sql = $@"
+			INSERT INTO {TablePrefix}{INFO_TABLE} (`key`, value)
+			VALUES (@Key, @Value)
+			ON DUPLICATE KEY UPDATE value = @Value";
+
+		await connection.ExecuteAsync(sql, new { Key = VERSION_KEY, Value = version }, transaction);
+		plugin.Logger.LogInformation($"Database version updated to: {version}");
+	}
+
 }

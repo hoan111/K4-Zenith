@@ -113,6 +113,22 @@ namespace Zenith_Ranks
 				return HookResult.Continue;
 			}, HookMode.Post);
 
+			RegisterEventHandler((EventRoundPrestart @event, GameEventInfo info) =>
+			{
+				playerSpawned.Clear();
+				return HookResult.Continue;
+			});
+
+			RegisterEventHandler((EventPlayerSpawn @event, GameEventInfo info) =>
+			{
+				CCSPlayerController? player = @event.Userid;
+				if (player == null || player.IsBot || player.IsHLTV)
+					return HookResult.Continue;
+
+				playerSpawned.Add(player);
+				return HookResult.Continue;
+			}, HookMode.Post);
+
 			_experienceEvents = new()
 			{
 				{ "EventRoundMvp", ("Userid", _configAccessor.GetValue<int>("Points", "MVP")) },
@@ -229,6 +245,9 @@ namespace Zenith_Ranks
 				{
 					foreach (var player in _plugin.GetValidPlayers())
 					{
+						if (_plugin.playerSpawned.Contains(player.Controller))
+							continue;
+
 						int teamNum = player.Controller.TeamNum;
 						if (teamNum <= (int)CsTeam.Spectator)
 							continue;

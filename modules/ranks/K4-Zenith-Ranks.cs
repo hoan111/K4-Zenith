@@ -17,44 +17,60 @@ public sealed partial class Plugin : BasePlugin
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
 	public override string ModuleVersion => "1.0.0";
 
-	public static PlayerCapability<IPlayerServices> Capability_PlayerServices { get; } = new("zenith:player-services");
-	public static PluginCapability<IModuleServices> Capability_ModuleServices { get; } = new("zenith:module-services");
+	private static PlayerCapability<IPlayerServices>? _playerServicesCapability;
+	private static PluginCapability<IModuleServices>? _moduleServicesCapability;
 
 	public CCSGameRules? GameRules = null;
 	private IZenithEvents? _zenithEvents;
+	private IModuleServices? _moduleServices;
+	private readonly List<CCSPlayerController> playerSpawned = [];
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
-		IModuleServices? moduleServices = Capability_ModuleServices.Get();
-		if (moduleServices == null)
+		try
+		{
+			_playerServicesCapability = new PlayerCapability<IPlayerServices>("zenith:player-services");
+			_moduleServicesCapability = new PluginCapability<IModuleServices>("zenith:module-services");
+		}
+		catch (Exception ex)
+		{
+			Logger.LogError($"Failed to initialize Zenith API: {ex.Message}");
+			Logger.LogInformation("Please check if Zenith is installed, configured and loaded correctly.");
+
+			Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(ModulePath)}");
+			return;
+		}
+
+		_moduleServices = _moduleServicesCapability.Get();
+		if (_moduleServices == null)
 		{
 			Logger.LogError("Failed to get Module-Services API for Zenith.");
 			Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(ModulePath)}");
 			return;
 		}
 
-		RegisterConfigs(moduleServices);
+		RegisterConfigs(_moduleServices);
 
-		moduleServices.RegisterModuleSettings(new Dictionary<string, object?>
+		_moduleServices.RegisterModuleSettings(new Dictionary<string, object?>
 		{
 			{ "ShowRankChanges", true },
 		}, Localizer);
 
-		moduleServices.RegisterModuleStorage(new Dictionary<string, object?>
+		_moduleServices.RegisterModuleStorage(new Dictionary<string, object?>
 		{
 			{ "Points", _configAccessor.GetValue<long>("Settings", "StartPoints") },
 			{ "Rank", null }
 		});
 
-		moduleServices.RegisterModulePlayerPlaceholder("rank", p => GetZenithPlayer(p)?.GetStorage<string>("Rank") ?? Localizer["k4.phrases.rank.none"]);
-		moduleServices.RegisterModulePlayerPlaceholder("points", p => GetZenithPlayer(p)?.GetStorage<long>("Points").ToString() ?? "0");
+		_moduleServices.RegisterModulePlayerPlaceholder("rank", p => GetZenithPlayer(p)?.GetStorage<string>("Rank") ?? Localizer["k4.phrases.rank.none"]);
+		_moduleServices.RegisterModulePlayerPlaceholder("points", p => GetZenithPlayer(p)?.GetStorage<long>("Points").ToString() ?? "0");
 
-		moduleServices.RegisterModuleCommands(_configAccessor.GetValue<List<string>>("Commands", "RankCommands"), "Show the rank informations.", OnRankCommand, CommandUsage.CLIENT_ONLY);
+		_moduleServices.RegisterModuleCommands(_configAccessor.GetValue<List<string>>("Commands", "RankCommands"), "Show the rank informations.", OnRankCommand, CommandUsage.CLIENT_ONLY);
 
 		Initialize_Ranks();
 		Initialize_Events();
 
-		_zenithEvents = moduleServices.GetEventHandler();
+		_zenithEvents = _moduleServices.GetEventHandler();
 		if (_zenithEvents != null)
 		{
 			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
@@ -66,14 +82,34 @@ public sealed partial class Plugin : BasePlugin
 		}
 
 		if (hotReload)
+		{
 			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
+
+			if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
+			{
+				_moduleServices.LoadAllOnlinePlayerData();
+				AddTimer(3.0f, () =>
+				{
+					Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
+					{
+						IPlayerServices? playerServices = GetZenithPlayer(player);
+						if (playerServices == null) return;
+
+						var (determinedRank, _) = DetermineRanks(playerServices.GetStorage<int>("Points"));
+						playerServices.SetStorage("Rank", determinedRank?.Name);
+
+						playerServices.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
+					});
+				});
+			}
+		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
 
 	public override void Unload(bool hotReload)
 	{
-		IModuleServices? moduleServices = Capability_ModuleServices.Get();
+		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
 		if (moduleServices == null)
 			return;
 
@@ -102,7 +138,7 @@ public sealed partial class Plugin : BasePlugin
 	public IPlayerServices? GetZenithPlayer(CCSPlayerController? player)
 	{
 		if (player == null) return null;
-		try { return Capability_PlayerServices.Get(player); }
+		try { return _playerServicesCapability?.Get(player); }
 		catch { return null; }
 	}
 }

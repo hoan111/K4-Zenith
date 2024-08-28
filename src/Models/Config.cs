@@ -17,10 +17,10 @@ namespace Zenith
 			RegisterModuleConfig("Database", "Username", "The username for accessing the database", "root", ConfigFlag.Protected | ConfigFlag.Locked);
 			RegisterModuleConfig("Database", "Password", "The password for accessing the database", "password", ConfigFlag.Protected | ConfigFlag.Locked);
 			RegisterModuleConfig("Database", "Database", "The name of the database", "database", ConfigFlag.Protected | ConfigFlag.Locked);
-			RegisterModuleConfig("Database", "Sslmode", "The SSL mode for the database connection (none, preferred, required, VerifyCA, VerifyFull)", "preferred", ConfigFlag.Locked);
+			RegisterModuleConfig("Database", "Sslmode", "The SSL mode for the database connection (none, preferred, required, verifyca, verifyfull)", "preferred", ConfigFlag.Locked);
 			RegisterModuleConfig("Database", "TablePrefix", "The prefix for the database tables to support multiple servers on the same database with different tables", "", ConfigFlag.Locked);
 			RegisterModuleConfig("Database", "TablePurgeDays", "The number of days of inactivity after which unused data is automatically purged", 30, ConfigFlag.Locked);
-			RegisterModuleConfig("Database", "SaveOnRoundEnd", "Whether to save every player setting and storage change on round ends", true, ConfigFlag.Locked);
+			RegisterModuleConfig("Database", "SaveOnRoundEnd", "Whether to save every player setting and storage change on round ends", true, ConfigFlag.Locked | ConfigFlag.Global);
 
 			// Commands settings
 			RegisterModuleConfig("Commands", "SettingsCommands", "Open the settings menu for players", new List<string> { "settings", "preferences", "prefs" });

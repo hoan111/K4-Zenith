@@ -49,7 +49,7 @@ public sealed partial class Player
 
 		Task.Run(async () =>
 		{
-			await RegisterModuleDataAsync(plugin, callerPlugin, defaultSettings, TABLE_PLAYER_SETTINGS);
+			await RegisterModuleDataAsync(plugin, callerPlugin, TABLE_PLAYER_SETTINGS);
 
 			Server.NextFrame(() =>
 			{
@@ -64,7 +64,7 @@ public sealed partial class Player
 
 		Task.Run(async () =>
 		{
-			await RegisterModuleDataAsync(plugin, callerPlugin, defaultStorage, TABLE_PLAYER_STORAGE);
+			await RegisterModuleDataAsync(plugin, callerPlugin, TABLE_PLAYER_STORAGE);
 
 			Server.NextFrame(() =>
 			{
@@ -73,7 +73,7 @@ public sealed partial class Player
 		});
 	}
 
-	private static async Task RegisterModuleDataAsync(Plugin plugin, string moduleID, Dictionary<string, object?> defaultData, string tableName)
+	private static async Task RegisterModuleDataAsync(Plugin plugin, string moduleID, string tableName)
 	{
 		string tablePrefix = plugin.Database.TablePrefix;
 		string columnName = tableName == TABLE_PLAYER_SETTINGS ? $"{moduleID}.settings" : $"{moduleID}.storage";
@@ -229,6 +229,11 @@ public sealed partial class Player
 	{
 		await LoadDataAsync(Settings, TABLE_PLAYER_SETTINGS, moduleDefaultSettings);
 		await LoadDataAsync(Storage, TABLE_PLAYER_STORAGE, moduleDefaultStorage);
+
+		Server.NextFrame(() =>
+		{
+			_plugin._moduleServices?.InvokeZenithPlayerLoaded(Controller!);
+		});
 	}
 
 	private async Task LoadDataAsync(Dictionary<string, object?> targetDict, string tableName, Dictionary<string, (Dictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults)
@@ -241,7 +246,7 @@ public sealed partial class Player
         WHERE `steam_id` = @SteamID;";
 		var result = await connection.QueryFirstOrDefaultAsync(query, new { SteamID = SteamID.ToString() });
 
-		_ = UpdateLastOnline();
+		await UpdateLastOnline();
 
 		Server.NextFrame(() =>
 		{
@@ -428,49 +433,71 @@ public sealed partial class Player
 		}
 	}
 
-	public static void LoadAllOnlinePlayerData(Plugin plugin)
+	public static void LoadAllOnlinePlayerData(Plugin plugin, bool blockEvent = false)
 	{
 		string tablePrefix = plugin.Database.TablePrefix;
-		List<string> steamIds = new List<string>();
+		List<string> steamIds = [];
 
-		steamIds = List.Where(p => p.IsValid).Select(p => p.SteamID.ToString()).ToList();
+		var playerList = Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV);
+
+		steamIds = playerList.Select(p => p.SteamID.ToString()).ToList();
 
 		Task.Run(async () =>
 		{
-			if (!steamIds.Any())
+			if (steamIds.Count == 0)
 				return;
-
-			using var connection = plugin.Database.CreateConnection();
-			await connection.OpenAsync();
-
-			var settingsQuery = $@"
-                        SELECT * FROM `{tablePrefix}{TABLE_PLAYER_SETTINGS}`
-                        WHERE `steam_id` IN @SteamIDs;";
-			var settingsResults = await connection.QueryAsync(settingsQuery, new { SteamIDs = steamIds });
-
-			var storageQuery = $@"
-                        SELECT * FROM `{tablePrefix}{TABLE_PLAYER_STORAGE}`
-                        WHERE `steam_id` IN @SteamIDs;";
-			var storageResults = await connection.QueryAsync(storageQuery, new { SteamIDs = steamIds });
-
-			Server.NextFrame(() =>
+			try
 			{
-				foreach (var player in List.Where(p => p.IsValid))
+				using var connection = plugin.Database.CreateConnection();
+				await connection.OpenAsync();
+
+				var settingsQuery = $@"
+						SELECT * FROM `{tablePrefix}{TABLE_PLAYER_SETTINGS}`
+						WHERE `steam_id` IN @SteamIDs;";
+				var settingsResults = await connection.QueryAsync(settingsQuery, new { SteamIDs = steamIds });
+
+				var storageQuery = $@"
+						SELECT * FROM `{tablePrefix}{TABLE_PLAYER_STORAGE}`
+						WHERE `steam_id` IN @SteamIDs;";
+				var storageResults = await connection.QueryAsync(storageQuery, new { SteamIDs = steamIds });
+
+				Server.NextFrame(() =>
 				{
-					var playerSettings = settingsResults.FirstOrDefault(r => r.steam_id == player.SteamID.ToString());
-					var playerStorage = storageResults.FirstOrDefault(r => r.steam_id == player.SteamID.ToString());
+					foreach (var controller in playerList)
+					{
+						var player = Player.Find(controller);
+						if (player == null)
+							continue;
 
-					if (playerSettings != null)
-						LoadPlayerData(player.Settings, playerSettings, moduleDefaultSettings, plugin);
+						try
+						{
+							var playerSettings = settingsResults.FirstOrDefault(r => r.steam_id == player.SteamID.ToString());
+							var playerStorage = storageResults.FirstOrDefault(r => r.steam_id == player.SteamID.ToString());
 
-					if (playerStorage != null)
-						LoadPlayerData(player.Storage, playerStorage, moduleDefaultStorage, plugin);
-				}
-			});
+							if (playerSettings != null)
+								LoadPlayerData(player.Settings, playerSettings, moduleDefaultSettings, plugin);
+
+							if (playerStorage != null)
+								LoadPlayerData(player.Storage, playerStorage, moduleDefaultStorage, plugin);
+						}
+						catch (Exception ex)
+						{
+							plugin.Logger.LogError($"Error loading player data for player {player.SteamID}: {ex.Message}");
+						}
+
+						if (!blockEvent)
+							plugin._moduleServices?.InvokeZenithPlayerLoaded(player.Controller!);
+					}
+				});
+			}
+			catch (Exception ex)
+			{
+				plugin.Logger.LogError($"An error occurred while querying the database: {ex.Message}");
+			}
 		});
 	}
 
-	public static void SaveAllOnlinePlayerData(Plugin plugin)
+	public static void SaveAllOnlinePlayerData(Plugin plugin, bool dipose)
 	{
 		string tablePrefix = plugin.Database.TablePrefix;
 		var playerDataToSave = new ConcurrentDictionary<string, (Dictionary<string, string> Settings, Dictionary<string, string> Storage)>();
@@ -535,6 +562,15 @@ public sealed partial class Player
 					await connection.ExecuteAsync(query, queryParams);
 				}
 			}
+
+			foreach (var player in List)
+			{
+				player.Settings.Clear();
+				player.Storage.Clear();
+			}
+
+			moduleDefaultSettings.Clear();
+			moduleDefaultStorage.Clear();
 		});
 	}
 
@@ -579,7 +615,7 @@ public sealed partial class Player
 
 	public static void DisposeModuleData(Plugin plugin, string callerPlugin)
 	{
-		SaveAllOnlinePlayerData(plugin);
+		SaveAllOnlinePlayerData(plugin, false);
 
 		foreach (var player in List.Where(p => p.IsValid))
 		{
@@ -596,5 +632,10 @@ public sealed partial class Player
 
 		moduleDefaultSettings.Remove(callerPlugin);
 		moduleDefaultStorage.Remove(callerPlugin);
+	}
+
+	public static void Dispose(Plugin plugin)
+	{
+		SaveAllOnlinePlayerData(plugin, true);
 	}
 }

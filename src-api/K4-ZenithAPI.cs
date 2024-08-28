@@ -226,30 +226,104 @@ namespace ZenithAPI
 		/// <param name="valueFunc">The function to retrieve the value.</param>
 		void RegisterModuleServerPlaceholder(string key, Func<string> valueFunc);
 
+		/// <summary>
+		/// Registers a module configuration setting.
+		/// </summary>
+		/// <typeparam name="T">The type of the setting.</typeparam>
+		/// <param name="groupName">The group name of the setting.</param>
+		/// <param name="configName">The name of the setting.</param>
+		/// <param name="description">The description of the setting.</param>
+		/// <param name="defaultValue">The default value of the setting.</param>
+		/// <param name="flags">The flags of the setting.</param>
 		void RegisterModuleConfig<T>(string groupName, string configName, string description, T defaultValue, ConfigFlag flags = ConfigFlag.None) where T : notnull;
 
+		/// <summary>
+		/// Checks if a module configuration setting exists.
+		/// </summary>
+		/// <param name="groupName">The group name of the setting.</param>
+		/// <param name="configName">The name of the setting.</param>
+		bool HasModuleConfigValue(string groupName, string configName);
+
+		/// <summary>
+		/// Retrieves a module configuration setting.
+		/// </summary>
+		/// <typeparam name="T">The type of the setting.</typeparam>
+		/// <param name="groupName">The group name of the setting.</param>
+		/// <param name="configName">The name of the setting.</param>
 		T GetModuleConfigValue<T>(string groupName, string configName) where T : notnull;
 
+		/// <summary>
+		/// Sets a module configuration setting.
+		/// </summary>
+		/// <typeparam name="T">The type of the setting.</typeparam>
+		/// <param name="groupName">The group name of the setting.</param>
+		/// <param name="configName">The name of the setting.</param>
+		/// <param name="value">The value to set.</param>
 		void SetModuleConfigValue<T>(string groupName, string configName, T value) where T : notnull;
 
+		/// <summary>
+		/// Retrieves a module configuration setting.
+		/// </summary>
 		IModuleConfigAccessor GetModuleConfigAccessor();
 
+		/// <summary>
+		/// Retrieves the event handler for the module.
+		/// </summary>
 		IZenithEvents GetEventHandler();
 
+		/// <summary>
+		/// Loads all player data from the database.
+		/// </summary>
+		void LoadAllOnlinePlayerData();
+
+		/// <summary>
+		/// Saves all player data to the database.
+		/// </summary>
+		void SaveAllOnlinePlayerData();
+
+		/// <summary>
+		/// Dispose the module's Zenith based resources such as commands, configs, and player datas.
+		/// </summary>
 		void DisposeModule();
 
-		void DisposeModule(Assembly assembly);
+		/// <summary>
+		/// Dispose the module's Zenith based resources such as commands, configs, and player datas.
+		/// </summary>
+		/// <param name="assembly">The assembly to dispose.</param>
+		void DisposeModule(Assembly assembly); // ! Recommended to use, if you see the regular not working
 	}
 
 	public interface IModuleConfigAccessor
 	{
+		/// <summary>
+		///  Retrieves a configuration value.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="groupName"></param>
+		/// <param name="configName"></param>
+		/// <returns></returns>
 		T GetValue<T>(string groupName, string configName) where T : notnull;
+
+		/// <summary>
+		/// Sets a configuration value.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="groupName"></param>
+		/// <param name="configName"></param>
+		/// <param name="value"></param>
 		void SetValue<T>(string groupName, string configName, T value) where T : notnull;
 	}
 
 	public interface IZenithEvents
 	{
+		/// <summary>
+		/// Occurs when a player is loaded and their data is downloaded.
+		/// </summary>
 		event EventHandler<CCSPlayerController> OnZenithPlayerLoaded;
+
+		/// <summary>
+		/// Occurs when a player is unloaded and their data is saved.
+		/// </summary>
 		event EventHandler<CCSPlayerController> OnZenithPlayerUnloaded;
 	}
 
@@ -264,9 +338,8 @@ namespace ZenithAPI
 	public enum ConfigFlag
 	{
 		None = 0,
-		Global = 1,
-		Protected = 2,
-		Locked = 4,
-		AutoReload = 8
+		Global = 1, // Allow all other modules to access this config value
+		Protected = 2, // Prevent this config value from retrieving the value (hidden)
+		Locked = 4 // Prevent this config value from being changed (read-only)
 	}
 }

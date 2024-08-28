@@ -95,6 +95,18 @@ namespace Zenith
 			}
 		}
 
+		public void RemoveAllCommands()
+		{
+			foreach (var pluginEntry in _pluginCommands)
+			{
+				foreach (var command in pluginEntry.Value.Keys)
+				{
+					RemoveCommand(command, pluginEntry.Value[command]);
+				}
+			}
+			_pluginCommands.Clear();
+		}
+
 		public void RegisterZenithCommand(List<string> commands, string description, CommandInfo.CommandCallback handler, CommandUsage usage = CommandUsage.CLIENT_AND_SERVER, int argCount = 0, string? helpText = null, string? permission = null)
 		{
 			foreach (string command in commands)

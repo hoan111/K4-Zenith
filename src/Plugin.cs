@@ -3,6 +3,7 @@ namespace Zenith
 	using CounterStrikeSharp.API;
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Core.Attributes;
+	using CounterStrikeSharp.API.Modules.Timers;
 	using Microsoft.Extensions.Logging;
 	using Zenith.Models;
 
@@ -73,23 +74,20 @@ namespace Zenith
 					.Where(d => Path.GetFileName(d).ToLower().Contains("zenith") && d != ModuleDirectory)
 					.ToArray();
 
-				float delay = 0.0f;
-				if (directories.Count() > 0)
+				if (directories.Length > 0)
 				{
-					delay = 3.0f;
-					Logger.LogInformation("Preloading all Zenith modules...");
-
-					directories.ToList().ForEach(directory =>
+					foreach (var directory in directories)
 					{
-						Server.ExecuteCommand($"css_plugins reload {Path.GetFileNameWithoutExtension(directory)}");
-					});
+						var pluginName = Path.GetFileNameWithoutExtension(directory);
+						Server.ExecuteCommand($"css_plugins unload {pluginName}");
+						Server.ExecuteCommand($"css_plugins load {pluginName}");
+
+						// ? Reload not finds them sadly
+					}
 				}
 
-				AddTimer(delay, () =>
-				{
-					Utilities.GetPlayers().ForEach(player => new Player(this, player, true));
-					Player.LoadAllOnlinePlayerData(this);
-				});
+				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player => new Player(this, player, true));
+				Player.LoadAllOnlinePlayerData(this);
 
 				AddTimer(3.0f, () =>
 				{
@@ -98,13 +96,15 @@ namespace Zenith
 						if (player.IsValid && player.IsPlayer)
 							player.EnforcePluginValues();
 					});
-				});
+				}, TimerFlags.REPEAT);
 			}
 		}
 
 		public override void Unload(bool hotReload)
 		{
-			Player.SaveAllOnlinePlayerData(this);
+			Player.Dispose(this);
+			RemoveAllCommands();
+			ConfigManager.Dispose();
 		}
 	}
 }

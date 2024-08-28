@@ -57,11 +57,6 @@ public sealed partial class Player
 			{
 				if (!noLoad)
 					await this.LoadPlayerData();
-
-				Server.NextFrame(() =>
-				{
-					plugin._moduleServices?.InvokeZenithPlayerLoaded(Controller!);
-				});
 			}
 			catch (Exception ex)
 			{

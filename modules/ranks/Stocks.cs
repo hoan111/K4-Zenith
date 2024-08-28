@@ -49,6 +49,10 @@ public sealed partial class Plugin : BasePlugin
 
 		long currentPoints = player.GetStorage<long>("Points");
 		long newPoints = currentPoints + points;
+
+		if (newPoints < 0)
+			newPoints = 0;
+
 		player.SetStorage("Points", newPoints);
 
 		if (_configAccessor.GetValue<bool>("Settings", "ScoreboardScoreSync"))
@@ -84,9 +88,7 @@ public sealed partial class Plugin : BasePlugin
 			player.SetStorage("Rank", newRank);
 
 			if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
-			{
 				player.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
-			}
 
 			string messageKey;
 			string colorCode;

@@ -5,6 +5,7 @@ namespace Zenith
 	using CounterStrikeSharp.API.Modules.Utils;
 	using Menu;
 	using Menu.Enums;
+	using Microsoft.Extensions.Logging;
 	using Zenith.Models;
 
 	public sealed partial class Plugin : BasePlugin

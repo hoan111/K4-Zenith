@@ -1,10 +1,14 @@
--- 2024.08.27 - 1.0.1
+-- 2024.08.27 - 1.0.2
   - feat: Option to change center alert time globally
   - feat: Option to change center message time globally
   - feat: Added css_zreload command to reload all module settings manually
   - feat: Added possibility to modify chat separator (customise : between name and message)
   - feat: Added css_commandlist to list all available commands in Zenith and modules
   - feat: Added automation to download GeoLite2-Country.mmdb if not exists
+  - feat: Added warning log about unauthorized access to a config value (non-global)
+  - feat: Core reload trigger reload to all modules aswell that use the APIs
+  - feat: Added Accuracy, KDR, KD and KDA to the statistics
+  - feat: Added hit groups to weapon stats
   - fix: Round lose translation was wrongly set
   - fix: Round lose rank event triggered for spectators
   - fix: Round lose stats event triggered for spectators
@@ -16,13 +20,21 @@
   - fix: Added NextFrame to rank event point messages to fix some not showing up
   - fix: Rank event point set to null shows the change messages
   - fix: Rank modify points round summary error log
+  - fix: Ignore values in the config files that not used by plugin
+  - fix: Weapon stats not loaded to server upon player join
+  - fix: Stats did not track at all
+  - fix: Rank points capped to 0, no negative points
+  - fix: Rank module round win/lose triggered for people not spawned in round
+  - fix: Stats module round win/lose triggered for people not spawned in round
+  - fix: ClanTag enforcement stopped after first enforcement
+  - fix: Accuracy capped to max 100%
+  - fix: Now one shot - one hit (shotguns and burst fire wont register multiple hits)
+  - **fix: Plugin was not able to hotReload**
   - optimise: Changed some functions to use less code
+  - optimise: Added global capability variables
 
 before release:
-  - Ha database nincs, akkor nem találja a shared-et, pluginba rakni a megtalálást stb logolással a modulokba
-  - Global module services a modulokba?
   - Example files
-  - Ha nem global wgy storage gagy config akkor irja hogy nem global ne azt hogy nem talalta 
 
  release:
   - admin system

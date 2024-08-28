@@ -1,6 +1,5 @@
 namespace Zenith
 {
-	using System.Reflection;
 	using CounterStrikeSharp.API;
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Core.Attributes.Registration;
@@ -26,23 +25,17 @@ namespace Zenith
 
 			bool enabledChatModifier = player.GetSetting<bool>("ShowChatTags");
 
-			string msgT = um.ReadString("messagename");
-			string playername = um.ReadString("param1");
-			string message = um.ReadString("param2");
-
 			string dead = player.IsAlive ? string.Empty : Localizer["k4.tag.dead"];
-			string team = msgT.Contains("All") ? Localizer["k4.tag.all"] : TeamLocalizer(player.Controller!.Team);
+			string team = um.ReadString("messagename").Contains("All") ? Localizer["k4.tag.all"] : TeamLocalizer(player.Controller!.Team);
 			string tag = enabledChatModifier ? player.GetNameTag() : string.Empty;
 
 			char namecolor = enabledChatModifier ? player.GetNameColor() : ChatColors.ForTeam(player.Controller!.Team);
 			char chatcolor = enabledChatModifier ? player.GetChatColor() : ChatColors.Default;
 
-			string formattedMessage = ReplaceTags($" {dead}{team}{tag}{namecolor}{playername}{Localizer["k4.tag.separator"]}{chatcolor}{message}", player.Controller!.Team);
-
-			um.SetString("messagename", formattedMessage);
+			um.SetString("messagename", FormatMessage($" {dead}{team}{tag}{namecolor}{um.ReadString("param1")}{Localizer["k4.tag.separator"]}{chatcolor}{um.ReadString("param2")}", player.Controller!.Team));
 			return HookResult.Changed;
 
-			static string ReplaceTags(string message, CsTeam team)
+			static string FormatMessage(string message, CsTeam team)
 			{
 				string modifiedValue = StringExtensions.ReplaceColorTags(message)
 					.Replace("{team}", ChatColors.ForTeam(team).ToString());
@@ -72,7 +65,7 @@ namespace Zenith
 			if (player.IsHLTV || player.IsBot)
 				return HookResult.Continue;
 
-			_ = new Player(this, player);
+			new Player(this, player);
 			return HookResult.Continue;
 		}
 
@@ -87,8 +80,8 @@ namespace Zenith
 		[GameEventHandler]
 		public HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
 		{
-			if (GetCoreConfig<bool>("Database", "SaveOnRoundEnd"))
-				Player.SaveAllOnlinePlayerData(this);
+			if (HasModuleConfigValue("Database", "SaveOnRoundEnd") && GetCoreConfig<bool>("Database", "SaveOnRoundEnd"))
+				Player.SaveAllOnlinePlayerData(this, false);
 			return HookResult.Continue;
 		}
 	}

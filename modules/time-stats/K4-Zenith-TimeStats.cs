@@ -20,34 +20,49 @@ public class Plugin : BasePlugin
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
 	public override string ModuleVersion => "1.0.0";
 
-	public static PlayerCapability<IPlayerServices> Capability_PlayerServices { get; } = new("zenith:player-services");
-	public static PluginCapability<IModuleServices> Capability_ModuleServices { get; } = new("zenith:module-services");
+	private static PlayerCapability<IPlayerServices>? _playerServicesCapability;
+	private static PluginCapability<IModuleServices>? _moduleServicesCapability;
 
 	private IZenithEvents? _zenithEvents;
+	private IModuleServices? _moduleServices;
 
 	private Dictionary<ulong, PlayerTimeData> _playerTimes = new Dictionary<ulong, PlayerTimeData>();
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
-		IModuleServices? moduleServices = Capability_ModuleServices.Get();
-		if (moduleServices == null)
+		try
+		{
+			_playerServicesCapability = new PlayerCapability<IPlayerServices>("zenith:player-services");
+			_moduleServicesCapability = new PluginCapability<IModuleServices>("zenith:module-services");
+		}
+		catch (Exception ex)
+		{
+			Logger.LogError($"Failed to initialize Zenith API: {ex.Message}");
+			Logger.LogInformation("Please check if Zenith is installed, configured and loaded correctly.");
+
+			Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(ModulePath)}");
+			return;
+		}
+
+		_moduleServices = _moduleServicesCapability.Get();
+		if (_moduleServices == null)
 		{
 			Logger.LogError("Failed to get Module-Services API for Zenith.");
 			Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(ModulePath)}");
 			return;
 		}
 
-		_coreAccessor = moduleServices.GetModuleConfigAccessor();
+		_coreAccessor = _moduleServices.GetModuleConfigAccessor();
 
-		moduleServices.RegisterModuleConfig("Config", "PlaytimeCommands", "List of commands that shows player time statistics", new List<string> { "playtime", "mytime" });
-		moduleServices.RegisterModuleConfig("Config", "NotificationInterval", "Interval in seconds between playtime notifications", 300);
+		_moduleServices.RegisterModuleConfig("Config", "PlaytimeCommands", "List of commands that shows player time statistics", new List<string> { "playtime", "mytime" });
+		_moduleServices.RegisterModuleConfig("Config", "NotificationInterval", "Interval in seconds between playtime notifications", 300);
 
-		moduleServices.RegisterModuleSettings(new Dictionary<string, object?>
+		_moduleServices.RegisterModuleSettings(new Dictionary<string, object?>
 		{
 			{ "ShowPlaytime", true }
 		}, Localizer);
 
-		moduleServices.RegisterModuleStorage(new Dictionary<string, object?>
+		_moduleServices.RegisterModuleStorage(new Dictionary<string, object?>
 		{
 			{ "TotalPlaytime", 0L },
 			{ "TerroristPlaytime", 0L },
@@ -58,7 +73,7 @@ public class Plugin : BasePlugin
 			{ "LastNotification", 0L }
 		});
 
-		_zenithEvents = moduleServices.GetEventHandler();
+		_zenithEvents = _moduleServices.GetEventHandler();
 		if (_zenithEvents != null)
 		{
 			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
@@ -75,7 +90,24 @@ public class Plugin : BasePlugin
 
 		AddTimer(10.0f, OnTimerElapsed, TimerFlags.REPEAT);
 
-		moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "PlaytimeCommands"), "Show the playtime informations.", OnPlaytimeCommand, CommandUsage.CLIENT_ONLY);
+		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "PlaytimeCommands"), "Show the playtime informations.", OnPlaytimeCommand, CommandUsage.CLIENT_ONLY);
+
+		if (hotReload)
+		{
+			_moduleServices.LoadAllOnlinePlayerData();
+			AddTimer(3.0f, () =>
+			{
+				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
+				{
+					_playerTimes[player.SteamID] = new PlayerTimeData
+					{
+						LastUpdateTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+						CurrentTeam = player.Team,
+						IsAlive = player.PlayerPawn.Value?.Health > 0
+					};
+				});
+			});
+		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
@@ -260,7 +292,7 @@ public class Plugin : BasePlugin
 		}
 		_playerTimes.Clear();
 
-		IModuleServices? moduleServices = Capability_ModuleServices.Get();
+		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
 		if (moduleServices == null)
 			return;
 
@@ -270,7 +302,7 @@ public class Plugin : BasePlugin
 	public IPlayerServices? GetZenithPlayer(CCSPlayerController? player)
 	{
 		if (player == null) return null;
-		try { return Capability_PlayerServices.Get(player); }
+		try { return _playerServicesCapability?.Get(player); }
 		catch { return null; }
 	}
 }

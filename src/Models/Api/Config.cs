@@ -47,6 +47,12 @@ namespace Zenith
 			ConfigManager.RegisterConfig(callerPlugin, groupName, configName, description, defaultValue, flags);
 		}
 
+		public static bool HasModuleConfigValue(string groupName, string configName)
+		{
+			string callerPlugin = CallerIdentifier.GetCallingPluginName();
+			return ConfigManager.HasConfigValue(callerPlugin, groupName, configName);
+		}
+
 		public static T GetModuleConfigValue<T>(string groupName, string configName) where T : notnull
 		{
 			string callerPlugin = CallerIdentifier.GetCallingPluginName();
@@ -109,7 +115,6 @@ namespace Zenith
 	public class ModuleConfig
 	{
 		public required string ModuleName { get; set; }
-		public bool AutoReload { get; set; } = false;
 		public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 		public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 		public List<ConfigGroup> Groups { get; set; } = new List<ConfigGroup>();
@@ -155,6 +160,12 @@ namespace Zenith
 			_watcher.Created += OnConfigFileChanged;
 		}
 
+
+		public static void Dispose()
+		{
+			_watcher?.Dispose();
+		}
+
 		public static void SetGlobalAutoReload(bool enabled)
 		{
 			GlobalAutoReloadEnabled = enabled;
@@ -164,12 +175,21 @@ namespace Zenith
 			}
 		}
 
+		private static Timer? _debounceTimer;
+
 		private static void OnConfigFileChanged(object sender, FileSystemEventArgs e)
 		{
 			if (!GlobalAutoReloadEnabled)
 				return;
 
-			var relativePath = Path.GetRelativePath(_baseConfigDirectory, e.FullPath);
+			_debounceTimer?.Dispose();
+			_debounceTimer = new Timer(DebounceCallback, e.FullPath, 1000, Timeout.Infinite);
+		}
+
+		private static void DebounceCallback(object? state)
+		{
+			var fullPath = (string)state!;
+			var relativePath = Path.GetRelativePath(_baseConfigDirectory, fullPath);
 			var pathParts = relativePath.Split(Path.DirectorySeparatorChar);
 			if (pathParts.Length >= 2 && pathParts[0] == "modules")
 			{
@@ -264,6 +284,22 @@ namespace Zenith
 			SaveModuleConfig(moduleName);
 		}
 
+		public static bool HasConfigValue(string callerModule, string groupName, string configName)
+		{
+			foreach (var moduleConfig in _moduleConfigs.Values)
+			{
+				var group = moduleConfig.Groups.FirstOrDefault(g => g.Name == groupName);
+				if (group != null)
+				{
+					var config = group.Items.FirstOrDefault(c => c.Name == configName);
+					if (config != null)
+						return true;
+				}
+			}
+
+			return false;
+		}
+
 		public static T GetConfigValue<T>(string callerModule, string groupName, string configName) where T : notnull
 		{
 			string cacheKey = $"{callerModule}:{groupName}:{configName}";
@@ -287,11 +323,10 @@ namespace Zenith
 					var config = group.Items.FirstOrDefault(c => c.Name == configName);
 					if (config != null)
 					{
-						if (callerModule != CoreModuleName &&
-							!config.Flags.HasFlag(ConfigFlag.Global) &&
-							callerModule != moduleConfig.ModuleName)
+						if (callerModule != CoreModuleName && !config.Flags.HasFlag(ConfigFlag.Global) && callerModule != moduleConfig.ModuleName)
 						{
-							continue; // Skip this config if it's not global and not from the caller's module
+							Logger.LogWarning($"Attempt to access non-global config '{groupName}.{configName}' from module '{callerModule}'");
+							continue;
 						}
 
 						if (config.CurrentValue == null)
@@ -327,11 +362,10 @@ namespace Zenith
 					var config = group.Items.FirstOrDefault(c => c.Name == configName);
 					if (config != null)
 					{
-						if (callerModule != CoreModuleName &&
-							!config.Flags.HasFlag(ConfigFlag.Global) &&
-							callerModule != moduleConfig.ModuleName)
+						if (callerModule != CoreModuleName && !config.Flags.HasFlag(ConfigFlag.Global) && callerModule != moduleConfig.ModuleName)
 						{
-							continue; // Skip this config if it's not global and not from the caller's module
+							Logger.LogWarning($"Attempt to modify non-global config '{groupName}.{configName}' from module '{callerModule}'");
+							continue;
 						}
 
 						if (callerModule != CoreModuleName)
@@ -411,6 +445,7 @@ namespace Zenith
 			{
 				var deserializer = new DeserializerBuilder()
 					.WithNamingConvention(CamelCaseNamingConvention.Instance)
+					.IgnoreUnmatchedProperties()
 					.Build();
 
 				var yaml = File.ReadAllText(filePath);
@@ -445,15 +480,11 @@ namespace Zenith
 					}
 				}
 
-				// Parse AutoReload, CreatedAt, and LastUpdated from comments
+				// Parse CreatedAt, and LastUpdated from comments
 				var lines = yaml.Split('\n');
 				foreach (var line in lines)
 				{
-					if (line.StartsWith("# AutoReload:", StringComparison.OrdinalIgnoreCase))
-					{
-						config.AutoReload = line.EndsWith("true", StringComparison.OrdinalIgnoreCase);
-					}
-					else if (line.StartsWith("# Created:", StringComparison.OrdinalIgnoreCase))
+					if (line.StartsWith("# Created:", StringComparison.OrdinalIgnoreCase))
 					{
 						if (DateTime.TryParse(line.Substring(10).Trim(), out var createdAt))
 						{
@@ -534,7 +565,7 @@ namespace Zenith
 				var listType = typeof(List<>).MakeGenericType(elementType);
 				var list = Activator.CreateInstance(listType);
 
-				if (value is System.Collections.IEnumerable enumerable)
+				if (value is IEnumerable enumerable)
 				{
 					var addMethod = listType.GetMethod("Add");
 					foreach (var item in enumerable)
@@ -652,11 +683,10 @@ namespace Zenith
 					var config = group.Items.FirstOrDefault(c => c.Name == configName);
 					if (config != null)
 					{
-						if (callerModule != CoreModuleName &&
-							!config.Flags.HasFlag(ConfigFlag.Global) &&
-							callerModule != moduleConfig.ModuleName)
+						if (callerModule != CoreModuleName && !config.Flags.HasFlag(ConfigFlag.Global) && callerModule != moduleConfig.ModuleName)
 						{
-							continue; // Skip this config if it's not global and not from the caller's module
+							Logger.LogWarning($"Attempt to access non-global config '{groupName}.{configName}' from module '{callerModule}'");
+							continue;
 						}
 
 						Type? configType = Type.GetType(config.AllowedType);
