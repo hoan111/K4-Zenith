@@ -69,6 +69,7 @@
 # before release:
 - Example files
 - Core reload module player not loaded
+- A calleridentifier-be elmenteni kik hivtak a plugint es azokat reloadolni hotReloadkor igy pontos a talalat akkor is ha nek az a mappa neve hogy zenith
 
 # release:
 - wall toplists and custom data using placeholders
