@@ -1,6 +1,7 @@
 using System.Reflection;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Localization;
 
 namespace ZenithAPI
@@ -41,14 +42,24 @@ namespace ZenithAPI
 		bool IsAlive { get; }
 
 		/// <summary>
-		/// Checks if the player is a VIP.
+		/// Checks if the player is muted in voice chat.
 		/// </summary>
-		bool IsVIP { get; }
+		bool IsMuted { get; }
 
 		/// <summary>
-		/// Checks if the player is an admin.
+		/// Checks if the player is gagged in chat.
 		/// </summary>
-		bool IsAdmin { get; }
+		bool IsGagged { get; }
+
+		/// <summary>
+		/// Sets the player's mute status.
+		/// </summary>
+		void SetMute(bool mute, ActionPriority priority = ActionPriority.Low);
+
+		/// <summary>
+		/// Sets the player's gag status.
+		/// </summary>
+		void SetGag(bool gag, ActionPriority priority = ActionPriority.Low);
 
 		/// <summary>
 		/// Prints a message to the player's chat.
@@ -174,6 +185,24 @@ namespace ZenithAPI
 	/// </summary>
 	public interface IModuleServices : IZenithEvents // ! zenith:module-services
 	{
+		/// <summary>
+		/// Prints a message to all players' chat.
+		/// </summary>
+		void PrintForAll(string message, bool showPrefix = true);
+
+		/// <summary>
+		/// Prints a message to all players on a specific team.
+		/// </summary>
+		void PrintForTeam(CsTeam team, string message, bool showPrefix = true);
+
+		/// <summary>
+		/// Prints a message to all players on a specific team.
+		/// </summary>
+		void PrintForPlayer(CCSPlayerController? player, string message, bool showPrefix = true);
+
+		/// <summary>
+		/// Retrieves the connection string for the database.
+		/// </summary>
 		string GetConnectionString();
 
 		/// <summary>
@@ -325,6 +354,11 @@ namespace ZenithAPI
 		/// Occurs when a player is unloaded and their data is saved.
 		/// </summary>
 		event Action<CCSPlayerController> OnZenithPlayerUnloaded;
+
+		/// <summary>
+		/// Invokes the OnZenithCoreUnload event.
+		/// </summary>
+		event Action<bool> OnZenithCoreUnload;
 	}
 
 	public enum ActionPriority

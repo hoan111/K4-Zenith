@@ -27,11 +27,11 @@ public partial class Database
 	private async Task EnsureVersionTableExistsAsync(MySqlConnection connection)
 	{
 		await connection.ExecuteAsync($@"
-            CREATE TABLE IF NOT EXISTS {TablePrefix}{INFO_TABLE} (
-                `key` VARCHAR(50) PRIMARY KEY,
-                value VARCHAR(50) NOT NULL
-            )
-        ");
+			CREATE TABLE IF NOT EXISTS {TablePrefix}{INFO_TABLE} (
+				`key` VARCHAR(50) PRIMARY KEY,
+				value VARCHAR(50) NOT NULL
+			) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+		");
 	}
 
 	private async Task CreateDatabaseBackupAsync()

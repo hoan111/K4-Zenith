@@ -62,7 +62,7 @@ namespace Zenith
 						}
 					}
 
-					Menu?.ShowPaginatedMenu(player, Localizer["k4.settings.title"], items, (buttons, menu, selected) =>
+					Menu?.ShowScrollableMenu(player, Localizer["k4.settings.title"], items, (buttons, menu, selected) =>
 					{
 						if (selected == null) return;
 

@@ -272,8 +272,8 @@ namespace Zenith_Ranks
 			{
 				if (deathEvent != null)
 				{
-					IPlayerServices? victim = GetZenithPlayer(deathEvent.Userid);
-					IPlayerServices? attacker = GetZenithPlayer(deathEvent.Attacker);
+					IPlayerServices? victim = _plugin.GetZenithPlayer(deathEvent.Userid);
+					IPlayerServices? attacker = _plugin.GetZenithPlayer(deathEvent.Attacker);
 
 					if (victim != null)
 					{
@@ -314,7 +314,7 @@ namespace Zenith_Ranks
 
 				AssisterDeathEvent:
 
-					IPlayerServices? assister = GetZenithPlayer(deathEvent.Assister);
+					IPlayerServices? assister = _plugin.GetZenithPlayer(deathEvent.Assister);
 					if (assister != null && assister.Controller.SteamID != deathEvent.Userid?.SteamID)
 					{
 						if (!_plugin._configAccessor.GetValue<bool>("Settings", "FFAMode") && attacker?.Controller.Team == deathEvent.Userid?.Team && assister.Controller.Team == deathEvent.Userid?.Team)
@@ -454,7 +454,7 @@ namespace Zenith_Ranks
 					object? targetValue = targetProp.GetValue(gameEvent);
 					if (targetValue is CCSPlayerController playerController)
 					{
-						var player = GetZenithPlayer(playerController);
+						var player = _plugin.GetZenithPlayer(playerController);
 						if (player != null)
 						{
 							string eventKey = $"k4.events.{eventName.ToLower().Replace("event", "")}";

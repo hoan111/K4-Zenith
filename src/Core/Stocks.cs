@@ -6,13 +6,15 @@ using MaxMind.GeoIP2;
 using Zenith.Models;
 using System.Reflection;
 using CounterStrikeSharp.API.Modules.Utils;
+using System.Collections.Concurrent;
+using System.Text;
 
 namespace Zenith
 {
 	public sealed partial class Plugin : BasePlugin
 	{
-		private readonly Dictionary<string, Dictionary<string, Func<CCSPlayerController, string>>> _pluginPlayerPlaceholders = [];
-		private readonly Dictionary<string, Dictionary<string, Func<string>>> _pluginServerPlaceholders = [];
+		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<CCSPlayerController, string>>> _pluginPlayerPlaceholders = [];
+		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<string>>> _pluginServerPlaceholders = [];
 
 		private void Initialize_Placeholders()
 		{
@@ -86,45 +88,38 @@ namespace Zenith
 		{
 			string callingPlugin = CallerIdentifier.GetCallingPluginName();
 
-			if (!_pluginPlayerPlaceholders.TryGetValue(callingPlugin, out var placeholders))
-			{
-				placeholders = [];
-				_pluginPlayerPlaceholders[callingPlugin] = placeholders;
-				return;
-			}
+			if (!_pluginPlayerPlaceholders.ContainsKey(callingPlugin))
+				_pluginPlayerPlaceholders.TryAdd(callingPlugin, new ConcurrentDictionary<string, Func<CCSPlayerController, string>>());
 
-			if (placeholders.ContainsKey(key))
+			if (_pluginPlayerPlaceholders[callingPlugin].ContainsKey(key))
 			{
 				Logger.LogWarning($"Player placeholder '{key}' already exists for plugin '{callingPlugin}', overwriting.");
 			}
 
-			placeholders[key] = valueFunc;
+			_pluginPlayerPlaceholders[callingPlugin][key] = valueFunc;
 		}
 
 		public void RegisterZenithServerPlaceholder(string key, Func<string> valueFunc)
 		{
 			string callingPlugin = CallerIdentifier.GetCallingPluginName();
 
-			if (!_pluginServerPlaceholders.TryGetValue(callingPlugin, out var placeholders))
-			{
-				placeholders = [];
-				_pluginServerPlaceholders[callingPlugin] = placeholders;
-			}
+			if (!_pluginServerPlaceholders.ContainsKey(callingPlugin))
+				_pluginServerPlaceholders.TryAdd(callingPlugin, new ConcurrentDictionary<string, Func<string>>());
 
-			if (placeholders.ContainsKey(key))
+			if (_pluginServerPlaceholders[callingPlugin].ContainsKey(key))
 			{
 				Logger.LogWarning($"Server placeholder '{key}' already exists for plugin '{callingPlugin}', overwriting.");
 			}
 
-			placeholders[key] = valueFunc;
+			_pluginServerPlaceholders[callingPlugin][key] = valueFunc;
 		}
 
 		public void RemoveModulePlaceholders(string? callingPlugin = null)
 		{
 			if (callingPlugin != null)
 			{
-				_pluginPlayerPlaceholders.Remove(callingPlugin);
-				_pluginServerPlaceholders.Remove(callingPlugin);
+				_pluginPlayerPlaceholders.Remove(callingPlugin, out _);
+				_pluginServerPlaceholders.Remove(callingPlugin, out _);
 			}
 			else
 			{
@@ -237,6 +232,30 @@ namespace Zenith
 				Logger.LogInformation($"Error getting country information: {ex.Message}");
 				return ("??", "Unknown");
 			}
+		}
+
+		public string RemoveColorChars(string input)
+		{
+			if (string.IsNullOrEmpty(input))
+				return input;
+
+			var chatColorChars = typeof(ChatColors)
+				.GetFields(BindingFlags.Public | BindingFlags.Static)
+				.Where(f => f.FieldType == typeof(char))
+				.Select(f => (char?)f.GetValue(null))
+				.ToArray();
+
+			StringBuilder result = new StringBuilder(input.Length);
+
+			foreach (char c in input)
+			{
+				if (!chatColorChars.Contains(c))
+				{
+					result.Append(c);
+				}
+			}
+
+			return result.ToString();
 		}
 	}
 }

@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Utils;
 using ZenithAPI;
 
@@ -44,7 +45,7 @@ public sealed partial class Plugin : BasePlugin
 		if (points == 0)
 			return;
 
-		if (player.IsVIP && points > 0)
+		if (_configAccessor.GetValue<List<string>>("Settings", "VIPFlags").Any(f => AdminManager.PlayerHasPermissions(player.Controller, f)) && points > 0)
 			points = (int)(points * (decimal)_configAccessor.GetValue<double>("Settings", "VipMultiplier"));
 
 		long currentPoints = player.GetStorage<long>("Points");

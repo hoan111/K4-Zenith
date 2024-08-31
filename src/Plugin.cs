@@ -60,58 +60,47 @@ namespace Zenith
 
 			RegisterListener<Listeners.OnTick>(() =>
 			{
-				Player.List.ForEach(player =>
+				foreach (var player in Player.List)
 				{
 					if (player.IsValid && player.IsPlayer)
 						player.ShowCenterMessage();
-				});
+				}
 			});
 
 			if (hotReload)
 			{
-				string pluginDirectory = Path.GetDirectoryName(ModuleDirectory)!;
-				string[] directories = Directory.EnumerateDirectories(pluginDirectory, "*", SearchOption.TopDirectoryOnly)
-					.Where(d => Path.GetFileName(d).ToLower().Contains("zenith") && d != ModuleDirectory)
-					.ToArray();
+				// log here an ascii art saying WARNING
+				Logger.LogCritical(@"*");
+				Logger.LogCritical(@"*");
+				Logger.LogCritical(@"*    ██╗    ██╗ █████╗ ██████╗ ███╗   ██╗██╗███╗   ██╗ ██████╗");
+				Logger.LogCritical(@"*    ██║    ██║██╔══██╗██╔══██╗████╗  ██║██║████╗  ██║██╔════╝");
+				Logger.LogCritical(@"*    ██║ █╗ ██║███████║██████╔╝██╔██╗ ██║██║██╔██╗ ██║██║  ███╗");
+				Logger.LogCritical(@"*    ██║███╗██║██╔══██║██╔══██╗██║╚██╗██║██║██║╚██╗██║██║   ██║");
+				Logger.LogCritical(@"*    ╚███╔███╔╝██║  ██║██║  ██║██║ ╚████║██║██║ ╚████║╚██████╔╝");
+				Logger.LogCritical(@"*     ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝  ╚═══╝ ╚═════╝");
+				Logger.LogCritical(@"*");
+				Logger.LogCritical(@"*    WARNING: Hot reloading Zenith Core currently breaks the plugin. Please restart the server instead.");
+				Logger.LogCritical(@"*    More information: https://github.com/roflmuffin/CounterStrikeSharp/issues/565");
+				Logger.LogCritical(@"*");
 
 				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player => new Player(this, player, true));
 				Player.LoadAllOnlinePlayerData(this);
-
-				// ? As css_plugins reload dont find plugin by name, we update their last updated time which triggers hotReload if enabled.
-				// ? If hotReload is disabled, then the core wont be reloaded aswell so wont trigger at all.
-				AddTimer(2.0f, () =>
-				{
-					foreach (var dir in directories)
-					{
-						string dllPath = Path.Combine(dir, $"{Path.GetFileNameWithoutExtension(dir)}.dll");
-						if (File.Exists(dllPath))
-						{
-							try
-							{
-								File.SetLastWriteTime(dllPath, DateTime.Now);
-							}
-							catch (Exception ex)
-							{
-								Logger.LogError($"Failed to update {dllPath}: {ex.Message}");
-							}
-						}
-						Server.ExecuteCommand($"css_plugins restart {Path.GetFileNameWithoutExtension(dir)}");
-					}
-				});
-
-				AddTimer(3.0f, () =>
-				{
-					Player.List.ForEach(player =>
-					{
-						if (player.IsValid && player.IsPlayer)
-							player.EnforcePluginValues();
-					});
-				}, TimerFlags.REPEAT);
 			}
+
+			AddTimer(3.0f, () =>
+			{
+				foreach (var player in Player.List)
+				{
+					if (player.IsValid && player.IsPlayer)
+						player.EnforcePluginValues();
+				}
+			}, TimerFlags.REPEAT);
 		}
 
 		public override void Unload(bool hotReload)
 		{
+			_moduleServices?.InvokeZenithCoreUnload(hotReload);
+
 			Player.Dispose(this);
 			RemoveAllCommands();
 			RemoveModulePlaceholders();

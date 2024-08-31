@@ -20,8 +20,8 @@ public class Plugin : BasePlugin
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
 	public override string ModuleVersion => "1.0.0";
 
-	private static PlayerCapability<IPlayerServices>? _playerServicesCapability;
-	private static PluginCapability<IModuleServices>? _moduleServicesCapability;
+	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
+	private PluginCapability<IModuleServices>? _moduleServicesCapability;
 
 	private IZenithEvents? _zenithEvents;
 	private IModuleServices? _moduleServices;
@@ -32,8 +32,8 @@ public class Plugin : BasePlugin
 	{
 		try
 		{
-			_playerServicesCapability = new PlayerCapability<IPlayerServices>("zenith:player-services");
-			_moduleServicesCapability = new PluginCapability<IModuleServices>("zenith:module-services");
+			_playerServicesCapability = new("zenith:player-services");
+			_moduleServicesCapability = new("zenith:module-services");
 		}
 		catch (Exception ex)
 		{
@@ -78,6 +78,7 @@ public class Plugin : BasePlugin
 		{
 			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
 			_zenithEvents.OnZenithPlayerUnloaded += OnZenithPlayerUnloaded;
+			_zenithEvents.OnZenithCoreUnload += OnZenithCoreUnload;
 		}
 		else
 		{
@@ -298,6 +299,18 @@ public class Plugin : BasePlugin
 			return;
 
 		moduleServices.DisposeModule(this.GetType().Assembly);
+	}
+
+	private void OnZenithCoreUnload(bool hotReload)
+	{
+		if (hotReload)
+		{
+			AddTimer(3.0f, () =>
+			{
+				try { File.SetLastWriteTime(Path.Combine(ModulePath), DateTime.Now); }
+				catch (Exception ex) { Logger.LogError($"Failed to update file: {ex.Message}"); }
+			});
+		}
 	}
 
 	public IPlayerServices? GetZenithPlayer(CCSPlayerController? player)

@@ -54,6 +54,9 @@ cp -R ./modules/ranks/bin/K4-Zenith-Ranks ./Zenith/plugins/ 2>/dev/null
 print_message "${YELLOW}" "Copying Statistics module..."
 rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modules/statistics/bin/K4-Zenith-Stats/ ./Zenith/plugins/K4-Zenith-Stats/
 
+print_message "${YELLOW}" "Copying Admin module..."
+rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modules/zenith-bans/bin/K4-Zenith-Bans/ ./Zenith/plugins/K4-Zenith-Bans/
+
 # Delete files with a specific extension from Zenith and sub-folders
 print_message "${BLUE}" "Cleaning up unnecessary files..."
 find ./Zenith -type f \( -name "*.pdb" -o -name "*.yaml" -o -name ".DS_Store" \) -delete 2>/dev/null

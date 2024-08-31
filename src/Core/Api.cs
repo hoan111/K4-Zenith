@@ -4,8 +4,8 @@ namespace Zenith
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Core.Capabilities;
 	using CounterStrikeSharp.API.Modules.Commands;
+	using CounterStrikeSharp.API.Modules.Utils;
 	using Microsoft.Extensions.Localization;
-	using Microsoft.Extensions.Logging;
 	using Zenith.Models;
 	using ZenithAPI;
 
@@ -13,11 +13,14 @@ namespace Zenith
 	{
 		public ModuleServices? _moduleServices;
 
-		public PlayerCapability<IPlayerServices> Capability_PlayerServices { get; } = new("zenith:player-services");
-		public PluginCapability<IModuleServices> Capability_ModuleServices { get; } = new("zenith:module-services");
+		public PlayerCapability<IPlayerServices> Capability_PlayerServices = null!;
+		public PluginCapability<IModuleServices> Capability_ModuleServices = null!;
 
 		public void Initialize_API()
 		{
+			Capability_PlayerServices = new("zenith:player-services");
+			Capability_ModuleServices = new("zenith:module-services");
+
 			Capabilities.RegisterPlayerCapability(Capability_PlayerServices, player => new PlayerServices(player, this));
 
 			_moduleServices = new ModuleServices(this);
@@ -50,16 +53,24 @@ namespace Zenith
 
 			public bool IsValid
 				=> _player.IsValid;
+
 			public bool IsPlayer
 				=> _player.IsPlayer;
+
 			public bool IsAlive
 				=> _player.IsAlive;
 
-			public bool IsVIP
-				=> _player.IsVIP;
+			public bool IsMuted
+				=> _player.IsMuted;
 
-			public bool IsAdmin
-				=> _player.IsAdmin;
+			public bool IsGagged
+				=> _player.IsGagged;
+
+			public void SetMute(bool value, ActionPriority priority = ActionPriority.Low)
+				=> _player.SetMute(value, priority);
+
+			public void SetGag(bool value, ActionPriority priority = ActionPriority.Low)
+				=> _player.SetGag(value, priority);
 
 			public void Print(string message)
 				=> _player.Print(message);
@@ -127,14 +138,43 @@ namespace Zenith
 
 			public event Action<CCSPlayerController>? OnZenithPlayerLoaded;
 			public event Action<CCSPlayerController>? OnZenithPlayerUnloaded;
+			public event Action<bool>? OnZenithCoreUnload;
 
 			public IZenithEvents GetEventHandler() => this;
+
+			public void PrintForAll(string message, bool showPrefix = true)
+			{
+				Console.ForegroundColor = ConsoleColor.DarkYellow;
+				Console.WriteLine($"{_plugin.RemoveColorChars(_plugin.Localizer["k4.general.prefix"])}{message}");
+				Console.ResetColor();
+
+				Player.List.ToList().ForEach(p => p.Print(message, showPrefix));
+			}
+
+			public void PrintForTeam(CsTeam team, string message, bool showPrefix = true)
+				=> Player.List.Where(p => p.Controller!.Team == team).ToList().ForEach(p => p.Print(message, showPrefix));
+
+			public void PrintForPlayer(CCSPlayerController? player, string message, bool showPrefix = true)
+			{
+				if (player == null)
+				{
+					Console.ForegroundColor = ConsoleColor.DarkYellow;
+					Console.WriteLine($"{_plugin.RemoveColorChars(_plugin.Localizer["k4.general.prefix"])}{message}");
+					Console.ResetColor();
+					return;
+				}
+
+				Player.Find(player)?.Print(message, showPrefix);
+			}
 
 			internal void InvokeZenithPlayerLoaded(CCSPlayerController player)
 				=> OnZenithPlayerLoaded?.Invoke(player);
 
 			internal void InvokeZenithPlayerUnloaded(CCSPlayerController player)
 				=> OnZenithPlayerUnloaded?.Invoke(player);
+
+			internal void InvokeZenithCoreUnload(bool hotReload)
+				=> OnZenithCoreUnload?.Invoke(hotReload);
 
 			public string GetConnectionString()
 				=> _plugin.Database.GetConnectionString();

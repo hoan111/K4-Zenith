@@ -13,10 +13,10 @@ public sealed partial class Player
 	public static readonly string TABLE_PLAYER_SETTINGS = "zenith_player_settings";
 	public static readonly string TABLE_PLAYER_STORAGE = "zenith_player_storage";
 
-	public Dictionary<string, object?> Settings = [];
-	public Dictionary<string, object?> Storage = [];
-	public static readonly Dictionary<string, (Dictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultSettings = [];
-	public static readonly Dictionary<string, (Dictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultStorage = [];
+	public ConcurrentDictionary<string, object?> Settings = new();
+	public ConcurrentDictionary<string, object?> Storage = new();
+	public static readonly ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultSettings = new();
+	public static readonly ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultStorage = new();
 
 	public static async Task CreateTablesAsync(Plugin plugin)
 	{
@@ -53,7 +53,7 @@ public sealed partial class Player
 
 			Server.NextFrame(() =>
 			{
-				moduleDefaultSettings[callerPlugin] = (defaultSettings, localizer);
+				moduleDefaultSettings[callerPlugin] = (new ConcurrentDictionary<string, object?>(defaultSettings), localizer);
 			});
 		});
 	}
@@ -68,7 +68,7 @@ public sealed partial class Player
 
 			Server.NextFrame(() =>
 			{
-				moduleDefaultStorage[callerPlugin] = (defaultStorage, null);
+				moduleDefaultStorage[callerPlugin] = (new ConcurrentDictionary<string, object?>(defaultStorage), null);
 			});
 		});
 	}
@@ -82,19 +82,20 @@ public sealed partial class Player
 		await connection.OpenAsync();
 
 		var columnExistsQuery = $@"
-        SELECT COUNT(*)
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = '{tablePrefix}{tableName}'
-        AND COLUMN_NAME = '{columnName}'";
+		SELECT COUNT(*)
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		AND TABLE_NAME = '{tablePrefix}{tableName}'
+		AND COLUMN_NAME = '{columnName}'";
 
 		var columnExists = await connection.ExecuteScalarAsync<int>(columnExistsQuery) > 0;
 
 		if (!columnExists)
 		{
 			var addColumnQuery = $@"
-            ALTER TABLE `{tablePrefix}{tableName}`
-            ADD COLUMN `{columnName}` JSON NULL;";
+			ALTER TABLE `{tablePrefix}{tableName}`
+			ADD COLUMN `{columnName}` JSON NULL
+			CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
 
 			await connection.ExecuteAsync(addColumnQuery);
 		}
@@ -106,7 +107,7 @@ public sealed partial class Player
 	public void SetStorage(string key, object? value, bool saveImmediately = false)
 		=> SetData(key, value, Storage, saveImmediately);
 
-	private void SetData(string key, object? value, Dictionary<string, object?> targetDict, bool saveImmediately, string? caller = null)
+	private void SetData(string key, object? value, ConcurrentDictionary<string, object?> targetDict, bool saveImmediately, string? caller = null)
 	{
 		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
 
@@ -133,7 +134,7 @@ public sealed partial class Player
 	public T? GetStorage<T>(string key)
 		=> GetData<T>(key, Storage);
 
-	private T? GetData<T>(string key, Dictionary<string, object?> targetDict, string? caller = null)
+	private T? GetData<T>(string key, ConcurrentDictionary<string, object?> targetDict, string? caller = null)
 	{
 		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
 
@@ -236,7 +237,7 @@ public sealed partial class Player
 		});
 	}
 
-	private async Task LoadDataAsync(Dictionary<string, object?> targetDict, string tableName, Dictionary<string, (Dictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults)
+	private async Task LoadDataAsync(ConcurrentDictionary<string, object?> targetDict, string tableName, ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults)
 	{
 		string tablePrefix = _plugin.Database.TablePrefix;
 		using var connection = _plugin.Database.CreateConnection();
@@ -284,7 +285,7 @@ public sealed partial class Player
 		await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString() });
 	}
 
-	private static void ApplyDefaultValues(Dictionary<string, (Dictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, Dictionary<string, object?> target)
+	private static void ApplyDefaultValues(ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, ConcurrentDictionary<string, object?> target)
 	{
 		foreach (var module in defaults)
 		{
@@ -383,7 +384,7 @@ public sealed partial class Player
 			dataToSave[$"{moduleID}.{(isStorage ? "storage" : "settings")}"] = JsonSerializer.Serialize(moduleData);
 		}
 
-		if (!dataToSave.Any())
+		if (dataToSave.Count == 0)
 		{
 			return; // No data to save
 		}
@@ -577,7 +578,7 @@ public sealed partial class Player
 		});
 	}
 
-	private static void LoadPlayerData(Dictionary<string, object?> targetDict, dynamic data, Dictionary<string, (Dictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, Plugin plugin)
+	private static void LoadPlayerData(ConcurrentDictionary<string, object?> targetDict, dynamic data, ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, Plugin plugin)
 	{
 		foreach (var property in (IDictionary<string, object>)data)
 		{
@@ -622,19 +623,12 @@ public sealed partial class Player
 
 		foreach (var player in List.Where(p => p.IsValid))
 		{
-			foreach (var key in player.Storage.Keys.Where(k => k.StartsWith($"{callerPlugin}.")))
-			{
-				player.Storage.Remove(key);
-			}
-
-			foreach (var key in player.Settings.Keys.Where(k => k.StartsWith($"{callerPlugin}.")))
-			{
-				player.Settings.Remove(key);
-			}
+			player.Storage.TryRemove(callerPlugin, out _);
+			player.Settings.TryRemove(callerPlugin, out _);
 		}
 
-		moduleDefaultSettings.Remove(callerPlugin);
-		moduleDefaultStorage.Remove(callerPlugin);
+		moduleDefaultSettings.TryRemove(callerPlugin, out _);
+		moduleDefaultStorage.TryRemove(callerPlugin, out _);
 	}
 
 	public static void Dispose(Plugin plugin)

@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Core.Commands;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Commands;
 using Microsoft.Extensions.Logging;
@@ -8,7 +10,7 @@ namespace Zenith
 {
 	public sealed partial class Plugin : BasePlugin
 	{
-		private readonly Dictionary<string, Dictionary<string, CommandInfo.CommandCallback>> _pluginCommands = [];
+		private readonly ConcurrentDictionary<string, List<CommandDefinition>> _pluginCommands = [];
 
 		public void RegisterZenithCommand(string command, string description, CommandInfo.CommandCallback handler, CommandUsage usage = CommandUsage.CLIENT_AND_SERVER, int argCount = 0, string? helpText = null, string? permission = null)
 		{
@@ -17,32 +19,29 @@ namespace Zenith
 
 			string callingPlugin = CallerIdentifier.GetCallingPluginName();
 
-			foreach (var pluginEntry in _pluginCommands)
+			var existingCommand = _pluginCommands
+				.SelectMany(kvp => kvp.Value.Select(cmd => new { Plugin = kvp.Key, Command = cmd }))
+				.FirstOrDefault(x => x.Command.Name == command);
+
+			if (existingCommand != null)
 			{
-				if (pluginEntry.Value.TryGetValue(command, out CommandInfo.CommandCallback? existingHandler))
+				if (existingCommand.Plugin != callingPlugin)
 				{
-					if (pluginEntry.Key != callingPlugin)
-					{
-						Logger.LogError($"Command '{command}' is already registered by plugin '{pluginEntry.Key}'. Registration by '{callingPlugin}' is not allowed.");
-						return;
-					}
-					else
-					{
-						RemoveCommand(command, existingHandler);
-						pluginEntry.Value.Remove(command);
-						Logger.LogWarning($"Command '{command}' already exists for plugin '{callingPlugin}', overwriting.");
-						break;
-					}
+					Logger.LogError($"Command '{command}' is already registered by plugin '{existingCommand.Plugin}'. Registration by '{callingPlugin}' is not allowed.");
+					return;
+				}
+				else
+				{
+					CommandManager.RemoveCommand(existingCommand.Command);
+					_pluginCommands[callingPlugin].Remove(existingCommand.Command);
+					Logger.LogWarning($"Command '{command}' already exists for plugin '{callingPlugin}', overwriting.");
 				}
 			}
 
-			if (!_pluginCommands.TryGetValue(callingPlugin, out var pluginCommandDict))
-			{
-				pluginCommandDict = new Dictionary<string, CommandInfo.CommandCallback>();
-				_pluginCommands[callingPlugin] = pluginCommandDict;
-			}
+			if (!_pluginCommands.ContainsKey(callingPlugin))
+				_pluginCommands[callingPlugin] = [];
 
-			AddCommand(command, description, (controller, info) =>
+			var newCommand = new CommandDefinition(command, description, (controller, info) =>
 			{
 				if (!CommandHelper(controller, info, usage, argCount, helpText, permission))
 					return;
@@ -50,18 +49,20 @@ namespace Zenith
 				handler(controller, info);
 			});
 
-			pluginCommandDict[command] = handler;
+			// ? Using CommandManager due to AddCommand cannot unregister modular commands
+			CommandManager.RegisterCommand(newCommand);
+			_pluginCommands[callingPlugin].Add(newCommand);
 		}
 
 		public void RemoveModuleCommands(string callingPlugin)
 		{
-			if (_pluginCommands.TryGetValue(callingPlugin, out var pluginCommandDict))
+			if (_pluginCommands.TryGetValue(callingPlugin, out var pluginCommands))
 			{
-				foreach (var command in pluginCommandDict.Keys)
+				foreach (var command in pluginCommands.ToList())
 				{
-					RemoveCommand(command, pluginCommandDict[command]);
+					CommandManager.RemoveCommand(command);
 				}
-				_pluginCommands.Remove(callingPlugin);
+				_pluginCommands.TryRemove(callingPlugin, out _);
 			}
 		}
 
@@ -69,12 +70,12 @@ namespace Zenith
 		{
 			if (pluginName != null)
 			{
-				if (_pluginCommands.TryGetValue(pluginName, out var pluginCommandDict))
+				if (_pluginCommands.TryGetValue(pluginName, out var pluginCommands))
 				{
 					PrintToConsole($"Commands for plugin '{pluginName}':", player);
-					foreach (var command in pluginCommandDict.Keys)
+					foreach (var command in pluginCommands)
 					{
-						PrintToConsole($"  - {command}", player);
+						PrintToConsole($"  - {command.Name}: {command.Description}", player);
 					}
 				}
 				else
@@ -87,9 +88,9 @@ namespace Zenith
 				foreach (var pluginEntry in _pluginCommands)
 				{
 					PrintToConsole($"Commands for plugin '{pluginEntry.Key}':", player);
-					foreach (var command in pluginEntry.Value.Keys)
+					foreach (var command in pluginEntry.Value)
 					{
-						PrintToConsole($"  - {command}", player);
+						PrintToConsole($"  - {command.Name}: {command.Description}", player);
 					}
 				}
 			}
@@ -99,9 +100,9 @@ namespace Zenith
 		{
 			foreach (var pluginEntry in _pluginCommands)
 			{
-				foreach (var command in pluginEntry.Value.Keys)
+				foreach (var command in pluginEntry.Value)
 				{
-					RemoveCommand(command, pluginEntry.Value[command]);
+					CommandManager.RemoveCommand(command);
 				}
 			}
 			_pluginCommands.Clear();

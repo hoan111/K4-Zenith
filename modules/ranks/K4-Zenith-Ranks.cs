@@ -17,8 +17,8 @@ public sealed partial class Plugin : BasePlugin
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
 	public override string ModuleVersion => "1.0.0";
 
-	private static PlayerCapability<IPlayerServices>? _playerServicesCapability;
-	private static PluginCapability<IModuleServices>? _moduleServicesCapability;
+	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
+	private PluginCapability<IModuleServices>? _moduleServicesCapability;
 
 	public CCSGameRules? GameRules = null;
 	private IZenithEvents? _zenithEvents;
@@ -28,12 +28,10 @@ public sealed partial class Plugin : BasePlugin
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
-		Logger.LogInformation($"OnAllPluginsLoaded called. Hot Reload: {hotReload}");
-
 		try
 		{
-			_playerServicesCapability = new PlayerCapability<IPlayerServices>("zenith:player-services");
-			_moduleServicesCapability = new PluginCapability<IModuleServices>("zenith:module-services");
+			_playerServicesCapability = new("zenith:player-services");
+			_moduleServicesCapability = new("zenith:module-services");
 		}
 		catch (Exception ex)
 		{
@@ -77,6 +75,7 @@ public sealed partial class Plugin : BasePlugin
 		if (_zenithEvents != null)
 		{
 			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
+			_zenithEvents.OnZenithCoreUnload += OnZenithCoreUnload;
 		}
 		else
 		{
@@ -107,6 +106,18 @@ public sealed partial class Plugin : BasePlugin
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
 
+	private void OnZenithCoreUnload(bool hotReload)
+	{
+		if (hotReload)
+		{
+			AddTimer(3.0f, () =>
+			{
+				try { File.SetLastWriteTime(Path.Combine(ModulePath), DateTime.Now); }
+				catch (Exception ex) { Logger.LogError($"Failed to update file: {ex.Message}"); }
+			});
+		}
+	}
+
 	public override void Unload(bool hotReload)
 	{
 		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
@@ -130,7 +141,7 @@ public sealed partial class Plugin : BasePlugin
 		}
 	}
 
-	public static IPlayerServices? GetZenithPlayer(CCSPlayerController? player)
+	public IPlayerServices? GetZenithPlayer(CCSPlayerController? player)
 	{
 		if (player == null) return null;
 		try { return _playerServicesCapability?.Get(player); }

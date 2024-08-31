@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Drawing;
 using CounterStrikeSharp.API.Core;
 
@@ -5,7 +6,7 @@ namespace Zenith.Models;
 
 public sealed partial class Player
 {
-	public static readonly List<Player> List = [];
+	public static readonly ConcurrentBag<Player> List = [];
 
 	public static Player? Find(ulong steamID)
 	{

@@ -21,8 +21,7 @@ namespace Zenith
 			try
 			{
 				string configDirectory = Path.Combine(Server.GameDirectory, "csgo", "addons", "counterstrikesharp", "configs", "zenith");
-				ConfigManager.Initialize(configDirectory, Logger);
-				_configManager = new ConfigManager();
+				_configManager = new ConfigManager(configDirectory, Logger);
 				RegisterCoreConfigs();
 			}
 			catch (Exception ex)
@@ -131,7 +130,7 @@ namespace Zenith
 		public static bool GlobalAutoReloadEnabled { get; set; } = false;
 		private static FileSystemWatcher? _watcher;
 
-		public static void Initialize(string baseConfigDirectory, ILogger logger)
+		public ConfigManager(string baseConfigDirectory, ILogger logger)
 		{
 			_baseConfigDirectory = baseConfigDirectory;
 			Logger = logger;

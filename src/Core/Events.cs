@@ -27,6 +27,9 @@ namespace Zenith
 			if (player == null || !player.IsValid)
 				return HookResult.Continue;
 
+			if (player.IsGagged)
+				return HookResult.Stop;
+
 			bool enabledChatModifier = player.GetSetting<bool>("ShowChatTags");
 
 			string dead = player.IsAlive ? string.Empty : Localizer["k4.tag.dead"];

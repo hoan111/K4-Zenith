@@ -1,3 +1,23 @@
+# 2024.08.31 - 1.0.7
+
+- feat: Added admin module with tons of stuffs
+- feat: Scrollable menus added instead of pages
+- feat: Keeping navigation button pressed will scroll the menu continuesly
+- feat: Added head hits to weapon stats
+- feat: Added Core Unload API to move self-reload to modules
+- feat: VIP flags can now be comnfigured to have multiple and customs in rank system
+- fix: Removed double for from translations
+- fix: ClanTag enforcement was not started, only with hotReload
+- fix: Tables was created with different encoding
+- fix: Valve miss-match MP5SD and MP7 in hurt event
+- fix: Valve miss-match Reolver and Deagle in hurt event
+- fix: Valve miss-match P250 and CZ75 in hurt event
+- fix: Flash unfreeze and freeze between key presses
+- fix: All mysql tables applied core prefix
+- fix: All mysql tables applied escaping
+- fix: Commands was unable to unregister on module reload which resulted in multiple command executions
+- remove: VIP and Admin clantag formats due to its uselessness
+
 # 2024.08.29 - 1.0.6
 
 - feat: Added option to not to hook chat manager
@@ -68,8 +88,6 @@
 
 # before release:
 - Example files
-- Core reload module player not loaded
-- A calleridentifier-be elmenteni kik hivtak a plugint es azokat reloadolni hotReloadkor igy pontos a talalat akkor is ha nek az a mappa neve hogy zenith
 
 # release:
 - wall toplists and custom data using placeholders

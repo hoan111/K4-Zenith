@@ -18,7 +18,7 @@ namespace Zenith
 			RegisterModuleConfig("Database", "Password", "The password for accessing the database", "password", ConfigFlag.Protected | ConfigFlag.Locked);
 			RegisterModuleConfig("Database", "Database", "The name of the database", "database", ConfigFlag.Protected | ConfigFlag.Locked);
 			RegisterModuleConfig("Database", "Sslmode", "The SSL mode for the database connection (none, preferred, required, verifyca, verifyfull)", "preferred", ConfigFlag.Locked);
-			RegisterModuleConfig("Database", "TablePrefix", "The prefix for the database tables to support multiple servers on the same database with different tables", "", ConfigFlag.Locked);
+			RegisterModuleConfig("Database", "TablePrefix", "The prefix for the database tables to support multiple servers on the same database with different tables", "", ConfigFlag.Locked | ConfigFlag.Global);
 			RegisterModuleConfig("Database", "TablePurgeDays", "The number of days of inactivity after which unused data is automatically purged", 30, ConfigFlag.Locked);
 			RegisterModuleConfig("Database", "SaveOnRoundEnd", "Whether to save every player setting and storage change on round ends", true, ConfigFlag.Locked | ConfigFlag.Global);
 
@@ -27,8 +27,6 @@ namespace Zenith
 
 			// Modular settings
 			RegisterModuleConfig("Modular", "PlayerClantagFormat", "The format for displaying the player clantag. css_placeholderlist for list", "{country_short} | {rank} |");
-			RegisterModuleConfig("Modular", "VIPClantagFormat", "The format for displaying the VIP clantag. css_placeholderlist for list", "");
-			RegisterModuleConfig("Modular", "AdminClantagFormat", "The format for displaying the admin clantag. css_placeholderlist for list", "");
 
 			// Core settings
 			RegisterModuleConfig("Core", "GlobalChangeTracking", "Whether to enable global change tracking. When you change config values through commands, they are saved to files.", true);

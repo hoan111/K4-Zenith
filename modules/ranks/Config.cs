@@ -32,6 +32,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Settings", "RankMax", "Maximum rank value for custom ranks", 0);
 		_moduleServices.RegisterModuleConfig("Settings", "RankMargin", "Rank margin value for custom ranks", 0);
 		_moduleServices.RegisterModuleConfig("Settings", "ExtendedDeathMessages", "Use extended death messages including enemy name and points", true);
+		_moduleServices.RegisterModuleConfig("Settings", "VIPFlags", "VIP flags for multipliers", new List<string> { "@zenith-ranks/vip" });
 
 		// Register Points
 		_moduleServices.RegisterModuleConfig("Points", "Death", "Points for death", -5);

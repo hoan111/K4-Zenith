@@ -1,9 +1,9 @@
 {
   "k4.phrases.gain": "{silver}Points: {green}{0} [+{1} for {2}]",
   "k4.phrases.loss": "{silver}Points: {red}{0} [-{1} for {2}]",
-  "k4.phrases.kill-extended": "for killing {0} ({1})",
-  "k4.phrases.death-extended": "for dying to {0} ({1})",
-  "k4.phrases.assist-extended": "for assisting to kill {0} ({1})",
+  "k4.phrases.kill-extended": "killing {0} ({1})",
+  "k4.phrases.death-extended": "dying to {0} ({1})",
+  "k4.phrases.assist-extended": "assisting to kill {0} ({1})",
   "k4.phrases.round-summary-earn": "{silver}You earned {green}{0} points{silver} this round.",
   "k4.phrases.round-summary-lose": "{silver}You lost {red}{0} points{silver} this round.",
   "k4.phrases.rankup": "Congratulations!",

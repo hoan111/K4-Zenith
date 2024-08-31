@@ -28,11 +28,13 @@ public sealed partial class Player
 	// | PLAYER PROPERTIES  |
 	// +--------------------+
 
-	private readonly List<CenterMessage> _centerMessages = new List<CenterMessage>();
+	private readonly List<CenterMessage> _centerMessages = [];
 	private Tuple<string, ActionPriority>? _clanTag = null;
 	private Tuple<string, ActionPriority>? _nameTag = null;
 	private Tuple<char, ActionPriority>? _nameColor = null;
 	private Tuple<char, ActionPriority>? _chatColor = null;
+	public Tuple<bool, ActionPriority>? _mute = null;
+	public Tuple<bool, ActionPriority>? _gag = null;
 
 	// +--------------------+
 	// | PLAYER CONSTRUCTOR |
@@ -76,18 +78,21 @@ public sealed partial class Player
 	public bool IsAlive
 		=> Controller?.PlayerPawn.Value?.Health > 0;
 
-	public bool IsVIP
-		=> AdminManager.PlayerHasPermissions(Controller, "@zenith/vip");
+	public bool IsMuted
+		=> _mute?.Item1 ?? false;
 
-	public bool IsAdmin
-		=> AdminManager.PlayerHasPermissions(Controller, "@zenith/admin");
+	public bool IsGagged
+		=> _gag?.Item1 ?? false;
 
 	// +--------------------+
 	// | PLAYER FUNCTIONS   |
 	// +--------------------+
 
-	public void Print(string message)
-		=> Controller?.PrintToChat($" {_plugin.Localizer["k4.general.prefix"]} {message}");
+	public void Print(string message, bool showPrefix = true)
+	{
+		string prefix = showPrefix ? $" {_plugin.Localizer["k4.general.prefix"]}" : "";
+		Controller?.PrintToChat($"{prefix}{message}");
+	}
 
 	public void PrintToCenter(string message, int duration = 3, ActionPriority priority = ActionPriority.Low, bool showCloseCounter = false)
 	{
@@ -113,6 +118,38 @@ public sealed partial class Player
 		Controller?.PrintToCenterHtml(finalMessage);
 
 		_centerMessages.RemoveAll(m => m.Duration <= Server.CurrentTime);
+	}
+
+	public void SetMute(bool mute, ActionPriority priority)
+	{
+		if (priority < _mute?.Item2)
+			return;
+
+		if (mute)
+		{
+			if (!Controller!.VoiceFlags.HasFlag(VoiceFlags.Muted))
+				Controller!.VoiceFlags |= VoiceFlags.Muted;
+
+			_mute = new Tuple<bool, ActionPriority>(mute, priority);
+		}
+		else
+		{
+			if (Controller!.VoiceFlags.HasFlag(VoiceFlags.Muted))
+				Controller!.VoiceFlags &= ~VoiceFlags.Muted;
+
+			_mute = null;
+		}
+	}
+
+	public void SetGag(bool gag, ActionPriority priority)
+	{
+		if (priority < _gag?.Item2)
+			return;
+
+		if (!gag)
+			_gag = null;
+
+		_gag = new Tuple<bool, ActionPriority>(gag, priority);
 	}
 
 	public void SetClanTag(string? tag, ActionPriority priority)
@@ -188,13 +225,24 @@ public sealed partial class Player
 
 	public void EnforcePluginValues()
 	{
+		if (IsMuted)
+		{
+			if (!Controller!.VoiceFlags.HasFlag(VoiceFlags.Muted))
+				Controller!.VoiceFlags |= VoiceFlags.Muted;
+		}
+		else
+		{
+			if (Controller!.VoiceFlags.HasFlag(VoiceFlags.Muted))
+				Controller!.VoiceFlags &= ~VoiceFlags.Muted;
+		}
+
 		if (!GetSetting<bool>("ShowClanTags"))
 			return;
 
-		string? clanTag = (_clanTag?.Item1) ?? (IsAdmin ? _plugin.GetCoreConfig<string>("Modular", "AdminClantagFormat") : IsVIP ? _plugin.GetCoreConfig<string>("Modular", "VIPClantagFormat") : _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat"));
+		string? clanTag = (_clanTag?.Item1) ?? _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat");
 		if (clanTag != null)
 		{
-			Controller!.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);
+			Controller.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);
 			Utilities.SetStateChanged(Controller, "CCSPlayerController", "m_szClan");
 		}
 	}
@@ -219,7 +267,8 @@ public sealed partial class Player
 			}
 			finally
 			{
-				List.Remove(this);
+				Player currentPlayer = this;
+				List.TryTake(out currentPlayer!);
 			}
 		});
 	}
