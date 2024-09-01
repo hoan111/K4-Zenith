@@ -54,6 +54,9 @@ robocopy modules\statistics\bin\K4-Zenith-Stats Zenith\plugins\K4-Zenith-Stats /
 call :echo_message "%YELLOW%" "[ INFO ] Copying Admin module..."
 rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modules/zenith-bans/bin/K4-Zenith-Bans/ ./Zenith/plugins/K4-Zenith-Bans/
 
+call :echo_message "%YELLOW%" "[ INFO ] Copying Extended Commands module..."
+rsync -a --quiet ./modules/zenith-bans/bin/K4-Zenith-ExtendedCommands/ ./Zenith/plugins/K4-Zenith-ExtendedCommands/
+
 :: Delete files with a specific extension from Zenith and sub-folders
 call :echo_message "%BLUE%" "[ INFO ] Cleaning up unnecessary files..."
 for /r Zenith %%f in (*.pdb *.yaml .DS_Store) do del "%%f" 2>nul

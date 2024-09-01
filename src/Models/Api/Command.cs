@@ -11,6 +11,7 @@ namespace Zenith
 	public sealed partial class Plugin : BasePlugin
 	{
 		private readonly ConcurrentDictionary<string, List<CommandDefinition>> _pluginCommands = [];
+		private readonly ConcurrentDictionary<string, string> _commandPermissions = [];
 
 		public void RegisterZenithCommand(string command, string description, CommandInfo.CommandCallback handler, CommandUsage usage = CommandUsage.CLIENT_AND_SERVER, int argCount = 0, string? helpText = null, string? permission = null)
 		{
@@ -52,6 +53,7 @@ namespace Zenith
 			// ? Using CommandManager due to AddCommand cannot unregister modular commands
 			CommandManager.RegisterCommand(newCommand);
 			_pluginCommands[callingPlugin].Add(newCommand);
+			_commandPermissions[command] = permission ?? string.Empty;
 		}
 
 		public void RemoveModuleCommands(string callingPlugin)
@@ -63,6 +65,7 @@ namespace Zenith
 					CommandManager.RemoveCommand(command);
 				}
 				_pluginCommands.TryRemove(callingPlugin, out _);
+				_commandPermissions.TryRemove(callingPlugin, out _);
 			}
 		}
 
@@ -75,7 +78,8 @@ namespace Zenith
 					PrintToConsole($"Commands for plugin '{pluginName}':", player);
 					foreach (var command in pluginCommands)
 					{
-						PrintToConsole($"  - {command.Name}: {command.Description}", player);
+						string permission = _commandPermissions[command.Name];
+						PrintToConsole($"  - {command.Name}: {command.Description} {(string.IsNullOrEmpty(permission) ? "" : $"({permission})")}", player);
 					}
 				}
 				else
@@ -90,7 +94,8 @@ namespace Zenith
 					PrintToConsole($"Commands for plugin '{pluginEntry.Key}':", player);
 					foreach (var command in pluginEntry.Value)
 					{
-						PrintToConsole($"  - {command.Name}: {command.Description}", player);
+						string permission = _commandPermissions[command.Name];
+						PrintToConsole($"  - {command.Name}: {command.Description} {(string.IsNullOrEmpty(permission) ? "" : $"({permission})")}", player);
 					}
 				}
 			}
@@ -105,7 +110,9 @@ namespace Zenith
 					CommandManager.RemoveCommand(command);
 				}
 			}
+
 			_pluginCommands.Clear();
+			_commandPermissions.Clear();
 		}
 
 		public void RegisterZenithCommand(List<string> commands, string description, CommandInfo.CommandCallback handler, CommandUsage usage = CommandUsage.CLIENT_AND_SERVER, int argCount = 0, string? helpText = null, string? permission = null)
@@ -140,7 +147,7 @@ namespace Zenith
 
 			if (permission != null && permission.Length > 0)
 			{
-				if (player != null && !AdminManager.PlayerHasPermissions(controller, permission))
+				if (player != null && !AdminManager.PlayerHasPermissions(controller, permission) && !AdminManager.PlayerHasPermissions(controller, "@zenith/root"))
 				{
 					info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.no-permission"]}");
 					return false;

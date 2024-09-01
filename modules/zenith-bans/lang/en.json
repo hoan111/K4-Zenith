@@ -18,7 +18,7 @@
   "k4.general.invalid-steamid": "{lightred}Invalid SteamID64 provided.",
   "k4.general.noplayersfound": "No players found",
 
-  "k4.chat.kick": "{lightred}{0} kicked {1} from the server.",
+  "k4.chat.kick": "{lightred}{0} kicked {1} from the server. Reason: {2}",
   "k4.chat.ban": "{lightred}{0} banned {1} for {2}. Reason: {3}",
   "k4.chat.ban.permanent": "{lightred}{0} permanently banned {1}. Reason: {2}",
   "k4.chat.unban": "{gold}{0} unbanned {1}.",
@@ -33,6 +33,9 @@
   "k4.chat.unsilence": "{gold}{0} unsilenced {1}.",
   "k4.chat.warn": "{lightred}{0} warned {1}. Reason: {2}",
   "k4.chat.clearwarns": "{gold}{0} cleared all warnings for {1}.",
+
+  "k4.alert.ban": "You being banned in {0} seconds.\n \n\"{1}\"",
+  "k4.alert.kick": "You being kicked in {0} seconds.\n \n\"{1}\"",
 
   "k4.commscheck.header": "{lightred}Communication status for {0}:",
   "k4.commscheck.mute": "{lightred}⚠ Mute:{default} Issued by {lightblue}{0}{default}, Remaining: {yellow}{1}",

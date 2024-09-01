@@ -66,10 +66,10 @@ namespace Zenith_Bans
 
 		private void OnUnbanCommand(CCSPlayerController? controller, CommandInfo info)
 		{
-			SteamID steamId = new SteamID(info.GetArg(1));
-			if (steamId.IsValid())
+			SteamID steamID = GetSteamID(info.GetArg(1));
+			if (steamID.IsValid())
 			{
-				RemovePunishment(controller, steamId, PunishmentType.Ban);
+				RemovePunishment(controller, steamID, PunishmentType.Ban);
 			}
 			else
 				_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-usage", "unban <SteamID64>"]);
@@ -394,7 +394,7 @@ namespace Zenith_Bans
 				return;
 			}
 
-			SteamID steamId = new SteamID(info.GetArg(1));
+			SteamID steamId = GetSteamID(info.GetArg(1));
 			if (!steamId.IsValid())
 			{
 				_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-steamid"]);
@@ -446,7 +446,7 @@ namespace Zenith_Bans
 				return;
 			}
 
-			SteamID steamId = new SteamID(info.GetArg(1));
+			SteamID steamId = GetSteamID(info.GetArg(1));
 			if (!steamId.IsValid())
 			{
 				_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-steamid"]);

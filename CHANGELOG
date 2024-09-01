@@ -1,3 +1,12 @@
+# 2024.08.01 - 1.0.8
+
+- feat: Added @zenith/root to access all Zenith command
+- feat: Added kick/ban delays with center alert with reason
+- fix: Unban, removeofflineadmin given invalid steamid issue
+- fix: Kick shown log and chat like for permanent
+- fix: Kick was unable be added again to players after the first
+- fix: Added missing kick reason configs
+
 # 2024.08.31 - 1.0.7
 
 - feat: Added admin module with tons of stuffs
@@ -91,9 +100,8 @@
 
 # release:
 - wall toplists and custom data using placeholders
-- admin system
-- ban system
-- flag clantags + chattags
-- toplist ranks
+- flag based clantags + chattags
+- toplists
 - game management system
 - more commands?
+- map management system

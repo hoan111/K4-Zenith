@@ -341,6 +341,13 @@ namespace ZenithAPI
 		/// <param name="configName"></param>
 		/// <param name="value"></param>
 		void SetValue<T>(string groupName, string configName, T value) where T : notnull;
+
+		/// <summary>
+		/// Checks if a configuration value exists.
+		/// </summary>
+		/// <param name="groupName"></param>
+		/// <param name="configName"></param>
+		bool HasValue(string groupName, string configName);
 	}
 
 	public interface IZenithEvents

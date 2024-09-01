@@ -83,6 +83,8 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Config", "WarnMax", "Maximum number of warnings before a ban is applied", 3);
 		_moduleServices.RegisterModuleConfig("Config", "WarnBanLength", "Duration of the ban in minutes when maximum warnings are reached (0 for permanent)", 1440);
 
+		_moduleServices.RegisterModuleConfig("Config", "KickReasons", "Reasons to select from while kicking", new List<string> { "Rule violation", "Inappropriate behavior", "Disruptive play", "Other" });
+
 		_moduleServices.RegisterModuleConfig("Config", "DisconnectMaxPlayers", "Maximum number of disconnected players to store", 20);
 
 		_moduleServices.RegisterModuleConfig("Config", "GlobalPunishments", "Whether to apply punishments globally on all your servers", false);
@@ -90,6 +92,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Config", "ShowActivity", "Specifies how admin activity should be relayed to users (1: Show to non-admins, 2: Show admin names to non-admins, 4: Show to admins, 8: Show admin names to admins, 16: Always show admin names to root users (admins are @zenith-admin/admin))", 13, ConfigFlag.Global);
 		_moduleServices.RegisterModuleConfig("Config", "ApplyIPBans", "(NOT RECOMMENDED )Whether to apply IP bans along with player bans. Not recommended due to Cloud Gaming, you ban everyone who use that data center.", false);
 		_moduleServices.RegisterModuleConfig("Config", "DiscordWebhookUrl", "Discord webhook URL for sending notifications", "", ConfigFlag.Protected);
+		_moduleServices.RegisterModuleConfig("Config", "DelayPlayerRemoval", "Delay in seconds before removing a player from the server on kick / ban to show a message about it. (0 - Instantly)", 5);
 
 		_zenithEvents = _moduleServices.GetEventHandler();
 		if (_zenithEvents != null)
