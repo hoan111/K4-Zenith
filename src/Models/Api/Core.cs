@@ -1,6 +1,7 @@
 using System.Reflection;
 using CounterStrikeSharp.API.Core;
 using Microsoft.Extensions.Logging;
+using Zenith;
 
 namespace Zenith
 {
@@ -60,7 +61,7 @@ public static class CallerIdentifier
 			if (assemblyName == "CounterStrikeSharp.API")
 				break;
 
-			if (assemblyName != CurrentPluginName && assemblyName != null && !assemblyName.StartsWith("System."))
+			if (assemblyName != CurrentPluginName && assemblyName != null && !assemblyName.StartsWith("System.") && !assemblyName.Equals("KitsuneMenu"))
 			{
 				callingPlugin = assemblyName;
 				break;

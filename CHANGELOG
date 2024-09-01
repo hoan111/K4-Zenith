@@ -1,4 +1,10 @@
-# 2024.08.01 - 1.0.9
+# 2024.08.?? - 1.0.10
+
+- todo:
+    - fix: target issue when printing no target found and then adding ban by steamid even if online
+    - fix: Add debounce timer to playerspawn events to prevent multiple min player messages
+
+# 2024.09.01 - 1.0.9
 
 - feat: Added new module to set chat rank, color, text color and clantag by group, permission or any type of steamid
 - feat: Added global config for chat rank display using css_placeholderlist placeholders

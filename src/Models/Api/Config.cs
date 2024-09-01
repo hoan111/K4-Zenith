@@ -9,6 +9,7 @@ using YamlDotNet.Core.Events;
 using System.Reflection;
 using ZenithAPI;
 using System.Collections;
+using CounterStrikeSharp.API.Modules.Cvars;
 
 namespace Zenith
 {
