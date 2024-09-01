@@ -118,7 +118,6 @@ These configuration files are made with YAML, which results in that we add descr
 - [ ] Add credits to README
 - [ ] Example developer files
 - [ ] Wall toplists using placeholders from core
-- [ ] Flag based chat and clan ranks using core API
 - [ ] Toplists
 - [ ] Game management system
 - [ ] More extended commands
