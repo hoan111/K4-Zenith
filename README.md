@@ -113,7 +113,13 @@ These configuration files are made with YAML, which results in that we add descr
 
 ## Roadmap
 
-- [ ] No plans for now
+- [ ] Example developer files
+- [ ] Wall toplists using placeholders from core
+- [ ] Flag based chat and clan ranks using core API
+- [ ] Toplists
+- [ ] Game management system
+- [ ] More extended commands
+- [ ] Map management system
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
