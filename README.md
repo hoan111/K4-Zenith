@@ -69,7 +69,7 @@ To install the Zenith Core, follow these steps:
 
 1. Download the latest [release](https://github.com/KitsuneLab-Development/K4-Zenith/releases/latest).
 2. Extract the contents of the ZIP file to `counterstrikesharp/plugins`. `K4-Zenith` is required, the other are optional to install.
-3. Start your server, which is going to generate the config files.
+3. Start your server, which is going to generate the config files to `counterstrikesharp/configs/zenith`.
 4. Modify the config files according to your preferences. Setup the MySQL connection and other settings that you want to customize.
 5. Restart your server to apply the changes.
 6. If Zenith finds old K4-System databases, it will automatically convert them to the new Zenith database structure. Follow the console instructions to complete the conversion.
