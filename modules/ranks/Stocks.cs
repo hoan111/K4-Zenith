@@ -88,9 +88,6 @@ public sealed partial class Plugin : BasePlugin
 		{
 			player.SetStorage("Rank", newRank);
 
-			if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
-				player.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
-
 			string messageKey;
 			string colorCode;
 			if (string.IsNullOrEmpty(currentRank) || CompareRanks(newRank, currentRank) > 0)
@@ -108,7 +105,7 @@ public sealed partial class Plugin : BasePlugin
 
 			string htmlMessage = $@"
 			<font color='{colorCode}' class='fontSize-m'>{Localizer[messageKey]}</font><br>
-			<font color='#FFFFFF' class='fontSize-m'>{Localizer["k4.phrases.newrank", rankName]}</font>";
+			<font color='#FFFFFF' class='fontSize-m'>{Localizer["k4.phrases.newrank", $"{determinedRank?.HexColor}{rankName}"]}</font>";
 
 			player.PrintToCenter(htmlMessage, _configAccessor.GetValue<int>("Core", "CenterAlertTime"), ActionPriority.Normal);
 		}

@@ -6,7 +6,6 @@ namespace Zenith
 	using CounterStrikeSharp.API.Core.Translations;
 	using CounterStrikeSharp.API.Modules.UserMessages;
 	using CounterStrikeSharp.API.Modules.Utils;
-	using Microsoft.Extensions.Logging;
 	using Zenith.Models;
 
 	public sealed partial class Plugin : BasePlugin

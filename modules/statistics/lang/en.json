@@ -41,8 +41,9 @@
   "k4.stats.revengekill": "Revenge Kills",
   "k4.stats.assistflash": "Flash Assists",
   "k4.stats.accuracy": "Accuracy",
-  "k4.stats.kdr": "KDR",
+  "k4.stats.kpr": "KPR",
   "k4.stats.kda": "KDA",
   "k4.stats.kd": "K/D",
-  "k4.stats.no_stats": "No stats available yet."
+  "k4.stats.no_stats": "No stats available yet.",
+  "k4.stats.stats_disabled": "{silver}Stats are disabled. Minimum {gold}{0} {silver}players required."
 }

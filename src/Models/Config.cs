@@ -27,6 +27,7 @@ namespace Zenith
 
 			// Modular settings
 			RegisterModuleConfig("Modular", "PlayerClantagFormat", "The format for displaying the player clantag. css_placeholderlist for list", "{country_short} | {rank} |");
+			RegisterModuleConfig("Modular", "PlayerChatRankFormat", "The format for displaying the player rank in chat. css_placeholderlist for list", "{rank_color}[{rank}] ");
 
 			// Core settings
 			RegisterModuleConfig("Core", "GlobalChangeTracking", "Whether to enable global change tracking. When you change config values through commands, they are saved to files.", true);

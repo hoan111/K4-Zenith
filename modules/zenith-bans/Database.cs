@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
@@ -56,6 +57,7 @@ namespace Zenith_Bans
 			connection.Execute($@"
 				CREATE TABLE IF NOT EXISTS `{prefix}zenith_bans_punishments` (
 					`id` INT AUTO_INCREMENT PRIMARY KEY,
+					`status` ENUM('active', 'expired', 'removed', 'removed_console') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
 					`steam_id` BIGINT UNSIGNED,
 					`type` ENUM('mute', 'gag', 'silence', 'ban', 'warn', 'kick') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
 					`duration` INT,
@@ -127,16 +129,17 @@ namespace Zenith_Bans
 						pun.`duration`,
 						pun.`expires_at` AS ExpiresAt,
 						COALESCE(admin.`name`, 'Console') AS PunisherName,
+						pun.`admin_steam_id` AS AdminSteamId,
 						pun.`reason` AS Reason
 					FROM `{prefix}zenith_bans_punishments` pun
 					LEFT JOIN `{prefix}zenith_bans_players` admin ON pun.`admin_steam_id` = admin.`steam_id`
 					WHERE pun.`steam_id` = @SteamId
 					AND (pun.`server_ip` = 'all' OR pun.`server_ip` = @ServerIp)
+					AND pun.`status` = 'active'
 					AND (
 						pun.`type` = 'warn'
 						OR (pun.`type` IN ('mute', 'gag', 'silence', 'ban') AND (pun.`expires_at` > NOW() OR pun.`expires_at` IS NULL))
-					)
-					AND pun.`removed_at` IS NULL;";
+					);";
 
 				var punishments = await connection.QueryAsync<Punishment>(selectPunishmentsQuery, new { SteamId = steamId, ServerIp = _serverIp });
 
@@ -301,7 +304,6 @@ namespace Zenith_Bans
 			return [.. permissions];
 		}
 
-
 		private async Task<int> AddPunishmentAsync(ulong targetSteamId, PunishmentType type, int? duration, string reason, ulong? adminSteamId)
 		{
 			string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
@@ -309,18 +311,23 @@ namespace Zenith_Bans
 			await connection.OpenAsync();
 
 			var query = $@"
-                INSERT INTO `{prefix}zenith_bans_punishments`
-                (`steam_id`, `type`, `duration`, `created_at`, `expires_at`, `admin_steam_id`, `reason`, `server_ip`)
-                VALUES
-                (@SteamId, @Type, @Duration, NOW(),
-                    CASE WHEN @Duration IS NULL THEN NULL ELSE DATE_ADD(NOW(), INTERVAL @Duration MINUTE) END,
-                @AdminSteamId, @Reason, @ServerIp);
-                SELECT LAST_INSERT_ID();";
+				INSERT INTO `{prefix}zenith_bans_punishments`
+				(`steam_id`, `type`, `status`, `duration`, `created_at`, `expires_at`, `admin_steam_id`, `reason`, `server_ip`)
+				VALUES
+				(@SteamId, @Type, @Status, @Duration, NOW(),
+					CASE
+						WHEN @Type = 'ban' AND (@Duration IS NULL OR @Duration = 0) THEN NULL
+						WHEN @Duration IS NULL THEN NULL
+						ELSE DATE_ADD(NOW(), INTERVAL @Duration MINUTE)
+					END,
+				@AdminSteamId, @Reason, @ServerIp);
+				SELECT LAST_INSERT_ID();";
 
 			return await connection.ExecuteScalarAsync<int>(query, new
 			{
 				SteamId = targetSteamId,
 				Type = type.ToString().ToLower(),
+				Status = type == PunishmentType.Kick ? "removed" : "active",
 				Duration = duration,
 				AdminSteamId = adminSteamId,
 				Reason = reason,
@@ -335,12 +342,13 @@ namespace Zenith_Bans
 			await connection.OpenAsync();
 
 			var query = $@"
-                UPDATE `{prefix}zenith_bans_punishments`
-                SET `removed_at` = NOW(), `remove_admin_steam_id` = @RemoverSteamId
-                WHERE `steam_id` = @TargetSteamId AND `type` = @Type
-                AND (`server_ip` = 'all' OR `server_ip` = @ServerIp)
-                AND (`expires_at` > NOW() OR `expires_at` IS NULL)
-                AND `removed_at` IS NULL";
+				UPDATE `{prefix}zenith_bans_punishments`
+				SET `status` = CASE WHEN @RemoverSteamId IS NULL THEN 'removed_console' ELSE 'removed' END,
+					`removed_at` = NOW(),
+					`remove_admin_steam_id` = @RemoverSteamId
+				WHERE `steam_id` = @TargetSteamId AND `type` = @Type
+				AND (`server_ip` = 'all' OR `server_ip` = @ServerIp)
+				AND `status` = 'active'";
 
 			int affectedRows = await connection.ExecuteAsync(query, new
 			{
@@ -360,13 +368,13 @@ namespace Zenith_Bans
 
 			var query = $@"
 				SELECT p.id, p.type, p.duration, p.expires_at AS ExpiresAt,
-					COALESCE(admin.name, 'Console') AS PunisherName, p.reason
+					COALESCE(admin.name, 'Console') AS PunisherName, p.admin_steam_id AS AdminSteamId, p.reason
 				FROM `{prefix}zenith_bans_punishments` p
 				LEFT JOIN `{prefix}zenith_bans_players` admin ON p.admin_steam_id = admin.steam_id
 				WHERE p.steam_id = @SteamId
 				AND (p.server_ip = 'all' OR p.server_ip = @ServerIp)
-				AND (p.type = 'warn' OR (p.expires_at > NOW() OR p.expires_at IS NULL))
-				AND p.removed_at IS NULL";
+				AND p.status = 'active'
+				AND (p.type = 'warn' OR (p.expires_at > NOW() OR p.expires_at IS NULL))";
 
 			var punishments = await connection.QueryAsync<Punishment>(query, new { SteamId = steamId, ServerIp = _serverIp });
 
@@ -394,10 +402,12 @@ namespace Zenith_Bans
 				var query = $@"
 					UPDATE `{prefix}zenith_bans_punishments` p
 					JOIN `{prefix}zenith_bans_players` pl ON p.`steam_id` = pl.`steam_id`
-					SET p.`removed_at` = NOW(), p.`remove_admin_steam_id` = NULL
+					SET p.`status` = 'expired',
+						p.`removed_at` = NOW(),
+						p.`remove_admin_steam_id` = NULL
 					WHERE p.`expires_at` <= NOW()
 					AND p.`expires_at` IS NOT NULL
-					AND p.`removed_at` IS NULL
+					AND p.`status` = 'active'
 					AND p.`type` IN ('mute', 'gag', 'silence', 'ban');
 
 					SELECT p.`steam_id`, p.`type`, pl.`name` AS `player_name`
@@ -405,6 +415,7 @@ namespace Zenith_Bans
 					JOIN `{prefix}zenith_bans_players` pl ON p.`steam_id` = pl.`steam_id`
 					WHERE p.`expires_at` <= NOW()
 					AND p.`expires_at` IS NOT NULL
+					AND p.`status` = 'expired'
 					AND p.`removed_at` = NOW()
 					AND p.`type` IN ('mute', 'gag', 'silence', 'ban');";
 
@@ -418,7 +429,7 @@ namespace Zenith_Bans
 						var player = FindPlayerBySteamID(steamId);
 						if (player != null && _playerCache.TryGetValue(steamId, out var playerData))
 						{
-							playerData.Punishments.RemoveAll(p => p.Type.ToString().ToLower() == type && p.ExpiresAt <= DateTime.UtcNow);
+							playerData.Punishments.RemoveAll(p => p.Type.ToString().Equals(type, StringComparison.CurrentCultureIgnoreCase) && p.ExpiresAt <= DateTime.UtcNow);
 							RemovePunishmentEffect(player, Enum.Parse<PunishmentType>(type, true));
 
 							_moduleServices?.PrintForPlayer(player, Localizer[$"k4.punishment.expired.{type.ToLower()}"]);
@@ -470,6 +481,62 @@ namespace Zenith_Bans
 		private async Task RemoveAdminAsync(ulong steamId, string serverIp = "all")
 		{
 			await UpdatePlayerRankAsync(steamId, [], null, null, null, serverIp);
+		}
+
+		private async Task ImportAdminGroupsFromJsonAsync(string directory)
+		{
+			string adminGroupsPath = Path.Combine(directory, "csgo", "addons", "counterstrikesharp", "configs", "admin_groups.json");
+
+			if (!File.Exists(adminGroupsPath))
+				return;
+
+			try
+			{
+				string jsonContent = await File.ReadAllTextAsync(adminGroupsPath);
+				var adminGroups = JsonSerializer.Deserialize<Dictionary<string, AdminGroupInfo>>(jsonContent);
+
+				if (adminGroups == null || adminGroups.Count == 0)
+					return;
+
+				string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
+				using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
+				await connection.OpenAsync();
+
+				foreach (var group in adminGroups)
+				{
+					string groupName = group.Key;
+					var groupInfo = group.Value;
+
+					var query = $@"
+						INSERT INTO `{prefix}zenith_bans_admin_groups` (`name`, `permissions`, `immunity`)
+						VALUES (@Name, @Permissions, @Immunity)
+						ON DUPLICATE KEY UPDATE
+						`permissions` = @Permissions,
+						`immunity` = @Immunity";
+
+					await connection.ExecuteAsync(query, new
+					{
+						Name = groupName,
+						Permissions = JsonSerializer.Serialize(groupInfo.Flags),
+						Immunity = groupInfo.Immunity
+					});
+				}
+
+				Logger.LogInformation($"Succesfully imported {adminGroups.Count} admin groups from local JSON. You can disable this feature in the config.");
+			}
+			catch (Exception ex)
+			{
+				Logger.LogError(ex, "Error importing admin groups from JSON.");
+			}
+		}
+
+		private class AdminGroupInfo
+		{
+			[JsonPropertyName("flags")]
+			public List<string> Flags { get; set; } = [];
+
+			[JsonPropertyName("immunity")]
+			public int Immunity { get; set; }
 		}
 	}
 }

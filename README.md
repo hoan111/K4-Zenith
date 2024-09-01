@@ -61,6 +61,8 @@ You can enhance your server with additional features and elevate its standards b
 
 - **Zenith Extended Commands**: This module adds a wide range of fun commands to your server, including commonly used admin commands like respawn, blind, revive, teleportation (tp), item giving (give), and much more. These commands enhance the gameplay experience and provide additional options for server administrators.
 
+**Zenith Custom Tags**: Enhance your server's chat experience with Zenith Custom Tags. This module gives players custom chat colors, ranks, clantags, and chat colors based on permissions, groups, or SteamID formats. Customize the chat environment for your community.
+
 <!-- INSTALLATION -->
 
 ## Installation
@@ -113,6 +115,7 @@ These configuration files are made with YAML, which results in that we add descr
 
 ## Roadmap
 
+- [ ] Add credits to README
 - [ ] Example developer files
 - [ ] Wall toplists using placeholders from core
 - [ ] Flag based chat and clan ranks using core API
@@ -120,6 +123,7 @@ These configuration files are made with YAML, which results in that we add descr
 - [ ] Game management system
 - [ ] More extended commands
 - [ ] Map management system
+- [ ] Module to check last week / month / year playtime
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

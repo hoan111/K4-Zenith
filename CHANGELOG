@@ -1,3 +1,33 @@
+# 2024.08.01 - 1.0.9
+
+- feat: Added new module to set chat rank, color, text color and clantag by group, permission or any type of steamid
+- feat: Added global config for chat rank display using css_placeholderlist placeholders
+- feat: Added KPR (kills per round) to the statistics
+- feat: Added punishment status to tables to use by panel devs
+- feat: Added support for command overrides
+- feat: Added ranks playtime points
+- feat: Added rank_color player placeholder
+- feat: Zenith now able to sync your local admin_groups.json to database
+- feat: Added logs to show warn limit reach bans
+- feat: Added !team and !swap commands to extended commands
+- upgrade: Modified rank placeholder to use current rank config instead of database value
+- upgrade: Database migration have now steps
+- upgrade: Database migration have now table validations
+- upgrade: Changed required CSS version to 260
+- upgrade: Added missing exception handlers to storages
+- upgrade: Rank-Up / Rank-Down center notification shows rank colors aswell
+- upgrade: Added duration and reason to logs for punishments
+- upgrade: Modified ShowActivity description to show how the activity is calculated
+- fix: Added missing translations for extended commands
+- fix: Removed KDR due to it was duplicate of KD
+- fix: Added missing logs on punishments
+- fix: Applied ActivitySettings to punishment removals
+- fix: Database migration not applied properly
+- fix: Perma punishment set expireAt to now instead of null
+- fix: Some load event blocked MySQL creating and module loads
+- fix: Storages didnt save because of above error
+- fix: Menu selection was wrong when selected below the first 5
+
 # 2024.08.01 - 1.0.8
 
 - feat: Added @zenith/root to access all Zenith command

@@ -10,7 +10,7 @@ using ZenithAPI;
 
 namespace Zenith_Bans;
 
-[MinimumApiVersion(250)]
+[MinimumApiVersion(260)]
 public sealed partial class Plugin : BasePlugin
 {
 	private IModuleConfigAccessor _coreAccessor = null!;
@@ -89,10 +89,11 @@ public sealed partial class Plugin : BasePlugin
 
 		_moduleServices.RegisterModuleConfig("Config", "GlobalPunishments", "Whether to apply punishments globally on all your servers", false);
 		_moduleServices.RegisterModuleConfig("Config", "ConnectAdminInfo", "Whether to show admin info on player connect (With @zenith-admin/admin permission)", true);
-		_moduleServices.RegisterModuleConfig("Config", "ShowActivity", "Specifies how admin activity should be relayed to users (1: Show to non-admins, 2: Show admin names to non-admins, 4: Show to admins, 8: Show admin names to admins, 16: Always show admin names to root users (admins are @zenith-admin/admin))", 13, ConfigFlag.Global);
+		_moduleServices.RegisterModuleConfig("Config", "ShowActivity", "Specifies how admin activity should be relayed to users (1: Show to non-admins, 2: Show admin names to non-admins, 4: Show to admins, 8: Show admin names to admins, 16: Always show admin names to root users (admins are @zenith-admin/admin)). Default is 13 due to 1+4+8", 13, ConfigFlag.Global);
 		_moduleServices.RegisterModuleConfig("Config", "ApplyIPBans", "(NOT RECOMMENDED )Whether to apply IP bans along with player bans. Not recommended due to Cloud Gaming, you ban everyone who use that data center.", false);
 		_moduleServices.RegisterModuleConfig("Config", "DiscordWebhookUrl", "Discord webhook URL for sending notifications", "", ConfigFlag.Protected);
 		_moduleServices.RegisterModuleConfig("Config", "DelayPlayerRemoval", "Delay in seconds before removing a player from the server on kick / ban to show a message about it. (0 - Instantly)", 5);
+		_moduleServices.RegisterModuleConfig("Config", "FetchAdminGroups", "Fetches admin groups from your CSS files to the database to use in menus", true);
 
 		_zenithEvents = _moduleServices.GetEventHandler();
 		if (_zenithEvents != null)
@@ -115,6 +116,15 @@ public sealed partial class Plugin : BasePlugin
 				await RemoveExpiredPunishmentsAsync();
 			});
 		}, TimerFlags.REPEAT);
+
+		if (_coreAccessor.GetValue<bool>("Config", "FetchAdminGroups"))
+		{
+			string directory = Server.GameDirectory;
+			Task.Run(async () =>
+			{
+				await ImportAdminGroupsFromJsonAsync(directory);
+			});
+		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}

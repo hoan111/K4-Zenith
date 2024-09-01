@@ -187,7 +187,13 @@ public sealed partial class Player
 	}
 
 	public string GetNameTag()
-		=> _nameTag?.Item1 ?? string.Empty;
+	{
+		string? nameTag = _nameTag?.Item1;
+		if (nameTag != null)
+			return nameTag;
+
+		return _plugin.ReplacePlayerPlaceholders(Controller!, _plugin.GetCoreConfig<string>("Modular", "PlayerChatRankFormat"));
+	}
 
 	public void SetNameColor(char? color, ActionPriority priority)
 	{
@@ -236,12 +242,10 @@ public sealed partial class Player
 				Controller!.VoiceFlags &= ~VoiceFlags.Muted;
 		}
 
-		if (!GetSetting<bool>("ShowClanTags"))
-			return;
-
-		string? clanTag = (_clanTag?.Item1) ?? _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat");
-		if (clanTag != null)
+		if (GetSetting<bool>("ShowClanTags"))
 		{
+			string clanTag = (_clanTag?.Item1) ?? _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat");
+
 			Controller.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);
 			Utilities.SetStateChanged(Controller, "CCSPlayerController", "m_szClan");
 		}

@@ -3,12 +3,14 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Timers;
+using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZenithAPI;
 
 namespace Zenith_Ranks;
 
-[MinimumApiVersion(250)]
+[MinimumApiVersion(260)]
 public sealed partial class Plugin : BasePlugin
 {
 	private const string MODULE_ID = "Ranks";
@@ -19,6 +21,7 @@ public sealed partial class Plugin : BasePlugin
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
+	private float _lastPlaytimeCheck = 0;
 
 	public CCSGameRules? GameRules = null;
 	private IZenithEvents? _zenithEvents;
@@ -63,7 +66,22 @@ public sealed partial class Plugin : BasePlugin
 			{ "Rank", null }
 		});
 
-		_moduleServices.RegisterModulePlayerPlaceholder("rank", p => GetZenithPlayer(p)?.GetStorage<string>("Rank") ?? Localizer["k4.phrases.rank.none"]);
+		_moduleServices.RegisterModulePlayerPlaceholder("rank_color", p =>
+		{
+			var player = GetZenithPlayer(p);
+			if (player == null) return ChatColors.Default.ToString();
+
+			var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
+			return determinedRank?.ChatColor.ToString() ?? ChatColors.Default.ToString();
+		});
+		_moduleServices.RegisterModulePlayerPlaceholder("rank", p =>
+		{
+			var player = GetZenithPlayer(p);
+			if (player == null) return "Unranked";
+
+			var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
+			return determinedRank?.Name ?? "Unranked";
+		});
 		_moduleServices.RegisterModulePlayerPlaceholder("points", p => GetZenithPlayer(p)?.GetStorage<long>("Points").ToString() ?? "0");
 
 		_moduleServices.RegisterModuleCommands(_configAccessor.GetValue<List<string>>("Commands", "RankCommands"), "Show the rank informations.", OnRankCommand, CommandUsage.CLIENT_ONLY);
@@ -74,7 +92,6 @@ public sealed partial class Plugin : BasePlugin
 		_zenithEvents = _moduleServices.GetEventHandler();
 		if (_zenithEvents != null)
 		{
-			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
 			_zenithEvents.OnZenithCoreUnload += OnZenithCoreUnload;
 		}
 		else
@@ -88,20 +105,22 @@ public sealed partial class Plugin : BasePlugin
 		AddTimer(3.0f, () =>
 		{
 			_moduleServices.LoadAllOnlinePlayerData();
-			if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
-			{
-				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
-				{
-					IPlayerServices? playerServices = GetZenithPlayer(player);
-					if (playerServices == null) return;
-
-					var (determinedRank, _) = DetermineRanks(playerServices.GetStorage<int>("Points"));
-					playerServices.SetStorage("Rank", determinedRank?.Name);
-
-					playerServices.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
-				});
-			}
 		});
+
+		AddTimer(1, () =>
+		{
+			int interval = _configAccessor.GetValue<int>("Points", "PlaytimeInterval");
+			if (interval <= 0) return;
+
+			if (_lastPlaytimeCheck + (interval * 60) > Server.CurrentTime) return;
+
+			foreach (var player in GetValidPlayers())
+			{
+				ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "PlaytimePoints"), "k4.events.playtime");
+			}
+
+			_lastPlaytimeCheck = Server.CurrentTime;
+		}, TimerFlags.REPEAT);
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
@@ -125,20 +144,6 @@ public sealed partial class Plugin : BasePlugin
 			return;
 
 		moduleServices.DisposeModule(this.GetType().Assembly);
-	}
-
-	private void OnZenithPlayerLoaded(CCSPlayerController player)
-	{
-		if (_configAccessor.GetValue<bool>("Settings", "UseChatRanks"))
-		{
-			var zenithPlayer = GetZenithPlayer(player);
-			if (zenithPlayer is null) return;
-
-			var (determinedRank, _) = DetermineRanks(zenithPlayer.GetStorage<int>("Points"));
-			zenithPlayer.SetStorage("Rank", determinedRank?.Name);
-
-			zenithPlayer.SetNameTag($"{determinedRank?.ChatColor}[{determinedRank?.Name}] ");
-		}
 	}
 
 	public IPlayerServices? GetZenithPlayer(CCSPlayerController? player)

@@ -354,5 +354,36 @@ public sealed partial class Plugin : BasePlugin
 				}
 			}, true);
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/god");
+
+		_moduleServices?.RegisterModuleCommands(["team"], "Sets player team", (player, info) =>
+		{
+			CsTeam team = GetTeamFromName(info.GetArg(2));
+			if (team == CsTeam.None)
+			{
+				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_team"]);
+				return;
+			}
+
+			ProcessTargetAction(player, info.GetArgTargetResult(1), target =>
+			{
+				if (target.PlayerPawn.Value != null)
+				{
+					target.ChangeTeam(team);
+					ShowActivityToPlayers(player?.SteamID, "commands.team.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName, team);
+				}
+			}, true);
+		}, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <team>", "@zenith-commands/team");
+
+		_moduleServices?.RegisterModuleCommands(["swap"], "Swaps player team to the opposite", (player, info) =>
+		{
+			ProcessTargetAction(player, info.GetArgTargetResult(1), target =>
+			{
+				if (target.PlayerPawn.Value != null)
+				{
+					target.ChangeTeam(target.Team == CsTeam.Terrorist ? CsTeam.CounterTerrorist : CsTeam.Terrorist);
+					ShowActivityToPlayers(player?.SteamID, "commands.swap.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName);
+				}
+			}, true);
+		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/swap");
 	}
 }

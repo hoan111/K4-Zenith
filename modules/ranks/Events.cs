@@ -134,6 +134,10 @@ namespace Zenith_Ranks
 				if (player == null || player.IsBot || player.IsHLTV)
 					return HookResult.Continue;
 
+				int reqiredPlayers = _configAccessor.GetValue<int>("Settings", "MinPlayers");
+				if (reqiredPlayers > Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).Count())
+					_moduleServices?.PrintForPlayer(player, Localizer["k4.phrases.points_disabled", reqiredPlayers]);
+
 				playerSpawned.Add(player);
 				return HookResult.Continue;
 			}, HookMode.Post);
@@ -346,6 +350,7 @@ namespace Zenith_Ranks
 				string? eventInfo = victim != null && _plugin._configAccessor.GetValue<bool>("Settings", "ExtendedDeathMessages")
 								? _plugin.Localizer["k4.phrases.kill-extended", victim.Name, $"{victim.GetStorage<long>("Points"):N0}"] ?? string.Empty
 								: null;
+
 				_plugin.ModifyPlayerPoints(attacker, _plugin._configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints") && victim != null ? _plugin.CalculateDynamicPoints(attacker, victim, _plugin._configAccessor.GetValue<int>("Points", "Kill")) : _plugin._configAccessor.GetValue<int>("Points", "Kill"), "k4.events.kill", eventInfo);
 
 				if (deathEvent.Headshot)

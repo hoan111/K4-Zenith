@@ -60,6 +60,9 @@ rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modul
 print_message "${YELLOW}" "Copying Extended Commands module..."
 rsync -a --quiet ./modules/extended-commands/bin/K4-Zenith-ExtendedCommands/ ./Zenith/plugins/K4-Zenith-ExtendedCommands/
 
+print_message "${YELLOW}" "Copying Custom Tags module..."
+rsync -a --quiet ./modules/custom-tags/bin/K4-Zenith-CustomTags/ ./Zenith/plugins/K4-Zenith-CustomTags/
+
 # Delete files with a specific extension from Zenith and sub-folders
 print_message "${BLUE}" "Cleaning up unnecessary files..."
 find ./Zenith -type f \( -name "*.pdb" -o -name "*.yaml" -o -name ".DS_Store" \) -delete 2>/dev/null

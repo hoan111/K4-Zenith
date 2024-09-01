@@ -9,6 +9,10 @@
   "commands.error.invalid_speed": "{lightred}Invalid speed value.",
   "commands.error.invalid_damage": "{lightred}Invalid damage value.",
   "commands.error.invalid_time": "{lightred}Invalid time value.",
+  "commands.error.invalid_immunity": "{lightred}You cannot target this player.",
+  "commands.error.invalid_target": "{lightred}Target not found.",
+  "commands.error.invalid_dead": "{lightred}Target must be alive.",
+  "commands.error.invalid_team": "{lightred}Invalid team.",
 
   "commands.hp.success": "{gold}{0} {silver}set {gold}{1}{silver}'s health to {gold}{2}{silver}.",
   "commands.armor.success": "{gold}{0} {silver}set {gold}{1}{silver}'s armor to {gold}{2}{silver}.",
@@ -33,5 +37,7 @@
   "commands.blind.success": "{gold}{0} {silver}blinded {gold}{1} {silver}for {gold}{2} {silver}seconds.",
   "commands.unblind.success": "{gold}{0} {silver}unblinded {gold}{1}{silver}.",
   "commands.god.enable": "{gold}{0} {silver}enabled god mode for {gold}{1}{silver}.",
-  "commands.god.disable": "{gold}{0} {silver}disabled god mode for {gold}{1}{silver}."
+  "commands.god.disable": "{gold}{0} {silver}disabled god mode for {gold}{1}{silver}.",
+  "commands.team.success": "{gold}{0} {silver}set {gold}{1}{silver}'s team to {gold}{2}{silver}.",
+  "commands.swap.success": "{gold}{0} {silver}swapped {gold}{1}{silver}'s team."
 }

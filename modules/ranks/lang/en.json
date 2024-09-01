@@ -6,6 +6,7 @@
   "k4.phrases.assist-extended": "assisting to kill {0} ({1})",
   "k4.phrases.round-summary-earn": "{silver}You earned {green}{0} points{silver} this round.",
   "k4.phrases.round-summary-lose": "{silver}You lost {red}{0} points{silver} this round.",
+  "k4.phrases.points_disabled": "{silver}Points are disabled. Minimum {gold}{0} {silver}players required.",
   "k4.phrases.rankup": "Congratulations!",
   "k4.phrases.rankdown": "Rank Decreased",
   "k4.phrases.newrank": "Your new rank is: {0}",
@@ -42,6 +43,7 @@
   "k4.events.assistflash": "flash assist",
   "k4.events.teamkillassist": "assisting a teamkill",
   "k4.events.teamkillassistflash": "flash assist a teamkill",
+  "k4.events.playtime": "playtime",
 
   "k4.events.killstreak2": "double kill",
   "k4.events.killstreak3": "triple kill",

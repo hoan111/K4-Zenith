@@ -7,7 +7,7 @@ namespace Zenith
 	using Microsoft.Extensions.Logging;
 	using Zenith.Models;
 
-	[MinimumApiVersion(250)]
+	[MinimumApiVersion(260)]
 	public sealed partial class Plugin : BasePlugin
 	{
 		public Menu.KitsuneMenu Menu { get; private set; } = null!;

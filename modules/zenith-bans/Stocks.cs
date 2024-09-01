@@ -344,6 +344,8 @@ namespace Zenith_Bans
 				if (type == PunishmentType.Kick)
 				{
 					string kickLocalizationKey = "k4.chat.kick";
+					Logger.LogWarning($"Player {targetName} ({targetSteamId}) was {type.ToString().ToLower()}ed by {callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}");
+
 					foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
 					{
 						if (ShouldShowActivity(callerSteamId, player, true))
@@ -366,15 +368,31 @@ namespace Zenith_Bans
 						$"k4.chat.{type.ToString().ToLower()}.permanent" :
 						$"k4.chat.{type.ToString().ToLower()}";
 
+					Logger.LogWarning($"Player {targetName} ({targetSteamId}) was {type.ToString().ToLower()}ed by {callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")} for {durationString} ({reason})");
+
 					foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
 					{
 						if (ShouldShowActivity(callerSteamId, player, true))
 						{
-							_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, callerName, targetName, durationString, reason]);
+							if (duration == 0 || duration == null)
+							{
+								_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, callerName, targetName, reason]);
+							}
+							else
+							{
+								_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, callerName, targetName, durationString, reason]);
+							}
 						}
 						else if (ShouldShowActivity(callerSteamId, player, false))
 						{
-							_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, Localizer["k4.general.admin"], targetName, durationString, reason]);
+							if (duration == 0 || duration == null)
+							{
+								_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, Localizer["k4.general.admin"], targetName, reason]);
+							}
+							else
+							{
+								_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, Localizer["k4.general.admin"], targetName, durationString, reason]);
+							}
 						}
 					}
 				}
@@ -409,6 +427,8 @@ namespace Zenith_Bans
 		{
 			int banLength = _coreAccessor.GetValue<int>("Config", "WarnBanLength");
 			string reason = Localizer["k4.general.max-warnings-reached"];
+
+			Logger.LogWarning($"Player {target.PlayerName} ({target.SteamID}) was banned for reaching the maximum number of warnings");
 
 			ApplyPunishment(null, target, PunishmentType.Ban, banLength, reason);
 
@@ -488,9 +508,21 @@ namespace Zenith_Bans
 						{
 							playerData.Punishments.RemoveAll(p => p.Type == type);
 						}
+
 						RemovePunishmentEffect(target, type);
 						Logger.LogWarning($"Player {targetName} ({targetSteamId}) was un{type.ToString().ToLower()}ed by {callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}");
-						_moduleServices?.PrintForAll(Localizer[$"k4.chat.un{type.ToString().ToLower()}", callerName, targetName]);
+
+						foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
+						{
+							if (ShouldShowActivity(callerSteamId, player, true))
+							{
+								_moduleServices?.PrintForPlayer(player, Localizer[$"k4.chat.un{type.ToString().ToLower()}", callerName, targetName]);
+							}
+							else if (ShouldShowActivity(callerSteamId, player, false))
+							{
+								_moduleServices?.PrintForPlayer(player, Localizer[$"k4.chat.un{type.ToString().ToLower()}", Localizer["k4.general.admin"], targetName]);
+							}
+						}
 					}
 					else
 					{
@@ -729,6 +761,7 @@ namespace Zenith_Bans
 
 					AdminManager.SetPlayerImmunity(player, (uint)playerData.Immunity.GetValueOrDefault());
 					AdminManager.AddPlayerPermissions(player, [.. playerData.Permissions]);
+					AdminManager.AddPlayerToGroup(player, [.. playerData.Groups]);
 
 					IPlayerServices? playerServices = GetZenithPlayer(player);
 					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Mute && p.ExpiresAt > DateTime.UtcNow))

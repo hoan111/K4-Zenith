@@ -20,27 +20,34 @@ public sealed partial class Player
 
 	public static async Task CreateTablesAsync(Plugin plugin)
 	{
-		string tablePrefix = plugin.Database.TablePrefix;
-		using var connection = plugin.Database.CreateConnection();
-		await connection.OpenAsync();
+		try
+		{
+			string tablePrefix = plugin.Database.TablePrefix;
+			using var connection = plugin.Database.CreateConnection();
+			await connection.OpenAsync();
 
-		var createSettingsTableQuery = $@"
-        CREATE TABLE IF NOT EXISTS `{tablePrefix}{TABLE_PLAYER_SETTINGS}` (
-            `steam_id` VARCHAR(32) NOT NULL,
-            `last_online` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (`steam_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+			var createSettingsTableQuery = $@"
+				CREATE TABLE IF NOT EXISTS `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}` (
+					`steam_id` VARCHAR(32) NOT NULL,
+					`last_online` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+					PRIMARY KEY (`steam_id`)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
 
-		await connection.ExecuteAsync(createSettingsTableQuery);
+			await connection.ExecuteAsync(createSettingsTableQuery);
 
-		var createStorageTableQuery = $@"
-        CREATE TABLE IF NOT EXISTS `{tablePrefix}{TABLE_PLAYER_STORAGE}` (
-            `steam_id` VARCHAR(32) NOT NULL,
-            `last_online` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (`steam_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+			var createStorageTableQuery = $@"
+				CREATE TABLE IF NOT EXISTS `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}` (
+					`steam_id` VARCHAR(32) NOT NULL,
+					`last_online` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+					PRIMARY KEY (`steam_id`)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
 
-		await connection.ExecuteAsync(createStorageTableQuery);
+			await connection.ExecuteAsync(createStorageTableQuery);
+		}
+		catch (Exception ex)
+		{
+			plugin.Logger.LogError($"Failed to create player data tables: {ex.Message}");
+		}
 	}
 
 	public static void RegisterModuleSettings(Plugin plugin, Dictionary<string, object?> defaultSettings, IStringLocalizer? localizer = null)
@@ -75,29 +82,35 @@ public sealed partial class Player
 
 	private static async Task RegisterModuleDataAsync(Plugin plugin, string moduleID, string tableName)
 	{
-		string tablePrefix = plugin.Database.TablePrefix;
-		string columnName = tableName == TABLE_PLAYER_SETTINGS ? $"{moduleID}.settings" : $"{moduleID}.storage";
-
-		using var connection = plugin.Database.CreateConnection();
-		await connection.OpenAsync();
-
-		var columnExistsQuery = $@"
-		SELECT COUNT(*)
-		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = DATABASE()
-		AND TABLE_NAME = '{tablePrefix}{tableName}'
-		AND COLUMN_NAME = '{columnName}'";
-
-		var columnExists = await connection.ExecuteScalarAsync<int>(columnExistsQuery) > 0;
-
-		if (!columnExists)
+		try
 		{
-			var addColumnQuery = $@"
-			ALTER TABLE `{tablePrefix}{tableName}`
-			ADD COLUMN `{columnName}` JSON NULL
-			CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+			string tablePrefix = plugin.Database.TablePrefix;
+			string columnName = tableName == TABLE_PLAYER_SETTINGS ? $"{moduleID}.settings" : $"{moduleID}.storage";
 
-			await connection.ExecuteAsync(addColumnQuery);
+			using var connection = plugin.Database.CreateConnection();
+			await connection.OpenAsync();
+
+			var columnExistsQuery = $@"
+				SELECT COUNT(*)
+				FROM INFORMATION_SCHEMA.COLUMNS
+				WHERE TABLE_SCHEMA = DATABASE()
+				AND TABLE_NAME = '{MySqlHelper.EscapeString(tablePrefix)}{tableName}'
+				AND COLUMN_NAME = '{MySqlHelper.EscapeString(columnName)}'";
+
+			var columnExists = await connection.ExecuteScalarAsync<int>(columnExistsQuery) > 0;
+
+			if (!columnExists)
+			{
+				var addColumnQuery = $@"
+					ALTER TABLE `{MySqlHelper.EscapeString(tablePrefix)}{tableName}`
+					ADD COLUMN `{MySqlHelper.EscapeString(columnName)}` JSON NULL;";
+
+				await connection.ExecuteAsync(addColumnQuery);
+			}
+		}
+		catch (Exception ex)
+		{
+			plugin.Logger.LogError($"Failed to register module data for {moduleID}: {ex.Message}");
 		}
 	}
 
@@ -239,50 +252,66 @@ public sealed partial class Player
 
 	private async Task LoadDataAsync(ConcurrentDictionary<string, object?> targetDict, string tableName, ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults)
 	{
-		string tablePrefix = _plugin.Database.TablePrefix;
-		using var connection = _plugin.Database.CreateConnection();
-		await connection.OpenAsync();
-		var query = $@"
-        SELECT * FROM `{tablePrefix}{tableName}`
-        WHERE `steam_id` = @SteamID;";
-		var result = await connection.QueryFirstOrDefaultAsync(query, new { SteamID = SteamID.ToString() });
-
-		await UpdateLastOnline();
-
-		Server.NextFrame(() =>
+		try
 		{
-			if (result != null)
+			string tablePrefix = _plugin.Database.TablePrefix;
+			using var connection = _plugin.Database.CreateConnection();
+			await connection.OpenAsync();
+			var query = $@"
+				SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{tableName}`
+				WHERE `steam_id` = @SteamID;";
+			var result = await connection.QueryFirstOrDefaultAsync(query, new { SteamID = SteamID.ToString() });
+
+			await UpdateLastOnline();
+
+			Server.NextFrame(() =>
 			{
-				foreach (var property in result)
+				if (result != null)
 				{
-					if (property.Value != null && (property.Key.EndsWith(".settings") || property.Key.EndsWith(".storage")))
+					foreach (var property in result)
 					{
-						var moduleID = property.Key.Split('.')[0];
-						var data = JsonSerializer.Deserialize<Dictionary<string, object>>(property.Value.ToString());
-						foreach (var item in data)
+						if (property.Value != null && (property.Key.EndsWith(".settings") || property.Key.EndsWith(".storage")))
 						{
-							targetDict[$"{moduleID}.{item.Key}"] = item.Value;
+							var moduleID = property.Key.Split('.')[0];
+							var data = JsonSerializer.Deserialize<Dictionary<string, object>>(property.Value.ToString());
+							foreach (var item in data)
+							{
+								targetDict[$"{moduleID}.{item.Key}"] = item.Value;
+							}
 						}
 					}
 				}
-			}
 
-			ApplyDefaultValues(defaults, targetDict);
-		});
+				ApplyDefaultValues(defaults, targetDict);
+			});
+		}
+		catch (Exception ex)
+		{
+			_plugin.Logger.LogError($"Error loading player data for player {SteamID}: {ex.Message}");
+		}
 	}
 
 	private async Task UpdateLastOnline()
 	{
-		string tablePrefix = _plugin.Database.TablePrefix;
-		using var connection = _plugin.Database.CreateConnection();
-		await connection.OpenAsync();
-		var query = $@"
-        UPDATE `{tablePrefix}{TABLE_PLAYER_SETTINGS}`, `{tablePrefix}{TABLE_PLAYER_STORAGE}`
-        SET `{tablePrefix}{TABLE_PLAYER_SETTINGS}`.`last_online` = NOW(),
-            `{tablePrefix}{TABLE_PLAYER_STORAGE}`.`last_online` = NOW()
-        WHERE `{tablePrefix}{TABLE_PLAYER_SETTINGS}`.`steam_id` = @SteamID
-          AND `{tablePrefix}{TABLE_PLAYER_STORAGE}`.`steam_id` = @SteamID;";
-		await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString() });
+		try
+		{
+			string tablePrefix = _plugin.Database.TablePrefix;
+			using var connection = _plugin.Database.CreateConnection();
+			await connection.OpenAsync();
+			var query = $@"
+				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}` (`steam_id`, `last_online`)
+				VALUES (@SteamID, NOW())
+				ON DUPLICATE KEY UPDATE `last_online` = NOW();
+
+				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}` (`steam_id`, `last_online`)
+				VALUES (@SteamID, NOW())
+				ON DUPLICATE KEY UPDATE `last_online` = NOW();";
+			await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString() });
+		}
+		catch (Exception ex)
+		{
+			_plugin.Logger.LogError($"Error updating last online for player {SteamID}: {ex.Message}");
+		}
 	}
 
 	private static void ApplyDefaultValues(ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, ConcurrentDictionary<string, object?> target)
@@ -346,66 +375,83 @@ public sealed partial class Player
 
 	private async Task SavePlayerDataAsync(string moduleID, bool isStorage)
 	{
-		string tablePrefix = _plugin.Database.TablePrefix;
-		string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
-		using var connection = _plugin.Database.CreateConnection();
-		await connection.OpenAsync();
+		try
+		{
+			string tablePrefix = _plugin.Database.TablePrefix;
+			string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
+			using var connection = _plugin.Database.CreateConnection();
+			await connection.OpenAsync();
 
-		var columnName = isStorage ? $"{moduleID}.storage" : $"{moduleID}.settings";
-		var targetDict = isStorage ? Storage : Settings;
-		var moduleData = targetDict
-			.Where(kvp => kvp.Key.StartsWith($"{moduleID}."))
-			.ToDictionary(kvp => kvp.Key.Split('.')[1], kvp => kvp.Value);
+			var columnName = isStorage ? $"{moduleID}.storage" : $"{moduleID}.settings";
+			var targetDict = isStorage ? Storage : Settings;
+			var moduleData = targetDict
+				.Where(kvp => kvp.Key.StartsWith($"{moduleID}."))
+				.ToDictionary(kvp => kvp.Key.Split('.')[1], kvp => kvp.Value);
 
-		var jsonValue = JsonSerializer.Serialize(moduleData);
+			var jsonValue = JsonSerializer.Serialize(moduleData);
 
-		var query = $@"
-			INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{MySqlHelper.EscapeString(tableName)}` (`steam_id`, `{MySqlHelper.EscapeString(columnName)}`)
-			VALUES (@SteamID, @JsonValue)
-			ON DUPLICATE KEY UPDATE `{MySqlHelper.EscapeString(columnName)}` = @JsonValue;";
+			var query = $@"
+				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `{MySqlHelper.EscapeString(columnName)}`)
+				VALUES (@SteamID, @JsonValue)
+				ON DUPLICATE KEY UPDATE `{MySqlHelper.EscapeString(columnName)}` = @JsonValue;";
 
-		await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString(), JsonValue = jsonValue });
+			await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString(), JsonValue = jsonValue });
+		}
+		catch (Exception ex)
+		{
+			_plugin.Logger.LogError($"Error saving player data for player {SteamID}: {ex.Message}");
+		}
 	}
 
 	private async Task SaveAllPlayerDataAsync(bool isStorage)
 	{
-		string tablePrefix = _plugin.Database.TablePrefix;
-		string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
-		using var connection = _plugin.Database.CreateConnection();
-		await connection.OpenAsync();
-
-		var targetDict = isStorage ? Storage : Settings;
-		var dataToSave = new Dictionary<string, string>();
-
-		foreach (var moduleGroup in targetDict.GroupBy(kvp => kvp.Key.Split('.')[0]))
+		try
 		{
-			var moduleID = moduleGroup.Key;
-			var moduleData = moduleGroup.ToDictionary(kvp => kvp.Key.Split('.')[1], kvp => kvp.Value);
-			dataToSave[$"{moduleID}.{(isStorage ? "storage" : "settings")}"] = JsonSerializer.Serialize(moduleData);
-		}
+			string tablePrefix = _plugin.Database.TablePrefix;
+			string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
+			using var connection = _plugin.Database.CreateConnection();
+			await connection.OpenAsync();
 
-		if (dataToSave.Count == 0)
+			var targetDict = isStorage ? Storage : Settings;
+			var dataToSave = new Dictionary<string, string>();
+
+			foreach (var moduleGroup in targetDict.GroupBy(kvp => kvp.Key.Split('.')[0]))
+			{
+				var moduleID = moduleGroup.Key;
+				var moduleData = moduleGroup.ToDictionary(kvp => kvp.Key.Split('.')[1], kvp => kvp.Value);
+				if (moduleData.Count > 0) // Only add if there's data to save
+				{
+					dataToSave[$"{moduleID}.{(isStorage ? "storage" : "settings")}"] = JsonSerializer.Serialize(moduleData);
+				}
+			}
+
+			if (dataToSave.Count == 0)
+			{
+				return; // No data to save
+			}
+
+			var columns = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}`"));
+			var parameters = string.Join(", ", dataToSave.Keys.Select(k => $"@p_{k.Replace("-", "_")}"));
+			var updateStatements = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}` = @p_{k.Replace("-", "_")}"));
+
+			var query = $@"
+				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, {columns})
+				VALUES (@p_SteamID, {parameters})
+				ON DUPLICATE KEY UPDATE {updateStatements};";
+
+			var queryParams = new DynamicParameters();
+			queryParams.Add("@p_SteamID", SteamID.ToString());
+			foreach (var item in dataToSave)
+			{
+				queryParams.Add($"@p_{item.Key.Replace("-", "_")}", item.Value);
+			}
+
+			await connection.ExecuteAsync(query, queryParams);
+		}
+		catch (Exception ex)
 		{
-			return; // No data to save
+			_plugin.Logger.LogError($"Error saving player data for player {SteamID}: {ex.Message}");
 		}
-
-		var columns = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}`"));
-		var parameters = string.Join(", ", dataToSave.Keys.Select(k => $"@p_{k.Replace("-", "_")}"));
-		var updateStatements = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}` = @p_{k.Replace("-", "_")}"));
-
-		var query = $@"
-        INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{MySqlHelper.EscapeString(tableName)}` (`steam_id`, {columns})
-        VALUES (@p_SteamID, {parameters})
-        ON DUPLICATE KEY UPDATE {updateStatements};";
-
-		var queryParams = new DynamicParameters();
-		queryParams.Add("@p_SteamID", SteamID.ToString());
-		foreach (var item in dataToSave)
-		{
-			queryParams.Add($"@p_{item.Key.Replace("-", "_")}", item.Value);
-		}
-
-		await connection.ExecuteAsync(query, queryParams);
 	}
 
 	public void ResetModuleSettings()
@@ -453,13 +499,13 @@ public sealed partial class Player
 				await connection.OpenAsync();
 
 				var settingsQuery = $@"
-						SELECT * FROM `{tablePrefix}{TABLE_PLAYER_SETTINGS}`
-						WHERE `steam_id` IN @SteamIDs;";
+					SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}`
+					WHERE `steam_id` IN @SteamIDs;";
 				var settingsResults = await connection.QueryAsync(settingsQuery, new { SteamIDs = steamIds });
 
 				var storageQuery = $@"
-						SELECT * FROM `{tablePrefix}{TABLE_PLAYER_STORAGE}`
-						WHERE `steam_id` IN @SteamIDs;";
+					SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}`
+					WHERE `steam_id` IN @SteamIDs;";
 				var storageResults = await connection.QueryAsync(storageQuery, new { SteamIDs = steamIds });
 
 				Server.NextFrame(() =>
@@ -529,51 +575,63 @@ public sealed partial class Player
 
 		Task.Run(async () =>
 		{
-			if (!playerDataToSave.Any())
+			if (playerDataToSave.IsEmpty)
 				return;
 
-			using var connection = plugin.Database.CreateConnection();
-			await connection.OpenAsync();
-
-			foreach (var isStorage in new[] { false, true })
+			try
 			{
-				string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
+				using var connection = plugin.Database.CreateConnection();
+				await connection.OpenAsync();
 
-				foreach (var playerData in playerDataToSave)
+				foreach (var isStorage in new[] { false, true })
 				{
-					var steamId = playerData.Key;
-					var data = isStorage ? playerData.Value.Storage : playerData.Value.Settings;
+					string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
 
-					var columns = string.Join(", ", data.Keys.Select(k => $"`{k}`"));
-					var parameters = string.Join(", ", data.Keys.Select(k => $"@{k}"));
-					var updateStatements = string.Join(", ", data.Keys.Select(k => $"`{k}` = @{k}"));
-
-					var query = $@"
-                                INSERT INTO `{tablePrefix}{tableName}` (`steam_id`, {columns})
-                                VALUES (@SteamID, {parameters})
-                                ON DUPLICATE KEY UPDATE {updateStatements};";
-
-					var queryParams = new DynamicParameters();
-					queryParams.Add("@SteamID", steamId);
-					foreach (var item in data)
+					foreach (var playerData in playerDataToSave)
 					{
-						queryParams.Add($"@{item.Key}", item.Value);
+						var steamId = playerData.Key;
+						var data = isStorage ? playerData.Value.Storage : playerData.Value.Settings;
+
+						if (data.Count == 0)
+							continue;
+
+						var columns = string.Join(", ", data.Keys.Select(k => $"`{k}`"));
+						var parameters = string.Join(", ", data.Keys.Select((k, i) => $"@param{i}"));
+						var updateStatements = string.Join(", ", data.Keys.Select((k, i) => $"`{k}` = @param{i}"));
+
+						var query = $@"
+                        INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, {columns})
+                        VALUES (@steamId, {parameters})
+                        ON DUPLICATE KEY UPDATE {updateStatements};";
+
+						var queryParams = new DynamicParameters();
+						queryParams.Add("@steamId", steamId);
+						int i = 0;
+						foreach (var item in data)
+						{
+							queryParams.Add($"@param{i}", item.Value);
+							i++;
+						}
+
+						await connection.ExecuteAsync(query, queryParams);
+					}
+				}
+
+				if (dipose)
+				{
+					foreach (var player in List)
+					{
+						player.Settings.Clear();
+						player.Storage.Clear();
 					}
 
-					await connection.ExecuteAsync(query, queryParams);
+					moduleDefaultSettings.Clear();
+					moduleDefaultStorage.Clear();
 				}
 			}
-
-			if (dipose)
+			catch (Exception ex)
 			{
-				foreach (var player in List)
-				{
-					player.Settings.Clear();
-					player.Storage.Clear();
-				}
-
-				moduleDefaultSettings.Clear();
-				moduleDefaultStorage.Clear();
+				plugin.Logger.LogError($"An error occurred while saving player data: {ex.Message}");
 			}
 		});
 	}

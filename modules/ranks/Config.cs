@@ -25,7 +25,6 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Settings", "DynamicDeathPoints", "Use dynamic death points", true);
 		_moduleServices.RegisterModuleConfig("Settings", "DynamicDeathPointsMaxMultiplier", "Max multiplier for dynamic death points", 3.00);
 		_moduleServices.RegisterModuleConfig("Settings", "DynamicDeathPointsMinMultiplier", "Min multiplier for dynamic death points", 0.5);
-		_moduleServices.RegisterModuleConfig("Settings", "UseChatRanks", "Use of ranks on chat messages", true);
 		_moduleServices.RegisterModuleConfig("Settings", "UseScoreboardRanks", "Use of ranks on scoreboard", true);
 		_moduleServices.RegisterModuleConfig("Settings", "ScoreboardMode", "Scoreboard mode (1 - premier, 2 - competitive, 3 - wingman, 4 - danger zone, 0 - custom)", 1);
 		_moduleServices.RegisterModuleConfig("Settings", "RankBase", "Base rank value for custom ranks", 0);
@@ -80,6 +79,8 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Points", "ImpactKill", "Points for impact kill", 100);
 		_moduleServices.RegisterModuleConfig("Points", "TaserKill", "Points for taser kill", 20);
 		_moduleServices.RegisterModuleConfig("Points", "KnifeKill", "Points for knife kill", 15);
+		_moduleServices.RegisterModuleConfig("Points", "PlaytimeInterval", "Interval for playtime points (in minutes), or 0 to disable", 5);
+		_moduleServices.RegisterModuleConfig("Points", "PlaytimePoints", "Points for playtime interval", 20);
 
 		// Get the config accessor
 		_configAccessor = _moduleServices.GetModuleConfigAccessor();

@@ -10,7 +10,7 @@ using CounterStrikeSharp.API.Modules.Timers;
 
 namespace Zenith_TimeStats;
 
-[MinimumApiVersion(250)]
+[MinimumApiVersion(260)]
 public class Plugin : BasePlugin
 {
 	private IModuleConfigAccessor _coreAccessor = null!;
@@ -244,7 +244,6 @@ public class Plugin : BasePlugin
 		playerServices.Print(message);
 	}
 
-	[CommandHelper(whoCanExecute: CommandUsage.CLIENT_ONLY)]
 	public void OnPlaytimeCommand(CCSPlayerController? player, CommandInfo command)
 	{
 		var playerServices = GetZenithPlayer(player);

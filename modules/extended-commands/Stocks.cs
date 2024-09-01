@@ -13,13 +13,13 @@ public sealed partial class Plugin : BasePlugin
 	{
 		if (!AdminManager.CanPlayerTarget(caller, target))
 		{
-			_moduleServices?.PrintForPlayer(caller, Localizer["k4.general.targetimmunity", target.PlayerName]);
+			_moduleServices?.PrintForPlayer(caller, Localizer["commands.error.invalid_immunity", target.PlayerName]);
 			return;
 		}
 
 		if (aliveOnly && target.PlayerPawn.Value != null && target.PlayerPawn.Value.Health <= 0 && target.PlayerPawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)
 		{
-			_moduleServices?.PrintForPlayer(caller, Localizer["k4.general.targetdead", target.PlayerName]);
+			_moduleServices?.PrintForPlayer(caller, Localizer["commands.error.invalid_dead", target.PlayerName]);
 			return;
 		}
 
@@ -30,7 +30,7 @@ public sealed partial class Plugin : BasePlugin
 	{
 		if (!targetResult.Any())
 		{
-			_moduleServices?.PrintForPlayer(caller, Localizer["k4.general.targetnotfound"]);
+			_moduleServices?.PrintForPlayer(caller, Localizer["commands.error.invalid_target"]);
 			return;
 		}
 
@@ -119,5 +119,20 @@ public sealed partial class Plugin : BasePlugin
 		}
 
 		return true;
+	}
+
+	private static CsTeam GetTeamFromName(string teamName)
+	{
+		return teamName.ToLower() switch
+		{
+			"t" => CsTeam.Terrorist,
+			"terrorist" => CsTeam.Terrorist,
+			"tt" => CsTeam.Terrorist,
+			"ct" => CsTeam.CounterTerrorist,
+			"counterterrorist" => CsTeam.CounterTerrorist,
+			"spec" => CsTeam.Spectator,
+			"spectator" => CsTeam.Spectator,
+			_ => CsTeam.None
+		};
 	}
 }

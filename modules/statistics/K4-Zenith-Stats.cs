@@ -16,7 +16,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Zenith_Stats;
 
-[MinimumApiVersion(250)]
+[MinimumApiVersion(260)]
 public class Plugin : BasePlugin
 {
 	public CCSGameRules? GameRules = null;
@@ -151,7 +151,7 @@ public class Plugin : BasePlugin
 		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "MapStatisticCommands"), "Show the player statistics for maps.", OnMapStatsCommand, CommandUsage.CLIENT_ONLY);
 
 		_moduleServices.RegisterModulePlayerPlaceholder("kda", p => CalculateKDA(GetZenithPlayer(p)));
-		_moduleServices.RegisterModulePlayerPlaceholder("kdr", p => CalculateKDR(GetZenithPlayer(p)));
+		_moduleServices.RegisterModulePlayerPlaceholder("kpr", p => CalculateKPR(GetZenithPlayer(p)));
 		_moduleServices.RegisterModulePlayerPlaceholder("accuracy", p => CalculateAccuracy(GetZenithPlayer(p)));
 		_moduleServices.RegisterModulePlayerPlaceholder("kd", p => CalculateKD(GetZenithPlayer(p)));
 
@@ -199,6 +199,10 @@ public class Plugin : BasePlugin
 			CCSPlayerController? player = @event.Userid;
 			if (player == null || player.IsBot || player.IsHLTV)
 				return HookResult.Continue;
+
+			int reqiredPlayers = _coreAccessor.GetValue<int>("Config", "MinPlayers");
+			if (reqiredPlayers > Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).Count())
+				_moduleServices.PrintForPlayer(player, Localizer["k4.stats.stats_disabled", reqiredPlayers]);
 
 			playerSpawned.Add(player);
 			return HookResult.Continue;
@@ -270,16 +274,16 @@ public class Plugin : BasePlugin
 		return kda.ToString("F2");
 	}
 
-	private string CalculateKDR(IPlayerServices? player)
+	private string CalculateKPR(IPlayerServices? player)
 	{
 		if (player == null) return "N/A";
 		var stats = _playerStats.GetValueOrDefault(player.Controller.SteamID);
 		if (stats == null) return "N/A";
 
 		int kills = stats.GetGlobalStat("Kills");
-		int deaths = stats.GetGlobalStat("Deaths");
-		double kdr = kills / (double)(deaths == 0 ? 1 : deaths);
-		return kdr.ToString("F2");
+		int rounds = stats.GetGlobalStat("RoundsPlayed");
+		double kpr = rounds == 0 ? kills : (double)kills / rounds;
+		return kpr.ToString("F2");
 	}
 
 	private string CalculateAccuracy(IPlayerServices? player)
@@ -431,7 +435,7 @@ public class Plugin : BasePlugin
 			List<MenuItem> items =
 			[
 				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {CalculateAccuracy(zenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kdr"]}:</font> {CalculateKDR(zenithPlayer)}")),
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kpr"]}:</font> {CalculateKPR(zenithPlayer)}")),
 				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kda"]}:</font> {CalculateKDA(zenithPlayer)}")),
 				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kd"]}:</font> {CalculateKD(zenithPlayer)}")),
 			];
