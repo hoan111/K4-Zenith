@@ -17,6 +17,10 @@ public partial class Database(Plugin plugin)
 			Database = plugin.GetCoreConfig<string>("Database", "Database"),
 			Port = plugin.GetCoreConfig<uint>("Database", "Port"),
 			SslMode = Enum.Parse<MySqlSslMode>(plugin.GetCoreConfig<string>("Database", "Sslmode"), true),
+			AllowZeroDateTime = true,
+			ConvertZeroDateTime = true,
+			TreatTinyAsBoolean = true,
+			OldGuids = true
 		};
 
 		return new MySqlConnection(builder.ToString());

@@ -120,7 +120,7 @@ public sealed partial class Player
 	public void SetStorage(string key, object? value, bool saveImmediately = false)
 		=> SetData(key, value, Storage, saveImmediately);
 
-	private void SetData(string key, object? value, ConcurrentDictionary<string, object?> targetDict, bool saveImmediately, string? caller = null)
+	public void SetData(string key, object? value, ConcurrentDictionary<string, object?> targetDict, bool saveImmediately, string? caller = null)
 	{
 		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
 
@@ -147,7 +147,7 @@ public sealed partial class Player
 	public T? GetStorage<T>(string key)
 		=> GetData<T>(key, Storage);
 
-	private T? GetData<T>(string key, ConcurrentDictionary<string, object?> targetDict, string? caller = null)
+	public T? GetData<T>(string key, ConcurrentDictionary<string, object?> targetDict, string? caller = null)
 	{
 		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
 

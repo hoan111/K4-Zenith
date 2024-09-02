@@ -21,7 +21,7 @@ namespace Zenith
 					var zenithPlayer = Player.Find(player);
 					if (zenithPlayer == null) return;
 
-					List<MenuItem> items = new List<MenuItem>();
+					List<MenuItem> items = [];
 					var defaultValues = new Dictionary<int, object>();
 					var settingsMap = new Dictionary<int, (string ModuleID, string Key)>();
 
@@ -35,7 +35,7 @@ namespace Zenith
 						{
 							string key = setting.Key;
 							object? defaultValue = setting.Value;
-							object? currentValue = zenithPlayer.GetSetting<object>(key);
+							object? currentValue = zenithPlayer.GetData<object>(key, zenithPlayer.Settings, moduleID);
 
 							currentValue ??= defaultValue;
 
@@ -78,7 +78,7 @@ namespace Zenith
 									if (selected.Type == MenuItemType.Bool)
 									{
 										bool newBoolValue = selected.Data[0] == 1;
-										zenithPlayer.SetSetting(key, newBoolValue, true);
+										zenithPlayer.SetData(key, newBoolValue, zenithPlayer.Settings, true, moduleID);
 										string localizedValue = Localizer[newBoolValue ? "k4.settings.enabled" : "k4.settings.disabled"];
 										localizedValue = newBoolValue ? $"{ChatColors.Lime}{localizedValue}" : $"{ChatColors.LightRed}{localizedValue}";
 										zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {localizedValue}");

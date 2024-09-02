@@ -22,32 +22,32 @@ namespace Zenith.Models
 
 		private readonly Dictionary<string, List<MigrationStep>> _migrations = new()
 		{
-			 { "1.8", new List<MigrationStep>
+			{ "1.0.9", new List<MigrationStep>
 				{
 					new MigrationStep
 					{
 						TableName = "zenith_bans_punishments",
 						SqlQuery = @"
-						ALTER TABLE `{prefix}zenith_bans_punishments`
-						ADD COLUMN IF NOT EXISTS `status` ENUM('active', 'expired', 'removed', 'removed_console')
-						CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-						NOT NULL DEFAULT 'active';"
+                        ALTER TABLE `{prefix}zenith_bans_punishments`
+                        ADD COLUMN IF NOT EXISTS `status` ENUM('active', 'expired', 'removed', 'removed_console')
+                        CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+                        NOT NULL DEFAULT 'active';"
 					},
 					new MigrationStep
 					{
 						TableName = "zenith_bans_punishments",
 						SqlQuery = @"
-						UPDATE `{prefix}zenith_bans_punishments`
-						SET `status` = CASE
-							WHEN `type` = 'kick' THEN 'removed'
-							WHEN `removed_at` IS NOT NULL THEN
-								CASE
-									WHEN `remove_admin_steam_id` IS NULL THEN 'removed_console'
-									ELSE 'removed'
-								END
-							WHEN `expires_at` IS NOT NULL AND `expires_at` <= NOW() THEN 'expired'
-							ELSE 'active'
-						END;"
+                        UPDATE `{prefix}zenith_bans_punishments`
+                        SET `status` = CASE
+                            WHEN `type` = 'kick' THEN 'removed'
+                            WHEN `removed_at` IS NOT NULL THEN
+                                CASE
+                                    WHEN `remove_admin_steam_id` IS NULL THEN 'removed_console'
+                                    ELSE 'removed'
+                                END
+                            WHEN `expires_at` IS NOT NULL AND `expires_at` <= NOW() THEN 'expired'
+                            ELSE 'active'
+                        END;"
 					}
 				}
 			},
@@ -131,11 +131,15 @@ namespace Zenith.Models
 		public async Task MigrateDatabaseAsync()
 		{
 			string currentVersion;
+			string serverType;
 			using (var connection = CreateConnection())
 			{
 				await connection.OpenAsync();
 				currentVersion = await GetCurrentDatabaseVersionAsync(connection);
+				serverType = await GetServerTypeAsync(connection);
 			}
+
+			plugin.Logger.LogInformation($"Database server type: {serverType}");
 
 			var pendingMigrations = _migrations
 				.Where(m => string.Compare(m.Key, currentVersion, StringComparison.Ordinal) > 0)
@@ -150,7 +154,15 @@ namespace Zenith.Models
 
 			plugin.Logger.LogInformation($"Starting database migration from version {currentVersion} to {plugin.ModuleVersion}");
 
-			await CreateDatabaseBackupAsync();
+			try
+			{
+				await CreateDatabaseBackupAsync();
+			}
+			catch (Exception ex)
+			{
+				plugin.Logger.LogError($"Failed to create database backup: {ex.Message}");
+				// Consider whether to proceed with migration or not
+			}
 
 			string latestAppliedVersion = currentVersion;
 
@@ -205,10 +217,10 @@ namespace Zenith.Models
 		private async Task<bool> TableExistsAsync(MySqlConnection connection, string tableName, MySqlTransaction transaction)
 		{
 			var sql = @"
-				SELECT COUNT(*)
-				FROM information_schema.tables
-				WHERE table_schema = DATABASE()
-				AND table_name = @TableName";
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = DATABASE()
+                AND table_name = @TableName";
 
 			var count = await connection.ExecuteScalarAsync<int>(sql, new { TableName = $"{TablePrefix}{tableName}" }, transaction);
 			return count > 0;
@@ -223,6 +235,12 @@ namespace Zenith.Models
 
 			await connection.ExecuteAsync(sql, new { Key = VERSION_KEY, Value = version }, transaction);
 			plugin.Logger.LogInformation($"Database version updated to: {version}");
+		}
+
+		private async Task<string> GetServerTypeAsync(MySqlConnection connection)
+		{
+			var version = await connection.ExecuteScalarAsync<string>("SELECT VERSION()");
+			return version!.Contains("mariadb", StringComparison.CurrentCultureIgnoreCase) ? "MariaDB" : "MySQL";
 		}
 	}
 }
