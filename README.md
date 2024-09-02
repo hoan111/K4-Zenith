@@ -57,11 +57,14 @@ You can enhance your server with additional features and elevate its standards b
 
 - **Zenith Time Stats**: This module offers a player time statistics system that accurately tracks playtimes per team, per life state, and globally. It also includes a user-friendly menu to display the statistics to the player, along with playtime notifications to appreciate their dedication and time spent in the game.
 
-- **Zenith Bans**: This module introduces a powerful admin system designed to simplify server management. It includes essential commands such as ban, kick, mute, gag, slay, slap, and more. Additionally, it provides a database-based player system that enables assigning ranks, permissions, immunity, groups, and even timed ranks like VIPs. With features like connect info, Discord webhooks, and more, this module offers a comprehensive set of tools to effectively manage your server.
+- ⚠️ **Zenith Bans**: This module introduces a powerful admin system designed to simplify server management. It includes essential commands such as ban, kick, mute, gag, slay, slap, and more. Additionally, it provides a database-based player system that enables assigning ranks, permissions, immunity, groups, and even timed ranks like VIPs. With features like connect info, Discord webhooks, and more, this module offers a comprehensive set of tools to effectively manage your server.
 
-- **Zenith Extended Commands**: This module adds a wide range of fun commands to your server, including commonly used admin commands like respawn, blind, revive, teleportation (tp), item giving (give), and much more. These commands enhance the gameplay experience and provide additional options for server administrators.
+- ⚠️ **Zenith Extended Commands**: This module adds a wide range of fun commands to your server, including commonly used admin commands like respawn, blind, revive, teleportation (tp), item giving (give), and much more. These commands enhance the gameplay experience and provide additional options for server administrators.
 
-- **Zenith Custom Tags**: Enhance your server's chat experience with Zenith Custom Tags. This module gives players custom chat colors, ranks, clantags, and chat colors based on permissions or SteamID formats. Customize the chat environment for your community.
+-**Zenith Custom Tags**: Enhance your server's chat experience with Zenith Custom Tags. This module gives players custom chat colors, ranks, clantags, and chat colors based on permissions or SteamID formats. Customize the chat environment for your community.
+
+> [!WARNING]
+> Do not install ⚠️ marked modules, if you are using SimpleAdmin or any similar plugin system.
 
 <!-- INSTALLATION -->
 
