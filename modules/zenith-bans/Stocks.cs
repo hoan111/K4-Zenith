@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using CounterStrikeSharp.API;
@@ -52,7 +53,6 @@ namespace Zenith_Bans
 		{
 			if (!targetResult.Any())
 			{
-				_moduleServices?.PrintForPlayer(caller, Localizer["k4.general.targetnotfound"]);
 				onFail?.Invoke(TargetFailureReason.TargetNotFound);
 				return;
 			}
@@ -117,7 +117,7 @@ namespace Zenith_Bans
 							}
 							else
 							{
-								_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-target"]);
+								_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.targetnotfound"]);
 							}
 						}
 					});
@@ -481,10 +481,19 @@ namespace Zenith_Bans
 				return;
 			}
 
-			ProcessTargetAction(controller, info.GetArgTargetResult(1), (target) => RemovePunishment(controller, target, type), (reason) =>
+			ProcessTargetAction(controller, info.GetArgTargetResult(1), (target) => RemovePunishment(controller, target, type), (failureReason) =>
 			{
-				if (reason == TargetFailureReason.TargetNotFound)
-					RemovePunishment(controller, new SteamID(info.GetArg(1)), type);
+				if (failureReason == TargetFailureReason.TargetNotFound)
+				{
+					if (SteamID.TryParse(info.GetArg(1), out SteamID? steamId) && steamId?.IsValid() == true)
+					{
+						RemovePunishment(controller, steamId, type);
+					}
+					else
+					{
+						_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.targetnotfound"]);
+					}
+				}
 			});
 		}
 
@@ -720,7 +729,7 @@ namespace Zenith_Bans
 			string playerName = player.PlayerName;
 			string ipAddress = player.IpAddress.Split(":")[0];
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				PlayerData? playerData = await LoadOrUpdatePlayerDataAsync(steamId, playerName, ipAddress);
 				if (playerData == null)
@@ -760,8 +769,7 @@ namespace Zenith_Bans
 					}
 
 					AdminManager.SetPlayerImmunity(player, (uint)playerData.Immunity.GetValueOrDefault());
-					AdminManager.AddPlayerPermissions(player, [.. playerData.Permissions]);
-					AdminManager.AddPlayerToGroup(player, [.. playerData.Groups]);
+					AdminManager.AddPlayerPermissions(player, playerData.Permissions.Select(p => p.StartsWith("@") ? p.Replace(" ", "-") : "@" + p.Replace(" ", "-")).ToArray());
 
 					IPlayerServices? playerServices = GetZenithPlayer(player);
 					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Mute && p.ExpiresAt > DateTime.UtcNow))
@@ -779,6 +787,57 @@ namespace Zenith_Bans
 					}
 				});
 			});
+		}
+
+		public bool CreateGroupIfNotExists(string[] groupNames, HashSet<string> flags, uint immunity, Dictionary<string, bool>? commandOverrides = null)
+		{
+			// Get the private Groups field using reflection
+			FieldInfo? groupsField = typeof(AdminManager).GetField("Groups", BindingFlags.NonPublic | BindingFlags.Static);
+			if (groupsField == null)
+			{
+				// Handle the case where the field is not found
+				Logger.LogError("Unable to find Groups field in AdminManager.");
+				return false;
+			}
+
+			var adminGroups = (Dictionary<string, AdminGroupData>?)groupsField.GetValue(null);
+			if (adminGroups == null)
+			{
+				// Handle the case where Groups is null
+				Logger.LogError("AdminManager.Groups is null.");
+				return false;
+			}
+
+			bool anyGroupCreated = false;
+
+			foreach (string groupName in groupNames)
+			{
+				if (!adminGroups.ContainsKey(groupName))
+				{
+					var newGroup = new AdminGroupData
+					{
+						Flags = new HashSet<string>(flags),
+						Immunity = immunity,
+						CommandOverrides = commandOverrides != null ? new Dictionary<string, bool>(commandOverrides) : new Dictionary<string, bool>()
+					};
+
+					adminGroups[groupName] = newGroup;
+					anyGroupCreated = true;
+					Logger.LogInformation($"Created new group: {groupName}");
+				}
+				else
+				{
+					Logger.LogInformation($"Group {groupName} already exists.");
+				}
+			}
+
+			if (anyGroupCreated)
+			{
+				// Set the modified dictionary back to the field
+				groupsField.SetValue(null, adminGroups);
+			}
+
+			return anyGroupCreated;
 		}
 
 		private void AddAdmin(CCSPlayerController? controller, CCSPlayerController target, string group)

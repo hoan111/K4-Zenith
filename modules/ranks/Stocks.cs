@@ -3,6 +3,7 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Utils;
+using Microsoft.Extensions.Logging;
 using ZenithAPI;
 
 namespace Zenith_Ranks;
@@ -105,7 +106,7 @@ public sealed partial class Plugin : BasePlugin
 
 			string htmlMessage = $@"
 			<font color='{colorCode}' class='fontSize-m'>{Localizer[messageKey]}</font><br>
-			<font color='#FFFFFF' class='fontSize-m'>{Localizer["k4.phrases.newrank", $"{determinedRank?.HexColor}{rankName}"]}</font>";
+			<font color='{determinedRank?.HexColor}' class='fontSize-m'>{Localizer["k4.phrases.newrank", $"{rankName}"]}</font>";
 
 			player.PrintToCenter(htmlMessage, _configAccessor.GetValue<int>("Core", "CenterAlertTime"), ActionPriority.Normal);
 		}

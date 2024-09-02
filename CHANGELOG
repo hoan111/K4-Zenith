@@ -1,15 +1,35 @@
-# 2024.08.?? - 1.0.10
-
-- fix: Menu debug messages removed from server console
-- fix: Database migration support enhanced for MySQL and MariaDB aswell
+# 2024.09.02 - 1.0.11
 
 - todo:
-    - fix: target issue when printing no target found and then adding ban by steamid even if online
-    - fix: Add debounce timer to playerspawn events to prevent multiple min player messages
 		- feat: SimpleAdmin transfer script
-		- fix: Check if transfer logs even if no k4-system tables found
-		- fix: Check custom tags matcher
-    - fix: Settings menu not load default values properly
+
+# 2024.09.02 - 1.0.10
+
+- feat: Added pre-defined custom tags and multiple allocations
+- feat: Added !tags command to select between pre-defined custom tags
+- feat: Added hide command for admins
+- upgrade: Config API for better type conversions
+- upgrade: Upgraded custom tag matching algorithm for higher stability
+- upgrade: Slap without damage specifiy now slap with 0 damage
+- upgrade: Blind without time specifiy now blind without time
+- upgrade: health without amount specifiy now health with 100 amount
+- upgrade: Armor without amount specifiy now armor with 100 amount
+- upgrade: RAnks module playtime points timer upgraded to use DateTime
+- fix: Menu debug messages removed from server console
+- fix: Database migration support enhanced for MySQL and MariaDB aswell
+- fix: Added prevention for duplicated min player messages
+- fix: Blocked old data transfer messages if no transfer happened
+- fix: Settings menu didnt load or save the current values
+- fix: ClanTag applied even if its set to empty string in configs
+- fix: Counting for scoreboard custom ranks
+- fix: Punishment by steamid returned no target found then punished aswell
+- fix: Unblind didnt go automatically
+- fix: HookChatMessages disabled gag apply
+- fix: ExtendedCommands didnt dispose properly
+- fix: Rank change center html didnt use HexColors properly
+- fix: Point summaries was shown if its disabled, but not when its enabled
+- fix: Storage APIs
+- fix: KPR calculation
 
 # 2024.09.01 - 1.0.9
 

@@ -39,5 +39,6 @@
   "commands.god.enable": "{gold}{0} {silver}enabled god mode for {gold}{1}{silver}.",
   "commands.god.disable": "{gold}{0} {silver}disabled god mode for {gold}{1}{silver}.",
   "commands.team.success": "{gold}{0} {silver}set {gold}{1}{silver}'s team to {gold}{2}{silver}.",
-  "commands.swap.success": "{gold}{0} {silver}swapped {gold}{1}{silver}'s team."
+  "commands.swap.success": "{gold}{0} {silver}swapped {gold}{1}{silver}'s team.",
+  "commands.hide.success": "{gold}You are now hidden now."
 }

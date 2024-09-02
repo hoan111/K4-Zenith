@@ -1,5 +1,6 @@
 namespace Zenith
 {
+	using System.Text.Json;
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Modules.Commands;
 	using CounterStrikeSharp.API.Modules.Utils;
@@ -41,7 +42,29 @@ namespace Zenith
 
 							string displayName = moduleLocalizer != null ? $"{moduleLocalizer[$"settings.{key}"]}: " : $"{moduleID}.{key}: ";
 
-							if (currentValue is bool boolValue)
+							if (currentValue is JsonElement jsonElement)
+							{
+								switch (jsonElement.ValueKind)
+								{
+									case JsonValueKind.True:
+									case JsonValueKind.False:
+										items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
+										defaultValues[index] = jsonElement.GetBoolean();
+										break;
+									case JsonValueKind.Number:
+										items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+										defaultValues[index] = jsonElement.GetInt32().ToString();
+										break;
+									case JsonValueKind.String:
+										items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+										defaultValues[index] = jsonElement.GetString() ?? string.Empty;
+										break;
+									default:
+										Logger.LogWarning($"Unsupported JsonElement type for {moduleID}.{key}: {jsonElement.ValueKind}");
+										continue;
+								}
+							}
+							else if (currentValue is bool boolValue)
 							{
 								items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
 								defaultValues[index] = boolValue;
@@ -55,6 +78,11 @@ namespace Zenith
 							{
 								items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
 								defaultValues[index] = stringValue;
+							}
+							else
+							{
+								Logger.LogWarning($"Unknown setting type for {moduleID}.{key} ({currentValue?.GetType().Name ?? "null"})");
+								continue;
 							}
 
 							settingsMap[index] = (moduleID, key);
@@ -88,7 +116,29 @@ namespace Zenith
 									string newValue = selected.DataString ?? string.Empty;
 									object? currentValue = zenithPlayer.GetSetting<object>(key);
 
-									if (currentValue is int)
+									if (currentValue is JsonElement jsonElement)
+									{
+										switch (jsonElement.ValueKind)
+										{
+											case JsonValueKind.Number:
+												if (int.TryParse(newValue, out int intValue))
+												{
+													zenithPlayer.SetSetting(key, intValue, true);
+													zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {intValue}");
+												}
+												else
+												{
+													zenithPlayer.Print(Localizer["k4.settings.invalid-input"]);
+													selected.DataString = jsonElement.GetInt32().ToString();
+												}
+												break;
+											case JsonValueKind.String:
+												zenithPlayer.SetSetting(key, newValue, true);
+												zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {newValue}");
+												break;
+										}
+									}
+									else if (currentValue is int)
 									{
 										if (int.TryParse(newValue, out int intValue))
 										{
@@ -98,7 +148,7 @@ namespace Zenith
 										else
 										{
 											zenithPlayer.Print(Localizer["k4.settings.invalid-input"]);
-											selected.DataString = currentValue?.ToString() ?? string.Empty;
+											selected.DataString = currentValue.ToString()!;
 										}
 									}
 									else if (currentValue is string)
@@ -110,7 +160,7 @@ namespace Zenith
 							}
 						}
 					}, false, GetCoreConfig<bool>("Core", "FreezeInMenu"), 5, defaultValues, !GetCoreConfig<bool>("Core", "ShowDevelopers"));
-				}, CommandUsage.CLIENT_ONLY);
+				});
 			}
 		}
 	}

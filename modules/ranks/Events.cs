@@ -12,7 +12,7 @@ namespace Zenith_Ranks
 	public sealed partial class Plugin : BasePlugin
 	{
 		private EventManager? _eventManager;
-		Dictionary<string, (string targetProperty, int points)> _experienceEvents = new();
+		Dictionary<string, (string targetProperty, int points)> _experienceEvents = [];
 
 		private void Initialize_Events()
 		{
@@ -32,6 +32,11 @@ namespace Zenith_Ranks
 			{
 				if (_configAccessor.GetValue<bool>("Settings", "UseScoreboardRanks"))
 				{
+					int mode = _configAccessor.GetValue<int>("Settings", "ScoreboardMode");
+					int rankMax = _configAccessor.GetValue<int>("Settings", "RankMax");
+					int rankBase = _configAccessor.GetValue<int>("Settings", "RankBase");
+					int rankMargin = _configAccessor.GetValue<int>("Settings", "RankMargin");
+
 					foreach (var player in GetValidPlayers())
 					{
 						long currentPoints = player.GetStorage<long>("Points");
@@ -39,7 +44,7 @@ namespace Zenith_Ranks
 						int rankId = determinedRank?.Id ?? 0;
 
 						player.Controller.CompetitiveWins = 10;
-						switch (_configAccessor.GetValue<int>("Settings", "ScoreboardMode"))
+						switch (mode)
 						{
 							// Premier
 							case 1:
@@ -72,11 +77,7 @@ namespace Zenith_Ranks
 							// Custom Rank
 							default:
 								{
-									int rankMax = _configAccessor.GetValue<int>("Settings", "RankMax");
-									int rankBase = _configAccessor.GetValue<int>("Settings", "RankBase");
-									int rankMargin = _configAccessor.GetValue<int>("Settings", "RankMargin");
-
-									int rank = rankId > rankMax ? rankBase + rankMax - rankMargin : rankBase + (rankId - rankMargin);
+									int rank = rankId > rankMax ? rankBase + rankMax - rankMargin : rankBase + (rankId - rankMargin - 1);
 
 									player.Controller.CompetitiveRankType = 12;
 
@@ -97,7 +98,7 @@ namespace Zenith_Ranks
 
 			RegisterEventHandler((EventRoundEnd @event, GameEventInfo info) =>
 			{
-				if (!_configAccessor.GetValue<bool>("Settings", "PointSummaries"))
+				if (_configAccessor.GetValue<bool>("Settings", "PointSummaries"))
 				{
 					GetValidPlayers().ToList().ForEach(player =>
 					{
@@ -135,8 +136,10 @@ namespace Zenith_Ranks
 					return HookResult.Continue;
 
 				int reqiredPlayers = _configAccessor.GetValue<int>("Settings", "MinPlayers");
-				if (reqiredPlayers > Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).Count())
+				if (reqiredPlayers > Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).Count() && !playerSpawned.Contains(player))
+				{
 					_moduleServices?.PrintForPlayer(player, Localizer["k4.phrases.points_disabled", reqiredPlayers]);
+				}
 
 				playerSpawned.Add(player);
 				return HookResult.Continue;

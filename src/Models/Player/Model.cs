@@ -246,8 +246,11 @@ public sealed partial class Player
 		{
 			string clanTag = (_clanTag?.Item1) ?? _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat");
 
-			Controller.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);
-			Utilities.SetStateChanged(Controller, "CCSPlayerController", "m_szClan");
+			if (!string.IsNullOrEmpty(clanTag))
+			{
+				Controller.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);
+				Utilities.SetStateChanged(Controller, "CCSPlayerController", "m_szClan");
+			}
 		}
 	}
 

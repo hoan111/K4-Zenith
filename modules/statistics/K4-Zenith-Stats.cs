@@ -201,8 +201,11 @@ public class Plugin : BasePlugin
 				return HookResult.Continue;
 
 			int reqiredPlayers = _coreAccessor.GetValue<int>("Config", "MinPlayers");
-			if (reqiredPlayers > Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).Count())
+			if (reqiredPlayers > Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).Count() && _playerStats.TryGetValue(player.SteamID, out var stats) && stats.SpawnMessageTimer == null)
+			{
 				_moduleServices.PrintForPlayer(player, Localizer["k4.stats.stats_disabled", reqiredPlayers]);
+				stats.SpawnMessageTimer = AddTimer(3.0f, () => { stats.SpawnMessageTimer = null; });
+			}
 
 			playerSpawned.Add(player);
 			return HookResult.Continue;
@@ -281,7 +284,7 @@ public class Plugin : BasePlugin
 		if (stats == null) return "N/A";
 
 		int kills = stats.GetGlobalStat("Kills");
-		int rounds = stats.GetGlobalStat("RoundsPlayed");
+		int rounds = stats.GetGlobalStat("RoundsOverall");
 		double kpr = rounds == 0 ? kills : (double)kills / rounds;
 		return kpr.ToString("F2");
 	}
@@ -1027,6 +1030,7 @@ public class Plugin : BasePlugin
 		private readonly Plugin _plugin;
 		public IPlayerServices ZenithPlayer { get; }
 		public MapStats CurrentMapStats { get; private set; }
+		public CounterStrikeSharp.API.Modules.Timers.Timer? SpawnMessageTimer = null;
 
 		private readonly Dictionary<string, DateTime> _lastShotTime = [];
 		private const double HIT_COOLDOWN = 0.1;

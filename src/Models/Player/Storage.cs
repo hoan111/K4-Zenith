@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using CounterStrikeSharp.API;
 using Microsoft.Extensions.Localization;
 using MySqlConnector;
+using System.Reflection;
 
 namespace Zenith.Models;
 
@@ -125,13 +126,30 @@ public sealed partial class Player
 		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
 
 		var fullKey = $"{callerPlugin}.{key}";
-		targetDict[fullKey] = value;
+		if (targetDict.ContainsKey(fullKey))
+		{
+			targetDict[fullKey] = value;
+		}
+		else
+		{
+			// Search across all plugins
+			var existingKey = targetDict.Keys.FirstOrDefault(k => k.EndsWith($".{key}"));
+			if (existingKey != null)
+			{
+				targetDict[existingKey] = value;
+				fullKey = existingKey;
+			}
+			else
+			{
+				targetDict[fullKey] = value;
+			}
+		}
 
 		if (saveImmediately)
 		{
 			Task.Run(async () =>
 			{
-				await SavePlayerDataAsync(callerPlugin, targetDict == Storage);
+				await SavePlayerDataAsync(fullKey.Split('.')[0], targetDict == Storage);
 			});
 		}
 	}
@@ -152,82 +170,130 @@ public sealed partial class Player
 		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
 
 		var fullKey = $"{callerPlugin}.{key}";
-		if (targetDict.TryGetValue(fullKey, out var value))
+		if (!targetDict.TryGetValue(fullKey, out var value))
 		{
-			try
+			// Search across all plugins
+			var existingKey = targetDict.Keys.FirstOrDefault(k => k.EndsWith($".{key}"));
+			if (existingKey != null)
 			{
-				if (value is JsonElement jsonElement)
-				{
-					// Handle JsonElement conversion
-					if (typeof(T) == typeof(int))
-					{
-						if (jsonElement.ValueKind == JsonValueKind.Number)
-						{
-							return (T)(object)jsonElement.GetInt32();
-						}
-						else if (jsonElement.ValueKind == JsonValueKind.True || jsonElement.ValueKind == JsonValueKind.False)
-						{
-							// Convert boolean to int (true = 1, false = 0)
-							return (T)(object)(jsonElement.GetBoolean() ? 1 : 0);
-						}
-					}
-					else if (typeof(T) == typeof(bool))
-					{
-						if (jsonElement.ValueKind == JsonValueKind.True || jsonElement.ValueKind == JsonValueKind.False)
-						{
-							return (T)(object)jsonElement.GetBoolean();
-						}
-						else if (jsonElement.ValueKind == JsonValueKind.Number)
-						{
-							// Convert int to boolean (0 = false, non-zero = true)
-							return (T)(object)(jsonElement.GetInt32() != 0);
-						}
-					}
-					else if (typeof(T) == typeof(string))
-					{
-						return (T)(object)jsonElement.GetString()!;
-					}
-					else if (typeof(T) == typeof(double))
-					{
-						return (T)(object)jsonElement.GetDouble();
-					}
-					else if (typeof(T) == typeof(float))
-					{
-						return (T)(object)jsonElement.GetSingle();
-					}
-					else if (typeof(T) == typeof(long))
-					{
-						return (T)(object)jsonElement.GetInt64();
-					}
-					// Add other type conversions as needed
-				}
-				else if (value is T typedValue)
-				{
-					return typedValue;
-				}
-				else
-				{
-					return (T?)Convert.ChangeType(value, typeof(T));
-				}
+				fullKey = existingKey;
+				value = targetDict[existingKey];
 			}
-			catch (Exception ex)
+			else
 			{
-				_plugin.Logger.LogError($"Failed to convert setting value for key '{fullKey}' to type '{typeof(T).Name}'. Error: {ex.Message}");
+				_plugin.Logger.LogWarning($"Key '{key}' not found for any plugin.");
+				return default;
 			}
 		}
 
-		// Safely return default value from moduleDefaultSettings if it exists
-		var defaults = targetDict == Settings ? moduleDefaultSettings : moduleDefaultStorage;
-		if (defaults.TryGetValue(callerPlugin, out var defaultSettings))
+		try
 		{
-			if (defaultSettings.Settings.TryGetValue(key, out var defaultSetting) && defaultSetting is T defaultTypedValue)
+			if (value is JsonElement jsonElement)
 			{
-				return defaultTypedValue;
+				return DeserializeJsonElement<T>(jsonElement);
+			}
+			else if (value is T typedValue)
+			{
+				return typedValue;
+			}
+			else
+			{
+				return (T?)Convert.ChangeType(value, typeof(T));
 			}
 		}
+		catch (Exception ex)
+		{
+			_plugin.Logger.LogError($"Failed to convert setting value for key '{fullKey}' to type '{typeof(T).Name}'. Error: {ex.Message}");
+			return default;
+		}
+	}
 
-		// Return default(T) if no value is found and no default value exists
+	private T? DeserializeJsonElement<T>(JsonElement element)
+	{
+		Type type = typeof(T);
+
+		if (Nullable.GetUnderlyingType(type) != null)
+		{
+			type = Nullable.GetUnderlyingType(type)!;
+		}
+
+		switch (Type.GetTypeCode(type))
+		{
+			case TypeCode.Boolean:
+				if (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False)
+					return (T)(object)element.GetBoolean();
+				else if (element.ValueKind == JsonValueKind.Number)
+					return (T)(object)(element.GetInt32() != 0);
+				break;
+			case TypeCode.Int32:
+				if (element.ValueKind == JsonValueKind.Number)
+					return (T)(object)element.GetInt32();
+				else if (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False)
+					return (T)(object)(element.GetBoolean() ? 1 : 0);
+				break;
+			case TypeCode.String:
+				if (element.ValueKind == JsonValueKind.String)
+					return (T)(object)element.GetString()!;
+				break;
+			case TypeCode.Double:
+				if (element.ValueKind == JsonValueKind.Number)
+					return (T)(object)element.GetDouble();
+				break;
+			case TypeCode.Single:
+				if (element.ValueKind == JsonValueKind.Number)
+					return (T)(object)element.GetSingle();
+				break;
+			case TypeCode.Int64:
+				if (element.ValueKind == JsonValueKind.Number)
+					return (T)(object)element.GetInt64();
+				break;
+			case TypeCode.DateTime:
+				if (element.ValueKind == JsonValueKind.String)
+					return (T)(object)element.GetDateTime();
+				break;
+			case TypeCode.Object:
+				if (type == typeof(Guid) && element.ValueKind == JsonValueKind.String)
+					return (T)(object)element.GetGuid();
+				else if (type == typeof(TimeSpan) && element.ValueKind == JsonValueKind.String)
+					return (T)(object)TimeSpan.Parse(element.GetString()!);
+				else if (type.IsGenericType)
+				{
+					if (type.GetGenericTypeDefinition() == typeof(List<>))
+					{
+						var listType = type.GetGenericArguments()[0];
+						var list = Activator.CreateInstance(type) as System.Collections.IList;
+						foreach (var item in element.EnumerateArray())
+						{
+							list!.Add(DeserializeJsonElement(item, listType));
+						}
+						return (T)list!;
+					}
+					else if (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+					{
+						var keyType = type.GetGenericArguments()[0];
+						var valueType = type.GetGenericArguments()[1];
+						var dict = Activator.CreateInstance(type) as System.Collections.IDictionary;
+						foreach (var item in element.EnumerateObject())
+						{
+							var key = Convert.ChangeType(item.Name, keyType);
+							var value = DeserializeJsonElement(item.Value, valueType);
+							dict!.Add(key, value);
+						}
+						return (T)dict!;
+					}
+				}
+				// For other complex types, use JsonSerializer
+				return JsonSerializer.Deserialize<T>(element.GetRawText());
+		}
+
 		return default;
+	}
+
+	private object? DeserializeJsonElement(JsonElement element, Type type)
+	{
+		var method = typeof(Player).GetMethod(nameof(DeserializeJsonElement), BindingFlags.NonPublic | BindingFlags.Instance);
+		var genericMethod = method!.MakeGenericMethod(type);
+		return genericMethod.Invoke(this, [element]);
 	}
 
 	public static IStringLocalizer? GetModuleLocalizer(string moduleID)

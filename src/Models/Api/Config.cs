@@ -10,6 +10,7 @@ using System.Reflection;
 using ZenithAPI;
 using System.Collections;
 using CounterStrikeSharp.API.Modules.Cvars;
+using System.Globalization;
 
 namespace Zenith
 {
@@ -523,15 +524,19 @@ namespace Zenith
 			}
 			else if (targetType == typeof(int))
 			{
-				return value is string intStr ? int.Parse(intStr) : Convert.ToInt32(value);
+				return value is string intStr ? int.Parse(intStr, CultureInfo.InvariantCulture) : Convert.ToInt32(value);
 			}
 			else if (targetType == typeof(double))
 			{
-				return value is string doubleStr ? double.Parse(doubleStr) : Convert.ToDouble(value);
+				return value is string doubleStr ? double.Parse(doubleStr, CultureInfo.InvariantCulture) : Convert.ToDouble(value, CultureInfo.InvariantCulture);
 			}
 			else if (targetType == typeof(float))
 			{
-				return value is string floatStr ? float.Parse(floatStr) : Convert.ToSingle(value);
+				return value is string floatStr ? float.Parse(floatStr, CultureInfo.InvariantCulture) : Convert.ToSingle(value, CultureInfo.InvariantCulture);
+			}
+			else if (targetType == typeof(decimal))
+			{
+				return value is string decimalStr ? decimal.Parse(decimalStr, CultureInfo.InvariantCulture) : Convert.ToDecimal(value, CultureInfo.InvariantCulture);
 			}
 			else if (targetType == typeof(string))
 			{

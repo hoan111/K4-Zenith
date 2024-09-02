@@ -17,17 +17,16 @@ namespace Zenith
 
 		public HookResult OnMessage(UserMessage um)
 		{
-			if (!GetCoreConfig<bool>("Core", "HookChatMessages"))
-				return HookResult.Continue;
-
 			int entity = um.ReadInt("entityindex");
-
 			Player? player = Player.Find(Utilities.GetPlayerFromIndex(entity));
 			if (player == null || !player.IsValid)
 				return HookResult.Continue;
 
 			if (player.IsGagged)
 				return HookResult.Stop;
+
+			if (!GetCoreConfig<bool>("Core", "HookChatMessages"))
+				return HookResult.Continue;
 
 			bool enabledChatModifier = player.GetSetting<bool>("ShowChatTags");
 

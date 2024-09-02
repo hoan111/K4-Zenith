@@ -83,4 +83,13 @@ public sealed partial class Plugin : BasePlugin
 		try { return _playerServicesCapability?.Get(player); }
 		catch { return null; }
 	}
+
+	public override void Unload(bool hotReload)
+	{
+		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
+		if (moduleServices == null)
+			return;
+
+		moduleServices.DisposeModule(this.GetType().Assembly);
+	}
 }

@@ -13,7 +13,8 @@ public sealed partial class Plugin : BasePlugin
 	{
 		_moduleServices?.RegisterModuleCommands(["hp", "health"], "Sets player health to a given value", (player, info) =>
 		{
-			if (!int.TryParse(info.GetArg(2), out int health))
+			int health = 100;
+			if (info.ArgCount >= 2 && !int.TryParse(info.GetArg(2), out health))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_health"]);
 				return;
@@ -32,7 +33,8 @@ public sealed partial class Plugin : BasePlugin
 
 		_moduleServices?.RegisterModuleCommands(["armor"], "Sets player armor to a given value", (player, info) =>
 		{
-			if (!int.TryParse(info.GetArg(2), out int armor))
+			int armor = 100;
+			if (info.ArgCount >= 2 && !int.TryParse(info.GetArg(2), out armor))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_armor"]);
 				return;
@@ -47,7 +49,7 @@ public sealed partial class Plugin : BasePlugin
 					ShowActivityToPlayers(player?.SteamID, "commands.armor.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName, armor);
 				}
 			}, true);
-		}, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <armor>", "@zenith-commands/armor");
+		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target> <armor>", "@zenith-commands/armor");
 
 		_moduleServices?.RegisterModuleCommands(["freeze"], "Freezes a player", (player, info) =>
 		{
@@ -258,10 +260,10 @@ public sealed partial class Plugin : BasePlugin
 				}
 			}, true);
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/bury");
-
 		_moduleServices?.RegisterModuleCommands(["slap"], "Slaps a player", (player, info) =>
 		{
-			if (!int.TryParse(info.GetArg(2), out int damage))
+			int damage = 0;
+			if (info.ArgCount >= 2 && !int.TryParse(info.GetArg(2), out damage))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_damage"]);
 				return;
@@ -293,11 +295,12 @@ public sealed partial class Plugin : BasePlugin
 					ShowActivityToPlayers(player?.SteamID, "commands.slap.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName, damage);
 				}
 			}, true);
-		}, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <damage>", "@zenith-commands/slap");
+		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target> <damage>", "@zenith-commands/slap");
 
 		_moduleServices?.RegisterModuleCommands(["blind"], "Blinds a player", (player, info) =>
 		{
-			if (!float.TryParse(info.GetArg(2), out float value))
+			float value = 0;
+			if (info.ArgCount >= 2 && !float.TryParse(info.GetArg(2), out value))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_time"]);
 				return;
@@ -321,14 +324,14 @@ public sealed partial class Plugin : BasePlugin
 				{
 					AddTimer(value, () =>
 					{
-						if (target.IsValid && playerPawn.BlindUntilTime == 9999)
+						if (target.IsValid && playerPawn.BlindUntilTime == 999999)
 							playerPawn.BlindUntilTime = Server.CurrentTime - 1;
 					});
 				}
 
 				ShowActivityToPlayers(player?.SteamID, "commands.blind.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName, value);
 			});
-		}, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <time>", "@zenith-commands/blind");
+		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target> <time>", "@zenith-commands/blind");
 
 		_moduleServices?.RegisterModuleCommands(["unblind"], "Unblinds a player", (player, info) =>
 		{
@@ -385,5 +388,20 @@ public sealed partial class Plugin : BasePlugin
 				}
 			}, true);
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/swap");
+
+		_moduleServices?.RegisterModuleCommands(["hide", "stealth"], "Hide yourself", (player, info) =>
+		{
+			if (player?.PlayerPawn.Value != null)
+			{
+				player.PlayerPawn.Value.CommitSuicide(true, false);
+
+				Server.ExecuteCommand("sv_disable_teamselect_menu 1");
+
+				player.ChangeTeam(CsTeam.None);
+				AddTimer(0.2f, () => { Server.ExecuteCommand("sv_disable_teamselect_menu 0"); });
+
+				_moduleServices.PrintForPlayer(player, Localizer["commands.hide.success"]);
+			}
+		}, CommandUsage.CLIENT_ONLY, permission: "@zenith-commands/hide");
 	}
 }

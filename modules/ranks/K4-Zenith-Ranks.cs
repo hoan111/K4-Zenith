@@ -21,7 +21,7 @@ public sealed partial class Plugin : BasePlugin
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
-	private float _lastPlaytimeCheck = 0;
+	private DateTime _lastPlaytimeCheck = DateTime.UtcNow;
 
 	public CCSGameRules? GameRules = null;
 	private IZenithEvents? _zenithEvents;
@@ -112,14 +112,18 @@ public sealed partial class Plugin : BasePlugin
 			int interval = _configAccessor.GetValue<int>("Points", "PlaytimeInterval");
 			if (interval <= 0) return;
 
-			if (_lastPlaytimeCheck + (interval * 60) > Server.CurrentTime) return;
+			DateTime currentTime = DateTime.UtcNow;
+			TimeSpan elapsedTime = currentTime - _lastPlaytimeCheck;
 
-			foreach (var player in GetValidPlayers())
+			if (elapsedTime.TotalMinutes >= interval)
 			{
-				ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "PlaytimePoints"), "k4.events.playtime");
-			}
+				foreach (var player in GetValidPlayers())
+				{
+					ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "PlaytimePoints"), "k4.events.playtime");
+				}
 
-			_lastPlaytimeCheck = Server.CurrentTime;
+				_lastPlaytimeCheck = currentTime;
+			}
 		}, TimerFlags.REPEAT);
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);

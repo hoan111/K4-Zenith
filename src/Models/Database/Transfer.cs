@@ -15,11 +15,16 @@ namespace Zenith
 				using var connection = Database.CreateConnection();
 				await connection.OpenAsync();
 
-				await MigrateRanksData(connection);
-				await MigrateTimesData(connection);
-				await MigrateStatsData(connection);
+				bool anyMigrationPerformed = false;
 
-				Logger.LogWarning("Data migration completed. Please manually delete the old k4ranks, k4times, and k4stats tables to prevent data duplication. We do not delete them automatically to prevent accidental data loss.");
+				anyMigrationPerformed |= await MigrateRanksData(connection);
+				anyMigrationPerformed |= await MigrateTimesData(connection);
+				anyMigrationPerformed |= await MigrateStatsData(connection);
+
+				if (anyMigrationPerformed)
+				{
+					Logger.LogWarning("Data migration completed. Please manually delete the old k4ranks, k4times, and k4stats tables to prevent data duplication. We do not delete them automatically to prevent accidental data loss.");
+				}
 			}
 			catch (Exception ex)
 			{
@@ -27,12 +32,12 @@ namespace Zenith
 			}
 		}
 
-		private async Task MigrateRanksData(MySqlConnection connection)
+		private async Task<bool> MigrateRanksData(MySqlConnection connection)
 		{
 			var oldTableExists = await connection.ExecuteScalarAsync<bool>(
 				$"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'k4ranks'");
 
-			if (!oldTableExists) return;
+			if (!oldTableExists) return false;
 
 			Logger.LogInformation("Found old k4ranks table. Starting data migration.");
 
@@ -59,15 +64,21 @@ namespace Zenith
                         `K4-Zenith-Ranks.storage`)";
 
 			var affectedRows = await connection.ExecuteAsync(migrateQuery);
-			Logger.LogInformation($"Migrated {affectedRows} rows from k4ranks table.");
+
+			if (affectedRows > 0)
+			{
+				Logger.LogInformation($"Migrated {affectedRows} rows from k4ranks table.");
+				return true;
+			}
+			return false;
 		}
 
-		private async Task MigrateStatsData(MySqlConnection connection)
+		private async Task<bool> MigrateStatsData(MySqlConnection connection)
 		{
 			var oldTableExists = await connection.ExecuteScalarAsync<bool>(
 				$"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'k4stats'");
 
-			if (!oldTableExists) return;
+			if (!oldTableExists) return false;
 
 			Logger.LogInformation("Found old k4stats table. Starting data migration.");
 
@@ -134,15 +145,21 @@ namespace Zenith
 						`K4-Zenith-Stats.storage`)";
 
 			var affectedRows = await connection.ExecuteAsync(migrateQuery);
-			Logger.LogInformation($"Migrated {affectedRows} rows from k4stats table.");
+
+			if (affectedRows > 0)
+			{
+				Logger.LogInformation($"Migrated {affectedRows} rows from k4stats table.");
+				return true;
+			}
+			return false;
 		}
 
-		private async Task MigrateTimesData(MySqlConnection connection)
+		private async Task<bool> MigrateTimesData(MySqlConnection connection)
 		{
 			var oldTableExists = await connection.ExecuteScalarAsync<bool>(
 				$"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'k4times'");
 
-			if (!oldTableExists) return;
+			if (!oldTableExists) return false;
 
 			Logger.LogInformation("Found old k4times table. Starting data migration.");
 
@@ -177,7 +194,13 @@ namespace Zenith
 						`K4-Zenith-TimeStats.storage`)";
 
 			var affectedRows = await connection.ExecuteAsync(migrateQuery);
-			Logger.LogInformation($"Migrated {affectedRows} rows from k4times table.");
+
+			if (affectedRows > 0)
+			{
+				Logger.LogInformation($"Migrated {affectedRows} rows from k4times table.");
+				return true;
+			}
+			return false;
 		}
 	}
 }
