@@ -58,7 +58,7 @@ namespace Zenith.Models
 						TableName = "zenith_bans_players",
 						SqlQuery = @"
 						ALTER TABLE `{prefix}zenith_bans_players`
-						ADD COLUMN IF NOT EXISTS `current_server` VARCHAR(50)
+						ADD COLUMN `current_server` VARCHAR(50)
 						CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 						DEFAULT NULL;"
 					},

@@ -81,9 +81,6 @@ public sealed partial class Plugin : BasePlugin
 		var (currentRank, _) = DetermineRanks(currentPoints);
 		var (determinedRank, _) = DetermineRanks(currentPoints + points);
 
-		Logger.LogInformation("Player {Player} has {Points} points and is ranked as {Rank} (current rank: {CurrentRank})",
-			player.Name, points, determinedRank?.Name ?? "None", currentRank?.Name ?? "None");
-
 		if (determinedRank?.Id != currentRank?.Id)
 		{
 			string newRankName = determinedRank?.Name ?? Localizer["k4.phrases.rank.none"];

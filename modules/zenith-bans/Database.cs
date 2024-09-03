@@ -25,10 +25,10 @@ namespace Zenith_Bans
 					`id` INT AUTO_INCREMENT PRIMARY KEY,
 					`steam_id` BIGINT UNSIGNED UNIQUE,
 					`name` VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-					`current_server` VARCHAR(50)
+					`current_server` VARCHAR(50),
 					`ip_addresses` JSON,
 					`last_online` DATETIME
-				) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
 			// Create player_ranks table
 			connection.Execute($@"
@@ -42,7 +42,7 @@ namespace Zenith_Bans
 					`rank_expiry` DATETIME,
 					UNIQUE KEY `unique_player_server` (`steam_id`, `server_ip`),
 					FOREIGN KEY (`steam_id`) REFERENCES `{prefix}zenith_bans_players`(`steam_id`)
-				) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
 			// Create admin_groups table
 			connection.Execute($@"
@@ -51,7 +51,7 @@ namespace Zenith_Bans
 					`name` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci UNIQUE,
 					`permissions` JSON,
 					`immunity` INT
-				) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
 			// Create punishments table
 			connection.Execute($@"
@@ -71,7 +71,7 @@ namespace Zenith_Bans
 					FOREIGN KEY (`steam_id`) REFERENCES `{prefix}zenith_bans_players`(`steam_id`),
 					FOREIGN KEY (`admin_steam_id`) REFERENCES `{prefix}zenith_bans_players`(`steam_id`),
 					FOREIGN KEY (`remove_admin_steam_id`) REFERENCES `{prefix}zenith_bans_players`(`steam_id`)
-				) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 		}
 
 		private async Task<PlayerData> LoadOrUpdatePlayerDataAsync(ulong steamId, string playerName, string ipAddress)

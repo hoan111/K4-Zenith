@@ -99,7 +99,11 @@ namespace Zenith
 
 			AddTimer(1, () =>
 			{
-				if ((DateTime.UtcNow - _lastStorageSave).TotalMinutes >= GetCoreConfig<int>("Database", "AutoSaveInterval"))
+				int interval = GetCoreConfig<int>("Database", "AutoSaveInterval");
+				if (interval <= 0)
+					return;
+
+				if ((DateTime.UtcNow - _lastStorageSave).TotalMinutes >= interval)
 				{
 					_lastStorageSave = DateTime.UtcNow;
 					Player.SaveAllOnlinePlayerData(this, false);
