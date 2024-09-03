@@ -36,9 +36,7 @@ namespace Zenith
 		public ModuleConfigAccessor GetModuleConfigAccessor()
 		{
 			string callerPlugin = CallerIdentifier.GetCallingPluginName();
-
 			Logger.LogInformation($"Module {callerPlugin} requested config accessor.");
-
 			return _configManager.GetModuleAccessor(callerPlugin);
 		}
 
@@ -131,7 +129,6 @@ namespace Zenith
 		private static string CoreModuleName => Assembly.GetEntryAssembly()?.GetName().Name ?? "K4-Zenith";
 		private static string _baseConfigDirectory = string.Empty;
 		private static readonly ConcurrentDictionary<string, ModuleConfig> _moduleConfigs = new ConcurrentDictionary<string, ModuleConfig>();
-		private static readonly ConcurrentDictionary<string, object> _cachedValues = new ConcurrentDictionary<string, object>();
 		private static ILogger Logger = null!;
 		public static bool GlobalChangeTracking { get; set; } = false;
 		public static bool GlobalAutoReloadEnabled { get; set; } = false;
@@ -165,7 +162,6 @@ namespace Zenith
 			_watcher.Changed += OnConfigFileChanged;
 			_watcher.Created += OnConfigFileChanged;
 		}
-
 
 		public static void Dispose()
 		{
@@ -210,7 +206,7 @@ namespace Zenith
 
 		private static void ReloadModuleConfig(string moduleName, bool force = false)
 		{
-			if (!GlobalAutoReloadEnabled)
+			if (!GlobalAutoReloadEnabled && !force)
 				return;
 
 			if (!force)
@@ -218,14 +214,6 @@ namespace Zenith
 
 			var newConfig = LoadModuleConfig(moduleName);
 			_moduleConfigs[moduleName] = newConfig;
-
-			foreach (var group in newConfig.Groups)
-			{
-				foreach (var config in group.Items)
-				{
-					_cachedValues[$"{moduleName}:{group.Name}:{config.Name}"] = config.CurrentValue;
-				}
-			}
 
 			if (!force)
 				Logger.LogInformation($"Config reloaded for module {moduleName}");
@@ -262,15 +250,8 @@ namespace Zenith
 				existingConfig.AllowedType = typeof(T).FullName ?? typeof(T).Name;
 				existingConfig.Flags = flags;
 
-				// Keep the existing CurrentValue if it's of the correct type
-				if (existingConfig.CurrentValue != null && existingConfig.CurrentValue.GetType() == typeof(T))
-				{
-					// CurrentValue remains unchanged
-				}
-				else
-				{
+				if (existingConfig.CurrentValue == null || existingConfig.CurrentValue.GetType() != typeof(T))
 					existingConfig.CurrentValue = defaultValue;
-				}
 			}
 			else
 			{
@@ -281,76 +262,104 @@ namespace Zenith
 					DefaultValue = defaultValue,
 					CurrentValue = defaultValue,
 					AllowedType = typeof(T).FullName ?? typeof(T).Name,
-					Flags = flags
+					Flags = flags,
 				});
 			}
-
-			_cachedValues[$"{moduleName}:{groupName}:{configName}"] = existingConfig?.CurrentValue ?? defaultValue;
 
 			SaveModuleConfig(moduleName);
 		}
 
 		public static bool HasConfigValue(string callerModule, string groupName, string configName)
 		{
-			foreach (var moduleConfig in _moduleConfigs.Values)
+			if (_moduleConfigs.TryGetValue(callerModule, out var moduleConfig))
 			{
 				var group = moduleConfig.Groups.FirstOrDefault(g => g.Name == groupName);
-				if (group != null)
-				{
-					var config = group.Items.FirstOrDefault(c => c.Name == configName);
-					if (config != null)
-						return true;
-				}
+				return group?.Items.Any(c => c.Name == configName) ?? false;
 			}
-
 			return false;
 		}
 
 		public static T GetConfigValue<T>(string callerModule, string groupName, string configName) where T : notnull
 		{
-			string cacheKey = $"{callerModule}:{groupName}:{configName}";
-			if (_cachedValues.TryGetValue(cacheKey, out var cachedValue) && cachedValue != null)
+			if (_moduleConfigs.TryGetValue(callerModule, out var moduleConfig))
 			{
-				try
+				var result = TryGetConfigValue<T>(moduleConfig, groupName, configName, callerModule);
+				if (result.found)
 				{
-					return (T)Convert.ChangeType(cachedValue, typeof(T));
-				}
-				catch (InvalidCastException ex)
-				{
-					Logger.LogWarning($"Failed to cast cached value for '{groupName}.{configName}' to type {typeof(T)}. Error: {ex.Message}. Attempting to load from config.");
+					return result.value;
 				}
 			}
 
-			foreach (var moduleConfig in _moduleConfigs.Values)
+			foreach (var config in _moduleConfigs.Values)
 			{
-				var group = moduleConfig.Groups.FirstOrDefault(g => g.Name == groupName);
-				if (group != null)
+				if (config.ModuleName != callerModule)
 				{
-					var config = group.Items.FirstOrDefault(c => c.Name == configName);
-					if (config != null)
+					var result = TryGetConfigValue<T>(config, groupName, configName, callerModule, checkGlobalOnly: true);
+					if (result.found)
 					{
-						if (callerModule != CoreModuleName && !config.Flags.HasFlag(ConfigFlag.Global) && callerModule != moduleConfig.ModuleName)
-						{
-							Logger.LogWarning($"Attempt to access non-global config '{groupName}.{configName}' from module '{callerModule}'");
-							continue;
-						}
+						return result.value;
+					}
+				}
+			}
 
-						if (config.CurrentValue == null)
-						{
-							throw new InvalidOperationException($"Configuration '{groupName}.{configName}' has null value for module '{moduleConfig.ModuleName}'");
-						}
+			Logger.LogWarning($"Configuration '{groupName}.{configName}' not found for module '{callerModule}'");
+			throw new KeyNotFoundException($"Configuration '{groupName}.{configName}' not found for module '{callerModule}'");
+		}
 
-						try
-						{
-							var value = (T)Convert.ChangeType(config.CurrentValue, typeof(T));
-							_cachedValues[cacheKey] = value;
-							return value;
-						}
-						catch (InvalidCastException ex)
-						{
-							Logger.LogError($"Failed to cast config value for '{groupName}.{configName}' to type {typeof(T)}. Stored type: {config.CurrentValue.GetType()}. Error: {ex.Message}");
-							throw;
-						}
+		private static (bool found, T value) TryGetConfigValue<T>(ModuleConfig config, string groupName, string configName, string callerModule, bool checkGlobalOnly = false) where T : notnull
+		{
+			var group = config.Groups.FirstOrDefault(g => g.Name == groupName);
+			var configItem = group?.Items.FirstOrDefault(c => c.Name == configName);
+
+			if (configItem != null)
+			{
+				if (checkGlobalOnly && !configItem.Flags.HasFlag(ConfigFlag.Global))
+				{
+					return (false, default!);
+				}
+
+				if (callerModule != CoreModuleName && callerModule != config.ModuleName && !configItem.Flags.HasFlag(ConfigFlag.Global))
+				{
+					Logger.LogWarning($"Attempt to access non-global config '{groupName}.{configName}' from module '{callerModule}'");
+					return (false, default!);
+				}
+
+				if (configItem.CurrentValue == null)
+				{
+					throw new InvalidOperationException($"Configuration '{groupName}.{configName}' has null value for module '{config.ModuleName}'");
+				}
+
+				try
+				{
+					return (true, (T)Convert.ChangeType(configItem.CurrentValue, typeof(T)));
+				}
+				catch (InvalidCastException ex)
+				{
+					Logger.LogError($"Failed to cast config value for '{groupName}.{configName}' to type {typeof(T)}. Stored type: {configItem.CurrentValue.GetType()}. Error: {ex.Message}");
+					throw;
+				}
+			}
+
+			return (false, default!);
+		}
+
+		public static void SetConfigValue<T>(string callerModule, string groupName, string configName, T value) where T : notnull
+		{
+			if (_moduleConfigs.TryGetValue(callerModule, out var moduleConfig))
+			{
+				if (TrySetConfigValue(moduleConfig, groupName, configName, value, callerModule))
+				{
+					return;
+				}
+			}
+
+			foreach (var config in _moduleConfigs.Values)
+			{
+				if (config.ModuleName != callerModule)
+				{
+					if (TrySetConfigValue(config, groupName, configName, value, callerModule, checkGlobalOnly: true))
+					{
+						return;
 					}
 				}
 			}
@@ -358,57 +367,55 @@ namespace Zenith
 			throw new KeyNotFoundException($"Configuration '{groupName}.{configName}' not found for module '{callerModule}'");
 		}
 
-		public static void SetConfigValue<T>(string callerModule, string groupName, string configName, T value) where T : notnull
+		private static bool TrySetConfigValue<T>(ModuleConfig moduleConfig, string groupName, string configName, T value, string callerModule, bool checkGlobalOnly = false) where T : notnull
 		{
-			foreach (var moduleConfig in _moduleConfigs.Values)
+			var group = moduleConfig.Groups.FirstOrDefault(g => g.Name == groupName);
+			var config = group?.Items.FirstOrDefault(c => c.Name == configName);
+
+			if (config != null)
 			{
-				var group = moduleConfig.Groups.FirstOrDefault(g => g.Name == groupName);
-				if (group != null)
+				if (checkGlobalOnly && !config.Flags.HasFlag(ConfigFlag.Global))
 				{
-					var config = group.Items.FirstOrDefault(c => c.Name == configName);
-					if (config != null)
+					return false;
+				}
+
+				if (callerModule != CoreModuleName && callerModule != moduleConfig.ModuleName && !config.Flags.HasFlag(ConfigFlag.Global))
+				{
+					Logger.LogWarning($"Attempt to modify non-global config '{groupName}.{configName}' from module '{callerModule}'");
+					return false;
+				}
+
+				if (callerModule != CoreModuleName && callerModule != moduleConfig.ModuleName)
+				{
+					if (config.Flags.HasFlag(ConfigFlag.Locked))
 					{
-						if (callerModule != CoreModuleName && !config.Flags.HasFlag(ConfigFlag.Global) && callerModule != moduleConfig.ModuleName)
-						{
-							Logger.LogWarning($"Attempt to modify non-global config '{groupName}.{configName}' from module '{callerModule}'");
-							continue;
-						}
+						Logger.LogWarning($"Attempt to modify locked configuration '{groupName}.{configName}' for module '{callerModule}'");
+						return false;
+					}
 
-						if (callerModule != CoreModuleName)
-						{
-							if (config.Flags.HasFlag(ConfigFlag.Locked))
-							{
-								Logger.LogWarning($"Attempt to modify locked configuration '{groupName}.{configName}' for module '{callerModule}'");
-								return;
-							}
-
-							if (config.Flags.HasFlag(ConfigFlag.Protected))
-							{
-								throw new InvalidOperationException($"Cannot modify protected configuration '{groupName}.{configName}' for module '{callerModule}'");
-							}
-						}
-
-						if (!IsValidType(value, config.AllowedType))
-						{
-							Logger.LogWarning($"Attempt to set invalid type for config '{groupName}.{configName}' in module '{moduleConfig.ModuleName}'. Expected {config.AllowedType}, got {value.GetType().Name}");
-							return;
-						}
-
-						config.CurrentValue = value;
-						_cachedValues[$"{moduleConfig.ModuleName}:{groupName}:{configName}"] = value;
-
-						if (GlobalChangeTracking || config.Flags.HasFlag(ConfigFlag.Global) || callerModule == CoreModuleName)
-						{
-							SaveModuleConfig(moduleConfig.ModuleName);
-						}
-
-						return; // Config found and updated, exit the method
+					if (config.Flags.HasFlag(ConfigFlag.Protected))
+					{
+						throw new InvalidOperationException($"Cannot modify protected configuration '{groupName}.{configName}' for module '{callerModule}'");
 					}
 				}
+
+				if (!IsValidType(value, config.AllowedType))
+				{
+					Logger.LogWarning($"Attempt to set invalid type for config '{groupName}.{configName}' in module '{moduleConfig.ModuleName}'. Expected {config.AllowedType}, got {value.GetType().Name}");
+					return false;
+				}
+
+				config.CurrentValue = value;
+
+				if (GlobalChangeTracking || config.Flags.HasFlag(ConfigFlag.Global) || callerModule == CoreModuleName)
+				{
+					SaveModuleConfig(moduleConfig.ModuleName);
+				}
+
+				return true;
 			}
 
-			// If we get here, the config wasn't found
-			throw new KeyNotFoundException($"Configuration '{groupName}.{configName}' not found for module '{callerModule}'");
+			return false;
 		}
 
 		private static bool IsValidType(object value, string allowedType)
@@ -445,72 +452,52 @@ namespace Zenith
 				? Path.Combine(_baseConfigDirectory, "core.yaml")
 				: Path.Combine(_baseConfigDirectory, "modules", $"{moduleName}.yaml");
 
-			ModuleConfig config;
+			ModuleConfig config = new ModuleConfig { ModuleName = moduleName };
 
 			if (File.Exists(filePath))
 			{
-				var deserializer = new DeserializerBuilder()
-					.WithNamingConvention(CamelCaseNamingConvention.Instance)
-					.IgnoreUnmatchedProperties()
-					.Build();
-
-				var yaml = File.ReadAllText(filePath);
-				config = deserializer.Deserialize<ModuleConfig>(yaml) ?? new ModuleConfig { ModuleName = moduleName };
-
-				foreach (var group in config.Groups)
+				try
 				{
-					foreach (var item in group.Items)
-					{
-						if (item.CurrentValue != null)
-						{
-							Type targetType = Type.GetType(item.AllowedType) ??
-								throw new InvalidOperationException($"Unknown type: {item.AllowedType}");
+					var deserializer = new DeserializerBuilder()
+						.WithNamingConvention(CamelCaseNamingConvention.Instance)
+						.IgnoreUnmatchedProperties()
+						.Build();
 
-							try
+					var yaml = File.ReadAllText(filePath);
+					config = deserializer.Deserialize<ModuleConfig>(yaml) ?? config;
+
+					config.ModuleName = moduleName;
+
+					foreach (var group in config.Groups)
+					{
+						foreach (var item in group.Items)
+						{
+							if (item.CurrentValue != null)
 							{
-								item.CurrentValue = ConvertValue(item.CurrentValue, targetType);
+								Type targetType = Type.GetType(item.AllowedType) ??
+									throw new InvalidOperationException($"Unknown type: {item.AllowedType}");
+
+								try
+								{
+									item.CurrentValue = ConvertValue(item.CurrentValue, targetType);
+								}
+								catch
+								{
+									Logger.LogWarning($"Invalid type for config '{group.Name}.{item.Name}' in module '{moduleName}'. Expected {item.AllowedType}, got {item.CurrentValue.GetType().Name}. Using default value.");
+									item.CurrentValue = item.DefaultValue;
+								}
 							}
-							catch
+							else
 							{
-								Logger.LogWarning($"Invalid type for config '{group.Name}.{item.Name}' in module '{moduleName}'. Expected {item.AllowedType}, got {item.CurrentValue.GetType().Name}. Using default value.");
 								item.CurrentValue = item.DefaultValue;
 							}
 						}
-						else
-						{
-							item.CurrentValue = item.DefaultValue;
-						}
-
-						// Update the cached value
-						_cachedValues[$"{moduleName}:{group.Name}:{item.Name}"] = item.CurrentValue;
 					}
 				}
-
-				// Parse CreatedAt, and LastUpdated from comments
-				var lines = yaml.Split('\n');
-				foreach (var line in lines)
+				catch (Exception ex)
 				{
-					if (line.StartsWith("# Created:", StringComparison.OrdinalIgnoreCase))
-					{
-						if (DateTime.TryParse(line.Substring(10).Trim(), out var createdAt))
-						{
-							config.CreatedAt = createdAt;
-						}
-					}
-					else if (line.StartsWith("# Last updated:", StringComparison.OrdinalIgnoreCase))
-					{
-						if (DateTime.TryParse(line.Substring(15).Trim(), out var lastUpdated))
-						{
-							config.LastUpdated = lastUpdated;
-						}
-					}
-					if (!line.StartsWith("#"))
-						break;
+					Logger.LogError($"Error loading config for module {moduleName}: {ex.Message}");
 				}
-			}
-			else
-			{
-				config = new ModuleConfig { ModuleName = moduleName };
 			}
 
 			return config;
@@ -623,21 +610,6 @@ namespace Zenith
 		{
 			if (_moduleConfigs.TryGetValue(moduleName, out var moduleConfig))
 			{
-				// Update CurrentValue from cached values
-				foreach (var group in moduleConfig.Groups)
-				{
-					foreach (var item in group.Items)
-					{
-						string cacheKey = $"{moduleName}:{group.Name}:{item.Name}";
-						if (_cachedValues.TryGetValue(cacheKey, out var cachedValue))
-						{
-							item.CurrentValue = cachedValue;
-						}
-					}
-					group.Items.RemoveAll(item => !_cachedValues.ContainsKey($"{moduleName}:{group.Name}:{item.Name}"));
-				}
-				moduleConfig.Groups.RemoveAll(g => g.Items.Count == 0);
-
 				CleanupUnusedConfigs(moduleName);
 
 				var serializer = new SerializerBuilder()
@@ -668,14 +640,7 @@ namespace Zenith
 			{
 				foreach (var group in moduleConfig.Groups)
 				{
-					var unusedConfigs = group.Items
-						.Where(c => !_cachedValues.ContainsKey($"{moduleName}:{group.Name}:{c.Name}"))
-						.ToList();
-
-					foreach (var unusedConfig in unusedConfigs)
-					{
-						group.Items.Remove(unusedConfig);
-					}
+					group.Items.RemoveAll(c => c.CurrentValue == null);
 				}
 
 				moduleConfig.Groups.RemoveAll(g => g.Items.Count == 0);
@@ -684,30 +649,27 @@ namespace Zenith
 
 		public static bool IsPrimitiveConfig(string callerModule, string groupName, string configName)
 		{
-			foreach (var moduleConfig in _moduleConfigs.Values)
+			if (_moduleConfigs.TryGetValue(callerModule, out var moduleConfig))
 			{
 				var group = moduleConfig.Groups.FirstOrDefault(g => g.Name == groupName);
-				if (group != null)
-				{
-					var config = group.Items.FirstOrDefault(c => c.Name == configName);
-					if (config != null)
-					{
-						if (callerModule != CoreModuleName && !config.Flags.HasFlag(ConfigFlag.Global) && callerModule != moduleConfig.ModuleName)
-						{
-							Logger.LogWarning($"Attempt to access non-global config '{groupName}.{configName}' from module '{callerModule}'");
-							continue;
-						}
+				var config = group?.Items.FirstOrDefault(c => c.Name == configName);
 
-						Type? configType = Type.GetType(config.AllowedType);
-						if (configType != null)
-						{
-							return IsPrimitiveType(configType);
-						}
+				if (config != null)
+				{
+					if (callerModule != CoreModuleName && !config.Flags.HasFlag(ConfigFlag.Global) && callerModule != moduleConfig.ModuleName)
+					{
+						Logger.LogWarning($"Attempt to access non-global config '{groupName}.{configName}' from module '{callerModule}'");
+						return false;
+					}
+
+					Type? configType = Type.GetType(config.AllowedType);
+					if (configType != null)
+					{
+						return IsPrimitiveType(configType);
 					}
 				}
 			}
 
-			// If we get here, the config wasn't found
 			Logger.LogWarning($"Configuration '{groupName}.{configName}' not found for module '{callerModule}'");
 			return false;
 		}
@@ -773,7 +735,6 @@ namespace Zenith
 			}
 			else
 			{
-				// Handle custom enums
 				var customType = AppDomain.CurrentDomain.GetAssemblies()
 					.SelectMany(a => a.GetTypes())
 					.FirstOrDefault(t => t.FullName == typeName || t.Name == typeName);

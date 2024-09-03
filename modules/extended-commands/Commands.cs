@@ -2,6 +2,7 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Utils;
 
@@ -168,7 +169,7 @@ public sealed partial class Plugin : BasePlugin
 
 		_moduleServices?.RegisterModuleCommands(["rcon"], "Executes an RCON command", (player, info) =>
 		{
-			string command = info.GetArg(1);
+			string command = info.GetCommandString.Substring(info.GetCommandString.IndexOf(' ') + 1);
 			Server.ExecuteCommand(command);
 			ShowActivityToPlayers(player?.SteamID, "commands.rcon.success", player?.PlayerName ?? Localizer["k4.general.console"], command);
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<command>", "@zenith-commands/rcon");
@@ -192,11 +193,17 @@ public sealed partial class Plugin : BasePlugin
 			}, true);
 		}, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <weapon>", "@zenith-commands/give");
 
-		_moduleServices?.RegisterModuleCommands(["cvar"], "Sets a ConVar value", (player, info) =>
+		_moduleServices?.RegisterModuleCommands(["cvar", "convar"], "Sets a ConVar value", (player, info) =>
 		{
-			string cvar = info.GetArg(1);
+			var cvar = ConVar.Find(info.GetArg(1));
+			if (cvar == null)
+			{
+				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_convar"]);
+				return;
+			}
+
 			string value = info.GetArg(2);
-			Server.ExecuteCommand($"{cvar} {value}");
+			SetConvarValue(cvar, value);
 			ShowActivityToPlayers(player?.SteamID, "commands.cvar.success", player?.PlayerName ?? Localizer["k4.general.console"], cvar, value);
 		}, CommandUsage.CLIENT_AND_SERVER, 2, "<convar> <value>", "@zenith-commands/cvar");
 

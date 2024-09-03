@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Drawing;
 using CounterStrikeSharp.API.Core;
 
 namespace Zenith.Models;
@@ -12,7 +11,7 @@ public sealed partial class Player
 	{
 		var player = List.FirstOrDefault(player => player.SteamID == steamID);
 
-		if (player != null && !player.IsValid)
+		if (player?.IsValid == false)
 		{
 			player.Dispose();
 			return null;
@@ -23,12 +22,11 @@ public sealed partial class Player
 
 	public static Player? Find(CCSPlayerController? controller)
 	{
-		if (controller is null)
-			return null;
+		if (controller == null) return null;
 
 		var player = List.FirstOrDefault(player => player.Controller == controller);
 
-		if (player != null && !player.IsValid)
+		if (player?.IsValid == false)
 		{
 			player.Dispose();
 			return null;

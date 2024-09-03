@@ -1,7 +1,6 @@
 using System.Reflection;
 using CounterStrikeSharp.API.Core;
 using Microsoft.Extensions.Logging;
-using Zenith;
 
 namespace Zenith
 {

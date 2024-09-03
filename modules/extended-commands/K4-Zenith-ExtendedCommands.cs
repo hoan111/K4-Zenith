@@ -14,7 +14,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.0";
+	public override string ModuleVersion => "1.0.1";
 
 	public IModuleConfigAccessor _coreAccessor = null!;
 
@@ -26,6 +26,18 @@ public sealed partial class Plugin : BasePlugin
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
+		string pluginDirectory = Path.GetDirectoryName(ModuleDirectory)!;
+		List<string> blockPlugins = ["CS2-SimpleAdmin"];
+		foreach (var p in blockPlugins)
+		{
+			if (Directory.GetDirectories(pluginDirectory, p).Any())
+			{
+				Logger.LogCritical($"This module is not compatible with {p}. You can use only one of them. Unloading...");
+				Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(ModulePath)}");
+				return;
+			}
+		}
+
 		try
 		{
 			_playerServicesCapability = new("zenith:player-services");

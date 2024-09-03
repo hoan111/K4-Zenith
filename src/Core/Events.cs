@@ -22,11 +22,8 @@ namespace Zenith
 			if (player == null || !player.IsValid)
 				return HookResult.Continue;
 
-			if (player.IsGagged)
+			if (player.IsGagged || !GetCoreConfig<bool>("Core", "HookChatMessages"))
 				return HookResult.Stop;
-
-			if (!GetCoreConfig<bool>("Core", "HookChatMessages"))
-				return HookResult.Continue;
 
 			bool enabledChatModifier = player.GetSetting<bool>("ShowChatTags");
 
@@ -37,37 +34,35 @@ namespace Zenith
 			char namecolor = enabledChatModifier ? player.GetNameColor() : ChatColors.ForTeam(player.Controller!.Team);
 			char chatcolor = enabledChatModifier ? player.GetChatColor() : ChatColors.Default;
 
-			um.SetString("messagename", FormatMessage(player.Controller!, $" {dead}{team}{tag}{namecolor}{um.ReadString("param1")}{RemoveLeadingSpaceBeforeColorCode(Localizer["k4.tag.separator"])}{chatcolor}{um.ReadString("param2")}"));
+			string formattedMessage = FormatMessage(player.Controller!, $" {dead}{team}{tag}{namecolor}{um.ReadString("param1")}{RemoveLeadingSpaceBeforeColorCode(Localizer["k4.tag.separator"])}{chatcolor}{um.ReadString("param2")}");
+
+			um.SetString("messagename", formattedMessage);
+
 			return HookResult.Changed;
+		}
 
-			static string FormatMessage(CCSPlayerController player, string message)
+		private static string FormatMessage(CCSPlayerController player, string message)
+		{
+			return StringExtensions.ReplaceColorTags(message)
+				.Replace("{team}", ChatColors.ForPlayer(player).ToString());
+		}
+
+		private string TeamLocalizer(CsTeam team)
+		{
+			return team switch
 			{
-				string modifiedValue = StringExtensions.ReplaceColorTags(message)
-					.Replace("{team}", ChatColors.ForPlayer(player).ToString());
-
-				return modifiedValue;
-			}
-
-			string TeamLocalizer(CsTeam team)
-			{
-				return team switch
-				{
-					CsTeam.Spectator => Localizer["k4.tag.team.spectator"],
-					CsTeam.Terrorist => Localizer["k4.tag.team.t"],
-					CsTeam.CounterTerrorist => Localizer["k4.tag.team.ct"],
-					_ => Localizer["k4.tag.team.unassigned"],
-				};
-			}
+				CsTeam.Spectator => Localizer["k4.tag.team.spectator"],
+				CsTeam.Terrorist => Localizer["k4.tag.team.t"],
+				CsTeam.CounterTerrorist => Localizer["k4.tag.team.ct"],
+				_ => Localizer["k4.tag.team.unassigned"],
+			};
 		}
 
 		[GameEventHandler]
 		public HookResult OnPlayerActivate(EventPlayerActivate @event, GameEventInfo info)
 		{
 			CCSPlayerController? player = @event.Userid;
-			if (player is null || !player.IsValid)
-				return HookResult.Continue;
-
-			if (player.IsHLTV || player.IsBot)
+			if (player is null || !player.IsValid || player.IsHLTV || player.IsBot)
 				return HookResult.Continue;
 
 			new Player(this, player);
@@ -84,7 +79,7 @@ namespace Zenith
 		[GameEventHandler]
 		public HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
 		{
-			if (HasModuleConfigValue("Database", "SaveOnRoundEnd") && GetCoreConfig<bool>("Database", "SaveOnRoundEnd"))
+			if (GetCoreConfig<bool>("Database", "SaveOnRoundEnd"))
 				Player.SaveAllOnlinePlayerData(this, false);
 			return HookResult.Continue;
 		}

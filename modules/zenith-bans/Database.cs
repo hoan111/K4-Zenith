@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Admin;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
@@ -26,6 +25,7 @@ namespace Zenith_Bans
 					`id` INT AUTO_INCREMENT PRIMARY KEY,
 					`steam_id` BIGINT UNSIGNED UNIQUE,
 					`name` VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+					`current_server` VARCHAR(50)
 					`ip_addresses` JSON,
 					`last_online` DATETIME
 				) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
@@ -85,8 +85,8 @@ namespace Zenith_Bans
 
 				// First query: Insert or update player data
 				var updateQuery = $@"
-					INSERT INTO `{prefix}zenith_bans_players` (`steam_id`, `name`, `ip_addresses`, `last_online`)
-					VALUES (@SteamId, @PlayerName, JSON_ARRAY(@IpAddress), NOW())
+					INSERT INTO `{prefix}zenith_bans_players` (`steam_id`, `name`, `ip_addresses`, `last_online`, `current_server`)
+					VALUES (@SteamId, @PlayerName, JSON_ARRAY(@IpAddress), NOW(), @ServerIp)
 					ON DUPLICATE KEY UPDATE
 						`name` = @PlayerName,
 						`ip_addresses` =
@@ -96,9 +96,10 @@ namespace Zenith_Bans
 								THEN JSON_ARRAY_APPEND(`ip_addresses`, '$', @IpAddress)
 								ELSE `ip_addresses`
 							END,
-						`last_online` = NOW();";
+						`last_online` = NOW(),
+						`current_server` = @ServerIp;";
 
-				await connection.ExecuteAsync(updateQuery, new { SteamId = steamId, PlayerName = playerName, IpAddress = ipAddress });
+				await connection.ExecuteAsync(updateQuery, new { SteamId = steamId, PlayerName = playerName, IpAddress = ipAddress, ServerIp = _serverIp });
 
 				// Second query: Select player data with ranks
 				var selectPlayerQuery = $@"
@@ -106,7 +107,7 @@ namespace Zenith_Bans
 						pr.`groups` AS GroupsJson,
 						pr.`permissions` AS PermissionsJson,
 						pr.`immunity`,
-						pr.`rank_expiry`,
+						pr.`rank_expiry` AS RankExpiry,
 						ag.`permissions` AS GroupPermissions
 					FROM `{prefix}zenith_bans_players` p
 					LEFT JOIN `{prefix}zenith_bans_player_ranks` pr ON p.`steam_id` = pr.`steam_id`
@@ -153,12 +154,10 @@ namespace Zenith_Bans
 					Punishments = punishments.ToList()
 				};
 
-				if (playerData != null)
+				if (playerDataRaw != null)
 				{
-					playerData.Punishments = punishments.ToList();
-
 					// Deserialize the groups JSON
-					if (!string.IsNullOrEmpty(playerDataRaw?.GroupsJson))
+					if (!string.IsNullOrEmpty(playerDataRaw.GroupsJson))
 					{
 						try
 						{
@@ -171,7 +170,7 @@ namespace Zenith_Bans
 					}
 
 					// Deserialize the permissions JSON
-					if (!string.IsNullOrEmpty(playerDataRaw?.PermissionsJson))
+					if (!string.IsNullOrEmpty(playerDataRaw.PermissionsJson))
 					{
 						try
 						{
@@ -183,26 +182,24 @@ namespace Zenith_Bans
 						}
 					}
 
-					if (playerData.RankExpiry.HasValue && playerData.RankExpiry.Value <= DateTime.UtcNow)
+					DateTime? rankExpiry = playerData.RankExpiry?.IsValidDateTime == true ? (DateTime?)playerData.RankExpiry : null;
+
+					if (rankExpiry <= DateTime.UtcNow)
 					{
-						playerData.Groups = [];
-						playerData.Permissions = [];
+						playerData.Groups = new List<string>();
+						playerData.Permissions = new List<string>();
 						playerData.Immunity = null;
 						await UpdatePlayerRankAsync(steamId, null, null, null, null, _serverIp);
 					}
 					else
 					{
-						playerData.Permissions = MergePermissions(playerData.Permissions, playerDataRaw?.GroupPermissions);
+						playerData.Permissions = MergePermissions(playerData.Permissions, playerDataRaw.GroupPermissions);
 					}
 				}
 				else
 				{
-					playerData = new PlayerData
-					{
-						Groups = [],
-						Permissions = [],
-						Punishments = punishments.ToList(),
-					};
+					playerData.Groups = [];
+					playerData.Permissions = [];
 				}
 
 				return playerData;
@@ -212,6 +209,9 @@ namespace Zenith_Bans
 				Logger.LogError(ex, "An error occurred while loading or updating player data for SteamID: {SteamId}", steamId);
 				return new PlayerData
 				{
+					SteamId = steamId,
+					Name = playerName,
+					IpAddress = ipAddress,
 					Groups = [],
 					Permissions = [],
 					Punishments = []
@@ -219,50 +219,88 @@ namespace Zenith_Bans
 			}
 		}
 
-		private async Task<bool> IsIpBannedAsync(string ipAddress)
+		private async Task HandlePlayerDisconnectAsync(ulong steamId)
 		{
-			string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
-			using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
-			await connection.OpenAsync();
+			try
+			{
+				string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
+				using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
+				await connection.OpenAsync();
 
-			var query = $@"
-				SELECT COUNT(*)
-				FROM `{prefix}zenith_bans_punishments` p
-				JOIN `{prefix}zenith_bans_players` pl ON p.`steam_id` = pl.`steam_id`
-				WHERE JSON_CONTAINS(pl.`ip_addresses`, JSON_QUOTE(@IpAddress))
-				AND p.`type` = 'ban'
-				AND (p.`expires_at` > NOW() OR p.`expires_at` IS NULL)
-				AND p.`removed_at` IS NULL";
+				var query = $@"
+					UPDATE `{prefix}zenith_bans_players`
+					SET `current_server` = NULL
+					WHERE `steam_id` = @SteamId;";
 
-			int count = await connection.ExecuteScalarAsync<int>(query, new { IpAddress = ipAddress });
-			return count > 0;
+				await connection.ExecuteAsync(query, new { SteamId = steamId });
+
+				_playerCache.Remove(steamId);
+			}
+			catch (Exception ex)
+			{
+				Logger.LogError(ex, "Error handling player disconnect for SteamID: {SteamId}", steamId);
+			}
 		}
 
-		private async Task UpdatePlayerRankAsync(ulong steamId, List<string>? groups, List<string>? permissions, int? immunity, DateTime? expiry, string serverIp = "all")
+		private async Task<bool> IsIpBannedAsync(string ipAddress)
 		{
-			string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
-			using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
-			await connection.OpenAsync();
-
-			var query = $@"
-				INSERT INTO `{prefix}zenith_bans_player_ranks`
-				(`steam_id`, `server_ip`, `groups`, `permissions`, `immunity`, `rank_expiry`)
-				VALUES (@SteamId, @ServerIp, @Groups, @Permissions, @Immunity, @Expiry)
-				ON DUPLICATE KEY UPDATE
-				`groups` = @Groups,
-				`permissions` = @Permissions,
-				`immunity` = @Immunity,
-				`rank_expiry` = @Expiry";
-
-			await connection.ExecuteAsync(query, new
+			try
 			{
-				SteamId = steamId,
-				ServerIp = serverIp,
-				Groups = groups != null ? JsonSerializer.Serialize(groups) : null,
-				Permissions = permissions != null ? JsonSerializer.Serialize(permissions) : null,
-				Immunity = immunity,
-				Expiry = expiry
-			});
+				string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
+				using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
+				await connection.OpenAsync();
+
+				var query = $@"
+					SELECT COUNT(*)
+					FROM `{prefix}zenith_bans_punishments` p
+					JOIN `{prefix}zenith_bans_players` pl ON p.`steam_id` = pl.`steam_id`
+					WHERE JSON_CONTAINS(pl.`ip_addresses`, JSON_QUOTE(@IpAddress))
+					AND p.`type` = 'ban'
+					AND (p.`expires_at` > NOW() OR p.`expires_at` IS NULL)
+					AND p.`removed_at` IS NULL";
+
+				int count = await connection.ExecuteScalarAsync<int>(query, new { IpAddress = ipAddress });
+				return count > 0;
+			}
+			catch (Exception ex)
+			{
+				Logger.LogError(ex, "An error occurred while checking if IP address is banned: {IpAddress}", ipAddress);
+				return false;
+			}
+		}
+
+		private async Task UpdatePlayerRankAsync(ulong steamId, List<string>? groups, List<string>? permissions, int? immunity, MySqlDateTime? expiry, string serverIp = "all")
+		{
+			try
+			{
+				string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
+				using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
+				await connection.OpenAsync();
+
+				var query = $@"
+					INSERT INTO `{prefix}zenith_bans_player_ranks`
+					(`steam_id`, `server_ip`, `groups`, `permissions`, `immunity`, `rank_expiry`)
+					VALUES (@SteamId, @ServerIp, @Groups, @Permissions, @Immunity, @Expiry)
+					ON DUPLICATE KEY UPDATE
+					`groups` = @Groups,
+					`permissions` = @Permissions,
+					`immunity` = @Immunity,
+					`rank_expiry` = @Expiry";
+
+				await connection.ExecuteAsync(query, new
+				{
+					SteamId = steamId,
+					ServerIp = serverIp,
+					Groups = groups != null ? JsonSerializer.Serialize(groups) : null,
+					Permissions = permissions != null ? JsonSerializer.Serialize(permissions) : null,
+					Immunity = immunity,
+					Expiry = expiry?.GetDateTime()
+				});
+			}
+			catch (Exception ex)
+			{
+				Logger.LogError(ex, "An error occurred while updating player rank for SteamID: {SteamId}", steamId);
+			}
 		}
 
 		private List<string> MergePermissions(List<string>? userPermissions, string? groupPermissionsJson)
@@ -391,7 +429,29 @@ namespace Zenith_Bans
 			return await connection.ExecuteScalarAsync<string>(query, new { SteamId = steamId }) ?? "Unknown";
 		}
 
-		private async Task RemoveExpiredPunishmentsAsync()
+		private async Task RemoveOfflinePlayersFromServerAsync(List<ulong> onlineSteamIds)
+		{
+			try
+			{
+				string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
+				using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
+				await connection.OpenAsync();
+
+				var query = $@"
+					UPDATE `{prefix}zenith_bans_players`
+					SET `current_server` = NULL
+					WHERE `current_server` = @ServerIp
+					AND `steam_id` NOT IN @OnlineSteamIds;";
+
+				await connection.ExecuteAsync(query, new { ServerIp = _serverIp, OnlineSteamIds = onlineSteamIds });
+			}
+			catch (Exception ex)
+			{
+				Logger.LogError(ex, "Error removing offline players from server.");
+			}
+		}
+
+		private async Task RemoveExpiredPunishmentsAsync(List<ulong> onlineSteamIds)
 		{
 			try
 			{
@@ -410,7 +470,7 @@ namespace Zenith_Bans
 					AND p.`status` = 'active'
 					AND p.`type` IN ('mute', 'gag', 'silence', 'ban');
 
-					SELECT p.`steam_id`, p.`type`, pl.`name` AS `player_name`
+					SELECT p.`steam_id`, p.`type`, pl.`name` AS `player_name`, pl.`current_server`
 					FROM `{prefix}zenith_bans_punishments` p
 					JOIN `{prefix}zenith_bans_players` pl ON p.`steam_id` = pl.`steam_id`
 					WHERE p.`expires_at` <= NOW()
@@ -420,21 +480,23 @@ namespace Zenith_Bans
 					AND p.`type` IN ('mute', 'gag', 'silence', 'ban');";
 
 				using var multi = await connection.QueryMultipleAsync(query);
-				var removedPunishments = await multi.ReadAsync<(ulong SteamId, string Type, string PlayerName)>();
+				var removedPunishments = await multi.ReadAsync<(ulong SteamId, string Type, string PlayerName, string CurrentServer)>();
 
-				Server.NextWorldUpdate(() =>
+				Server.NextWorldUpdate(async () =>
 				{
-					foreach (var (steamId, type, playerName) in removedPunishments)
+					foreach (var (steamId, type, playerName, currentServer) in removedPunishments)
 					{
-						var player = FindPlayerBySteamID(steamId);
+						var player = Utilities.GetPlayerFromSteamId(steamId);
 						if (player != null && _playerCache.TryGetValue(steamId, out var playerData))
 						{
-							playerData.Punishments.RemoveAll(p => p.Type.ToString().Equals(type, StringComparison.CurrentCultureIgnoreCase) && p.ExpiresAt <= DateTime.UtcNow);
+							playerData.Punishments.RemoveAll(p => p.Type.ToString().Equals(type, StringComparison.CurrentCultureIgnoreCase) && p.ExpiresAt?.GetDateTime() <= DateTime.UtcNow);
 							RemovePunishmentEffect(player, Enum.Parse<PunishmentType>(type, true));
 
 							_moduleServices?.PrintForPlayer(player, Localizer[$"k4.punishment.expired.{type.ToLower()}"]);
 						}
 					}
+
+					await RemoveOfflinePlayersFromServerAsync(onlineSteamIds);
 				});
 			}
 			catch (Exception ex)

@@ -106,7 +106,7 @@ namespace Zenith_Bans
 
 		private void ShowGroupSelectionMenu(CCSPlayerController controller, List<string> groups, Action<string> callback)
 		{
-			List<MenuItem> items = groups.Select(group => new MenuItem(MenuItemType.Button, new List<MenuValue> { new MenuValue(group) })).ToList();
+			List<MenuItem> items = groups.Select(group => new MenuItem(MenuItemType.Button, [new MenuValue(group)])).ToList();
 
 			Menu.ShowScrollableMenu(controller, Localizer["k4.addadmin.select-group"], items, (buttons, menu, selected) =>
 			{

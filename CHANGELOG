@@ -1,7 +1,27 @@
 # 2024.09.02 - 1.0.11
 
-- todo:
-		- feat: SimpleAdmin transfer script
+- feat: Added auto save on timer for long gamemodes (#2)
+- feat: Bans module now store the server ip where the player is online currently (#2)
+- feat: Added module load blocker for modules that is incompatible with other plugins
+- feat: Selected CustomTag is now saved and loaded on player join
+- upgrade: css/root not applied to Zenith commands aswell
+- upgrade: Silence mechanism
+- fix: Punishment non-game thread issues
+- fix: CVAR command was unable to set cheat protected cvars (thanks @Cruze)
+- fix: Silence was not shown in !comms properly
+- fix: Mute / Gag was not overwritten by silence
+- fix: Warn translation was wrong
+- fix: NULL issues with ban module
+- fix: RankUp shown on first point gather using default rank
+- fix: PlayTime notification was shown on join even if its 0
+- fix: Bans hotReload loading issue
+- fix: Bans addadmin/removeadmin query issues
+- fix: Removed error log on country not found
+- fix: RCON command stripped everything after space
+- chore: Moved ShowActivity to Core
+- optimise: Ranks module
+- optimise: Command handler
+- optimise: Config handler
 
 # 2024.09.02 - 1.0.10
 
@@ -14,7 +34,7 @@
 - upgrade: Blind without time specifiy now blind without time
 - upgrade: health without amount specifiy now health with 100 amount
 - upgrade: Armor without amount specifiy now armor with 100 amount
-- upgrade: RAnks module playtime points timer upgraded to use DateTime
+- upgrade: Ranks module playtime points timer upgraded to use DateTime
 - fix: Menu debug messages removed from server console
 - fix: Database migration support enhanced for MySQL and MariaDB aswell
 - fix: Added prevention for duplicated min player messages

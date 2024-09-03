@@ -12,6 +12,7 @@ namespace Zenith
 	{
 		public Menu.KitsuneMenu Menu { get; private set; } = null!;
 		public Database Database { get; private set; } = null!;
+		public DateTime _lastStorageSave = DateTime.UtcNow;
 
 		public override void Load(bool hotReload)
 		{
@@ -93,6 +94,15 @@ namespace Zenith
 				{
 					if (player.IsValid && player.IsPlayer)
 						player.EnforcePluginValues();
+				}
+			}, TimerFlags.REPEAT);
+
+			AddTimer(1, () =>
+			{
+				if ((DateTime.UtcNow - _lastStorageSave).TotalMinutes >= GetCoreConfig<int>("Database", "AutoSaveInterval"))
+				{
+					_lastStorageSave = DateTime.UtcNow;
+					Player.SaveAllOnlinePlayerData(this, false);
 				}
 			}, TimerFlags.REPEAT);
 		}

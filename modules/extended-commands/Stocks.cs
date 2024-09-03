@@ -3,6 +3,7 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Commands.Targeting;
+using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Utils;
 
 namespace Zenith_ExtendedCommands;
@@ -95,15 +96,36 @@ public sealed partial class Plugin : BasePlugin
 		}
 	}
 
+	public void SetConvarValue(ConVar? cvar, string? value)
+	{
+		if (cvar == null) return;
+		if (string.IsNullOrEmpty(value)) return;
+
+		var flag = cvar.Flags;
+
+		if ((flag & ConVarFlags.FCVAR_CHEAT) > 0)
+			cvar.Flags &= ~ConVarFlags.FCVAR_CHEAT;
+
+		Server.ExecuteCommand($"{cvar.Name} {value}");
+
+		if (flag != cvar.Flags)
+		{
+			AddTimer(0.1f, () =>
+			{
+				cvar.Flags = flag;
+			});
+		}
+	}
+
 	private bool ShouldShowActivity(ulong? adminSteamId, CCSPlayerController player, bool showName)
 	{
 		if (!adminSteamId.HasValue) return true; // Always show console activity
-		if (!_coreAccessor.HasValue("Config", "ShowActivity")) return true; // Show activity if no ZenithBans installed
+		if (!_coreAccessor.HasValue("Core", "ShowActivity")) return true; // Show activity if no ZenithBans installed
 
-		int _showActivity = _coreAccessor.GetValue<int>("Config", "ShowActivity");
+		int _showActivity = _coreAccessor.GetValue<int>("Core", "ShowActivity");
 
 		bool isRoot = AdminManager.PlayerHasPermissions(player, "@zenith/root");
-		bool isPlayerAdmin = AdminManager.PlayerHasPermissions(player, "@zenith-admin/admin");
+		bool isPlayerAdmin = AdminManager.PlayerHasPermissions(player, "@zenith/admin");
 
 		if (isRoot && (_showActivity & 16) != 0) return true; // Always show to root
 

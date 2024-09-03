@@ -1,5 +1,5 @@
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Timers;
+using MySqlConnector;
 
 namespace Zenith_Bans
 {
@@ -14,7 +14,7 @@ namespace Zenith_Bans
 			public string GroupsJson { get; set; } = "[]";
 			public string PermissionsJson { get; set; } = "[]";
 			public int? Immunity { get; set; }
-			public DateTime? RankExpiry { get; set; }
+			public MySqlDateTime? RankExpiry { get; set; }
 			public string? GroupPermissions { get; set; }
 		}
 
@@ -26,7 +26,7 @@ namespace Zenith_Bans
 			public List<string> Groups { get; set; } = [];
 			public List<string> Permissions { get; set; } = [];
 			public int? Immunity { get; set; }
-			public DateTime? RankExpiry { get; set; }
+			public MySqlDateTime? RankExpiry { get; set; }
 			public List<Punishment> Punishments { get; set; } = [];
 		}
 
@@ -35,7 +35,7 @@ namespace Zenith_Bans
 			public int Id { get; set; }
 			public PunishmentType Type { get; set; }
 			public int? Duration { get; set; }
-			public DateTime? ExpiresAt { get; set; }
+			public MySqlDateTime? ExpiresAt { get; set; } = null;
 			public string PunisherName { get; set; } = "Console";
 			public ulong? AdminSteamId { get; set; }
 			public string Reason { get; set; } = "";

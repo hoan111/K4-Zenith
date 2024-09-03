@@ -10,119 +10,103 @@ namespace Zenith_Ranks;
 
 public sealed partial class Plugin : BasePlugin
 {
-	private readonly Dictionary<CCSPlayerController, int> _roundPoints = [];
+	private readonly Dictionary<CCSPlayerController, int> _roundPoints = new();
+
+	private static readonly Dictionary<string, string> _chatColors = typeof(ChatColors).GetFields()
+		.GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+		.Select(g => g.First())
+		.ToDictionary(f => f.Name, f => f.GetValue(null)?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+
+	private static readonly Regex _colorRegex = new(@"\b(?<color>\w+)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
 	public string ApplyPrefixColors(string msg)
 	{
-		var chatColors = typeof(ChatColors).GetFields()
-			.Select(f => new { f.Name, Value = f.GetValue(null)?.ToString() })
-			.OrderByDescending(c => c.Name.Length);
-
-		foreach (var color in chatColors)
+		return _colorRegex.Replace(msg, match =>
 		{
-			if (color.Value != null)
-			{
-				msg = Regex.Replace(msg, $@"\b{color.Name}\b", color.Value, RegexOptions.IgnoreCase);
-			}
-		}
-
-		return msg;
+			string colorKey = match.Groups["color"].Value;
+			return _chatColors.TryGetValue(colorKey, out string? colorValue) ? colorValue : match.Value;
+		});
 	}
 
 	public IEnumerable<IPlayerServices> GetValidPlayers()
 	{
-		foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
+		foreach (var player in Utilities.GetPlayers())
 		{
-			var zenithPlayer = GetZenithPlayer(player);
-			if (zenithPlayer != null)
+			if (player.IsValid && !player.IsBot && !player.IsHLTV)
 			{
-				yield return zenithPlayer;
+				var zenithPlayer = GetZenithPlayer(player);
+				if (zenithPlayer != null)
+				{
+					yield return zenithPlayer;
+				}
 			}
 		}
 	}
 
 	public void ModifyPlayerPoints(IPlayerServices player, int points, string eventKey, string? extraInfo = null)
 	{
-		if (points == 0)
-			return;
-
-		if (_configAccessor.GetValue<List<string>>("Settings", "VIPFlags").Any(f => AdminManager.PlayerHasPermissions(player.Controller, f)) && points > 0)
-			points = (int)(points * (decimal)_configAccessor.GetValue<double>("Settings", "VipMultiplier"));
+		if (points == 0) return;
 
 		long currentPoints = player.GetStorage<long>("Points");
-		long newPoints = currentPoints + points;
+		long newPoints = Math.Max(0, currentPoints + points);
 
-		if (newPoints < 0)
-			newPoints = 0;
+		if (points > 0 && _configAccessor.GetValue<List<string>>("Settings", "VIPFlags").Any(f => AdminManager.PlayerHasPermissions(player.Controller, f)))
+		{
+			points = (int)(points * (decimal)_configAccessor.GetValue<double>("Settings", "VipMultiplier"));
+		}
 
 		player.SetStorage("Points", newPoints);
 
 		if (_configAccessor.GetValue<bool>("Settings", "ScoreboardScoreSync"))
+		{
 			player.Controller.Score = (int)newPoints;
+		}
 
 		UpdatePlayerRank(player, newPoints);
 
-		if (!_configAccessor.GetValue<bool>("Settings", "PointSummaries") && player.GetSetting<bool>("ShowRankChanges"))
+		if (_configAccessor.GetValue<bool>("Settings", "PointSummaries") || !player.GetSetting<bool>("ShowRankChanges"))
 		{
-			string pointChangePhrase = points >= 0 ? "k4.phrases.gain" : "k4.phrases.loss";
-			string eventReason = Localizer[eventKey];
-			string message = Localizer[pointChangePhrase, $"{newPoints:N0}", Math.Abs(points), extraInfo ?? eventReason];
-
-			Server.NextFrame(() => player.Print(message));
+			_roundPoints[player.Controller] = _roundPoints.TryGetValue(player.Controller, out int existingPoints) ? existingPoints + points : points;
 		}
 		else
 		{
-			if (!_roundPoints.ContainsKey(player.Controller))
-				_roundPoints[player.Controller] = 0;
-
-			_roundPoints[player.Controller] += points;
+			string message = Localizer[points >= 0 ? "k4.phrases.gain" : "k4.phrases.loss", $"{newPoints:N0}", Math.Abs(points), extraInfo ?? Localizer[eventKey]];
+			Server.NextFrame(() => player.Print(message));
 		}
 	}
 
 	private void UpdatePlayerRank(IPlayerServices player, long points)
 	{
-		string? currentRank = player.GetStorage<string>("Rank");
-		var (determinedRank, _) = DetermineRanks(points);
-		string? newRank = determinedRank?.Name;
+		long currentPoints = player.GetStorage<long>("Points");
+		var (currentRank, _) = DetermineRanks(currentPoints);
+		var (determinedRank, _) = DetermineRanks(currentPoints + points);
 
-		if (newRank != currentRank)
+		Logger.LogInformation("Player {Player} has {Points} points and is ranked as {Rank} (current rank: {CurrentRank})",
+			player.Name, points, determinedRank?.Name ?? "None", currentRank?.Name ?? "None");
+
+		if (determinedRank?.Id != currentRank?.Id)
 		{
-			player.SetStorage("Rank", newRank);
+			string newRankName = determinedRank?.Name ?? Localizer["k4.phrases.rank.none"];
+			player.SetStorage("Rank", newRankName);
 
-			string messageKey;
-			string colorCode;
-			if (string.IsNullOrEmpty(currentRank) || CompareRanks(newRank, currentRank) > 0)
-			{
-				messageKey = "k4.phrases.rankup";
-				colorCode = "#00FF00";
-			}
-			else
-			{
-				messageKey = "k4.phrases.rankdown";
-				colorCode = "#FF0000";
-			}
-
-			string rankName = newRank ?? Localizer["k4.phrases.rank.none"];
+			bool isRankUp = currentRank is null || CompareRanks(determinedRank, currentRank) > 0;
+			string messageKey = isRankUp ? "k4.phrases.rankup" : "k4.phrases.rankdown";
+			string colorCode = isRankUp ? "#00FF00" : "#FF0000";
+			string rankName = newRankName;
 
 			string htmlMessage = $@"
-			<font color='{colorCode}' class='fontSize-m'>{Localizer[messageKey]}</font><br>
-			<font color='{determinedRank?.HexColor}' class='fontSize-m'>{Localizer["k4.phrases.newrank", $"{rankName}"]}</font>";
+            <font color='{colorCode}' class='fontSize-m'>{Localizer[messageKey]}</font><br>
+            <font color='{determinedRank?.HexColor}' class='fontSize-m'>{Localizer["k4.phrases.newrank", $"{rankName}"]}</font>";
 
 			player.PrintToCenter(htmlMessage, _configAccessor.GetValue<int>("Core", "CenterAlertTime"), ActionPriority.Normal);
 		}
 	}
 
-	private int CompareRanks(string? rank1Name, string? rank2Name)
+	private static int CompareRanks(Rank? rank1, Rank? rank2)
 	{
-		if (rank1Name == null && rank2Name == null) return 0;
-		if (rank1Name == null) return -1;
-		if (rank2Name == null) return 1;
+		if (rank1 == rank2) return 0;
 
-		Rank? rank1 = Ranks.FirstOrDefault(r => r.Name == rank1Name);
-		Rank? rank2 = Ranks.FirstOrDefault(r => r.Name == rank2Name);
-
-		if (rank1 == null && rank2 == null) return 0;
-		if (rank1 == null) return -1;
+		if (rank1 == null) return rank2 == null ? 0 : -1;
 		if (rank2 == null) return 1;
 
 		return rank1.Point.CompareTo(rank2.Point);
@@ -130,9 +114,6 @@ public sealed partial class Plugin : BasePlugin
 
 	private (Rank? CurrentRank, Rank? NextRank) DetermineRanks(long points)
 	{
-		if (Ranks == null || Ranks.Count == 0)
-			return (null, null);
-
 		Rank? currentRank = null;
 		Rank? nextRank = null;
 
@@ -154,10 +135,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public int CalculateDynamicPoints(IPlayerServices attacker, IPlayerServices victim, int basePoints)
 	{
-		if (!_configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints"))
-			return basePoints;
-
-		if (!attacker.IsPlayer || !victim.IsPlayer)
+		if (!_configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints") || !attacker.IsPlayer || !victim.IsPlayer)
 			return basePoints;
 
 		long attackerPoints = attacker.GetStorage<long>("Points");
@@ -166,8 +144,10 @@ public sealed partial class Plugin : BasePlugin
 		if (attackerPoints <= 0 || victimPoints <= 0)
 			return basePoints;
 
-		double pointsRatio = Math.Clamp(victimPoints / attackerPoints, _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMinMultiplier"), _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMaxMultiplier"));
-		double result = pointsRatio * basePoints;
-		return (int)Math.Round(result);
+		double minMultiplier = _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMinMultiplier");
+		double maxMultiplier = _configAccessor.GetValue<double>("Settings", "DynamicDeathPointsMaxMultiplier");
+
+		double pointsRatio = Math.Clamp(victimPoints / (double)attackerPoints, minMultiplier, maxMultiplier);
+		return (int)Math.Round(pointsRatio * basePoints);
 	}
 }

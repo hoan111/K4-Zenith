@@ -13,6 +13,7 @@
   "commands.error.invalid_target": "{lightred}Target not found.",
   "commands.error.invalid_dead": "{lightred}Target must be alive.",
   "commands.error.invalid_team": "{lightred}Invalid team.",
+  "commands.error.invalid_convar": "{lightred}The given ConVar is not valid.",
 
   "commands.hp.success": "{gold}{0} {silver}set {gold}{1}{silver}'s health to {gold}{2}{silver}.",
   "commands.armor.success": "{gold}{0} {silver}set {gold}{1}{silver}'s armor to {gold}{2}{silver}.",

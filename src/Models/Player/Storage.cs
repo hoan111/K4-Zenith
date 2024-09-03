@@ -180,10 +180,7 @@ public sealed partial class Player
 				value = targetDict[existingKey];
 			}
 			else
-			{
-				_plugin.Logger.LogWarning($"Key '{key}' not found for any plugin.");
 				return default;
-			}
 		}
 
 		try
@@ -559,6 +556,7 @@ public sealed partial class Player
 		{
 			if (steamIds.Count == 0)
 				return;
+
 			try
 			{
 				using var connection = plugin.Database.CreateConnection();
@@ -578,9 +576,7 @@ public sealed partial class Player
 				{
 					foreach (var controller in playerList)
 					{
-						var player = Player.Find(controller);
-						if (player == null)
-							continue;
+						var player = Find(controller) ?? new Player(plugin, controller, true);
 
 						try
 						{

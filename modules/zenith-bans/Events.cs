@@ -24,13 +24,19 @@ namespace Zenith_Bans
 				CCSPlayerController? player = @event.Userid;
 				if (player?.IsValid == true && !player.IsBot && !player.IsHLTV)
 				{
+					ulong steamID = player.SteamID;
+					Task.Run(async () =>
+					{
+						await HandlePlayerDisconnectAsync(steamID);
+					});
+
 					AddDisconnectedPlayer(new DisconnectedPlayer
 					{
-						SteamId = player.SteamID,
+						SteamId = steamID,
 						PlayerName = player.PlayerName,
 						DisconnectedAt = DateTime.UtcNow
 					});
-					_playerCache.Remove(player.SteamID);
+					_playerCache.Remove(steamID);
 				}
 				return HookResult.Continue;
 			});

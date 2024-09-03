@@ -4,7 +4,6 @@ using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Utils;
-using Microsoft.Extensions.Logging;
 using ZenithAPI;
 using System.Reflection;
 using CounterStrikeSharp.API.Modules.Events;
@@ -13,6 +12,7 @@ using Menu.Enums;
 using MySqlConnector;
 using Dapper;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.Extensions.Logging;
 
 namespace Zenith_Stats;
 
@@ -25,7 +25,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.0";
+	public override string ModuleVersion => "1.0.2";
 
 	public KitsuneMenu Menu { get; private set; } = null!;
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
@@ -34,10 +34,10 @@ public class Plugin : BasePlugin
 	private IZenithEvents? _zenithEvents;
 	private EventManager? _eventManager;
 	private IModuleServices? _moduleServices;
-	private readonly Dictionary<ulong, PlayerStats> _playerStats = new Dictionary<ulong, PlayerStats>();
-	private readonly List<CCSPlayerController> playerSpawned = [];
+	private readonly Dictionary<ulong, PlayerStats> _playerStats = new();
+	private readonly HashSet<CCSPlayerController> playerSpawned = new();
 
-	private Dictionary<string, List<string>> _eventTargets = new Dictionary<string, List<string>>
+	private readonly Dictionary<string, List<string>> _eventTargets = new()
 	{
 		{ "EventPlayerDeath", new List<string> { "Userid", "Attacker", "Assister" } },
 		{ "EventGrenadeThrown", new List<string> { "Userid" } },
@@ -64,7 +64,6 @@ public class Plugin : BasePlugin
 		{
 			Logger.LogError($"Failed to initialize Zenith API: {ex.Message}");
 			Logger.LogInformation("Please check if Zenith is installed, configured and loaded correctly.");
-
 			Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(ModulePath)}");
 			return;
 		}
@@ -78,61 +77,12 @@ public class Plugin : BasePlugin
 		}
 
 		Menu = new KitsuneMenu(this);
-
 		_coreAccessor = _moduleServices.GetModuleConfigAccessor();
 
-		_moduleServices.RegisterModuleConfig("Config", "StatisticCommands", "List of commands that shows player statistics", new List<string> { "stats", "stat", "statistics" });
-		_moduleServices.RegisterModuleConfig("Config", "MapStatisticCommands", "List of commands that shows map statistics", new List<string> { "mapstats", "mapstat", "mapstatistics" });
-		_moduleServices.RegisterModuleConfig("Config", "WeaponStatisticCommands", "List of commands that shows weapon statistics", new List<string> { "weaponstats", "weaponstat", "weaponstatistics" });
-		_moduleServices.RegisterModuleConfig("Config", "WarmupStats", "Allow stats during warmup", false);
-		_moduleServices.RegisterModuleConfig("Config", "StatsForBots", "Allow stats for bots", false);
-		_moduleServices.RegisterModuleConfig("Config", "MinPlayers", "Minimum number of players required for stats", 4);
-		_moduleServices.RegisterModuleConfig("Config", "FFAMode", "Enable FFA mode", false);
-		_moduleServices.RegisterModuleConfig("Config", "EnableWeaponStats", "Enable weapon-based statistics", true);
-		_moduleServices.RegisterModuleConfig("Config", "EnableMapStats", "Enable map-based statistics", true);
-
-		_moduleServices.RegisterModuleStorage(new Dictionary<string, object?>
-		{
-			{ "Kills", 0 },
-			{ "FirstBlood", 0 },
-			{ "Deaths", 0 },
-			{ "Assists", 0 },
-			{ "Shoots", 0 },
-			{ "HitsTaken", 0 },
-			{ "HitsGiven", 0 },
-			{ "Headshots", 0 },
-			{ "HeadHits", 0 },
-			{ "ChestHits", 0 },
-			{ "StomachHits", 0 },
-			{ "LeftArmHits", 0 },
-			{ "RightArmHits", 0 },
-			{ "LeftLegHits", 0 },
-			{ "RightLegHits", 0 },
-			{ "NeckHits", 0 },
-			{ "UnusedHits", 0 },
-			{ "GearHits", 0 },
-			{ "SpecialHits", 0 },
-			{ "Grenades", 0 },
-			{ "MVP", 0 },
-			{ "RoundWin", 0 },
-			{ "RoundLose", 0 },
-			{ "GameWin", 0 },
-			{ "GameLose", 0 },
-			{ "RoundsOverall", 0 },
-			{ "RoundsCT", 0 },
-			{ "RoundsT", 0 },
-			{ "BombPlanted", 0 },
-			{ "BombDefused", 0 },
-			{ "HostageRescued", 0 },
-			{ "HostageKilled", 0 },
-			{ "NoScopeKill", 0 },
-			{ "PenetratedKill", 0 },
-			{ "ThruSmokeKill", 0 },
-			{ "FlashedKill", 0 },
-			{ "DominatedKill", 0 },
-			{ "RevengeKill", 0 },
-			{ "AssistFlash", 0 }
-		});
+		RegisterModuleConfigs();
+		RegisterModuleStorage();
+		RegisterModuleCommands();
+		RegisterModulePlaceholders();
 
 		_zenithEvents = _moduleServices.GetEventHandler();
 		if (_zenithEvents != null)
@@ -146,89 +96,65 @@ public class Plugin : BasePlugin
 			Logger.LogError("Failed to get Zenith event handler.");
 		}
 
-		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "StatisticCommands"), "Show the player statistics.", OnStatsCommand, CommandUsage.CLIENT_ONLY);
-		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "WeaponStatisticCommands"), "Show the player statistics for weapons.", OnWeaponStatsCommand, CommandUsage.CLIENT_ONLY);
-		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "MapStatisticCommands"), "Show the player statistics for maps.", OnMapStatsCommand, CommandUsage.CLIENT_ONLY);
-
-		_moduleServices.RegisterModulePlayerPlaceholder("kda", p => CalculateKDA(GetZenithPlayer(p)));
-		_moduleServices.RegisterModulePlayerPlaceholder("kpr", p => CalculateKPR(GetZenithPlayer(p)));
-		_moduleServices.RegisterModulePlayerPlaceholder("accuracy", p => CalculateAccuracy(GetZenithPlayer(p)));
-		_moduleServices.RegisterModulePlayerPlaceholder("kd", p => CalculateKD(GetZenithPlayer(p)));
-
 		Initialize_Events();
 		InitializeDatabaseTables();
 
-		RegisterListener<Listeners.OnMapStart>((mapName) =>
-		{
-			AddTimer(1.0f, () =>
-			{
-				GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
-
-				foreach (var player in GetValidPlayers())
-				{
-					var stats = new PlayerStats(player, this);
-					_playerStats[player.SteamID] = stats;
-				}
-			});
-		});
-
-		RegisterListener<Listeners.OnMapEnd>(() =>
-		{
-			foreach (var playerStats in _playerStats.Values)
-			{
-				Task.Run(async () =>
-				{
-					await playerStats.SaveWeaponStats();
-					await playerStats.SaveMapStats();
-					playerStats.ResetStats();
-				});
-			}
-
-			_playerStats.Clear();
-			playerSpawned.Clear();
-		});
-
-		RegisterEventHandler((EventRoundPrestart @event, GameEventInfo info) =>
-		{
-			playerSpawned.Clear();
-			return HookResult.Continue;
-		});
-
-		RegisterEventHandler((EventPlayerSpawn @event, GameEventInfo info) =>
-		{
-			CCSPlayerController? player = @event.Userid;
-			if (player == null || player.IsBot || player.IsHLTV)
-				return HookResult.Continue;
-
-			int reqiredPlayers = _coreAccessor.GetValue<int>("Config", "MinPlayers");
-			if (reqiredPlayers > Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).Count() && _playerStats.TryGetValue(player.SteamID, out var stats) && stats.SpawnMessageTimer == null)
-			{
-				_moduleServices.PrintForPlayer(player, Localizer["k4.stats.stats_disabled", reqiredPlayers]);
-				stats.SpawnMessageTimer = AddTimer(3.0f, () => { stats.SpawnMessageTimer = null; });
-			}
-
-			playerSpawned.Add(player);
-			return HookResult.Continue;
-		}, HookMode.Post);
+		RegisterListener<Listeners.OnMapStart>(OnMapStart);
+		RegisterListener<Listeners.OnMapEnd>(OnMapEnd);
+		RegisterEventHandler<EventRoundPrestart>(OnRoundPrestart);
+		RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn, HookMode.Post);
 
 		if (hotReload)
 			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
 
-		AddTimer(3.0f, () =>
-		{
-			_moduleServices.LoadAllOnlinePlayerData();
-			Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
-			{
-				var zenithPlayer = GetZenithPlayer(player);
-				if (zenithPlayer != null)
-				{
-					var stats = new PlayerStats(zenithPlayer, this);
-					_playerStats[player.SteamID] = stats;
-				}
-			});
-		});
+		AddTimer(3.0f, InitializePlayerStats);
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
+	}
+
+	private void RegisterModuleConfigs()
+	{
+		_moduleServices!.RegisterModuleConfig("Config", "StatisticCommands", "List of commands that shows player statistics", new List<string> { "stats", "stat", "statistics" });
+		_moduleServices.RegisterModuleConfig("Config", "MapStatisticCommands", "List of commands that shows map statistics", new List<string> { "mapstats", "mapstat", "mapstatistics" });
+		_moduleServices.RegisterModuleConfig("Config", "WeaponStatisticCommands", "List of commands that shows weapon statistics", new List<string> { "weaponstats", "weaponstat", "weaponstatistics" });
+		_moduleServices.RegisterModuleConfig("Config", "WarmupStats", "Allow stats during warmup", false);
+		_moduleServices.RegisterModuleConfig("Config", "StatsForBots", "Allow stats for bots", false);
+		_moduleServices.RegisterModuleConfig("Config", "MinPlayers", "Minimum number of players required for stats", 4);
+		_moduleServices.RegisterModuleConfig("Config", "FFAMode", "Enable FFA mode", false);
+		_moduleServices.RegisterModuleConfig("Config", "EnableWeaponStats", "Enable weapon-based statistics", true);
+		_moduleServices.RegisterModuleConfig("Config", "EnableMapStats", "Enable map-based statistics", true);
+	}
+
+	private void RegisterModuleStorage()
+	{
+		_moduleServices!.RegisterModuleStorage(new Dictionary<string, object?>
+		{
+			{ "Kills", 0 }, { "FirstBlood", 0 }, { "Deaths", 0 }, { "Assists", 0 },
+			{ "Shoots", 0 }, { "HitsTaken", 0 }, { "HitsGiven", 0 }, { "Headshots", 0 },
+			{ "HeadHits", 0 }, { "ChestHits", 0 }, { "StomachHits", 0 }, { "LeftArmHits", 0 },
+			{ "RightArmHits", 0 }, { "LeftLegHits", 0 }, { "RightLegHits", 0 }, { "NeckHits", 0 },
+			{ "UnusedHits", 0 }, { "GearHits", 0 }, { "SpecialHits", 0 }, { "Grenades", 0 },
+			{ "MVP", 0 }, { "RoundWin", 0 }, { "RoundLose", 0 }, { "GameWin", 0 },
+			{ "GameLose", 0 }, { "RoundsOverall", 0 }, { "RoundsCT", 0 }, { "RoundsT", 0 },
+			{ "BombPlanted", 0 }, { "BombDefused", 0 }, { "HostageRescued", 0 }, { "HostageKilled", 0 },
+			{ "NoScopeKill", 0 }, { "PenetratedKill", 0 }, { "ThruSmokeKill", 0 }, { "FlashedKill", 0 },
+			{ "DominatedKill", 0 }, { "RevengeKill", 0 }, { "AssistFlash", 0 }
+		});
+	}
+
+	private void RegisterModuleCommands()
+	{
+		_moduleServices!.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "StatisticCommands"), "Show the player statistics.", OnStatsCommand, CommandUsage.CLIENT_ONLY);
+		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "WeaponStatisticCommands"), "Show the player statistics for weapons.", OnWeaponStatsCommand, CommandUsage.CLIENT_ONLY);
+		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "MapStatisticCommands"), "Show the player statistics for maps.", OnMapStatsCommand, CommandUsage.CLIENT_ONLY);
+	}
+
+	private void RegisterModulePlaceholders()
+	{
+		_moduleServices!.RegisterModulePlayerPlaceholder("kda", p => CalculateKDA(GetZenithPlayer(p)));
+		_moduleServices.RegisterModulePlayerPlaceholder("kpr", p => CalculateKPR(GetZenithPlayer(p)));
+		_moduleServices.RegisterModulePlayerPlaceholder("accuracy", p => CalculateAccuracy(GetZenithPlayer(p)));
+		_moduleServices.RegisterModulePlayerPlaceholder("kd", p => CalculateKD(GetZenithPlayer(p)));
 	}
 
 	private void OnZenithCoreUnload(bool hotReload)
@@ -237,7 +163,7 @@ public class Plugin : BasePlugin
 		{
 			AddTimer(3.0f, () =>
 			{
-				try { File.SetLastWriteTime(Path.Combine(ModulePath), DateTime.Now); }
+				try { File.SetLastWriteTime(ModulePath, DateTime.Now); }
 				catch (Exception ex) { Logger.LogError($"Failed to update file: {ex.Message}"); }
 			});
 		}
@@ -245,19 +171,12 @@ public class Plugin : BasePlugin
 
 	public override void Unload(bool hotReload)
 	{
-		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
-		if (moduleServices == null)
-			return;
-
-		moduleServices.DisposeModule(this.GetType().Assembly);
+		_moduleServicesCapability?.Get()?.DisposeModule(this.GetType().Assembly);
 	}
 
 	private string CalculateKD(IPlayerServices? player)
 	{
-		if (player == null) return "N/A";
-		var stats = _playerStats.GetValueOrDefault(player.Controller.SteamID);
-		if (stats == null) return "N/A";
-
+		if (player == null || !_playerStats.TryGetValue(player.Controller.SteamID, out var stats)) return "N/A";
 		int kills = stats.GetGlobalStat("Kills");
 		int deaths = stats.GetGlobalStat("Deaths");
 		double kd = deaths == 0 ? kills : (double)kills / deaths;
@@ -266,10 +185,7 @@ public class Plugin : BasePlugin
 
 	private string CalculateKDA(IPlayerServices? player)
 	{
-		if (player == null) return "N/A";
-		var stats = _playerStats.GetValueOrDefault(player.Controller.SteamID);
-		if (stats == null) return "N/A";
-
+		if (player == null || !_playerStats.TryGetValue(player.Controller.SteamID, out var stats)) return "N/A";
 		int kills = stats.GetGlobalStat("Kills");
 		int deaths = stats.GetGlobalStat("Deaths");
 		int assists = stats.GetGlobalStat("Assists");
@@ -279,10 +195,7 @@ public class Plugin : BasePlugin
 
 	private string CalculateKPR(IPlayerServices? player)
 	{
-		if (player == null) return "N/A";
-		var stats = _playerStats.GetValueOrDefault(player.Controller.SteamID);
-		if (stats == null) return "N/A";
-
+		if (player == null || !_playerStats.TryGetValue(player.Controller.SteamID, out var stats)) return "N/A";
 		int kills = stats.GetGlobalStat("Kills");
 		int rounds = stats.GetGlobalStat("RoundsOverall");
 		double kpr = rounds == 0 ? kills : (double)kills / rounds;
@@ -291,23 +204,16 @@ public class Plugin : BasePlugin
 
 	private string CalculateAccuracy(IPlayerServices? player)
 	{
-		if (player == null) return "N/A";
-		var stats = _playerStats.GetValueOrDefault(player.Controller.SteamID);
-		if (stats == null) return "N/A";
-
+		if (player == null || !_playerStats.TryGetValue(player.Controller.SteamID, out var stats)) return "N/A";
 		int shoots = stats.GetGlobalStat("Shoots");
 		int hitsGiven = stats.GetGlobalStat("HitsGiven");
-		double accuracy = (shoots == 0) ? 0 : (double)hitsGiven / shoots * 100;
-		if (accuracy > 100) // ? This is just to prevent shotguns making them over 100%
-			accuracy = 100;
-
+		double accuracy = (shoots == 0) ? 0 : Math.Min((double)hitsGiven / shoots * 100, 100);
 		return accuracy.ToString("F2") + "%";
 	}
 
 	private async void InitializeDatabaseTables()
 	{
-		if (_moduleServices == null)
-			return;
+		if (_moduleServices == null) return;
 
 		string createWeaponStatsTable = $@"
 		CREATE TABLE IF NOT EXISTS `{_coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats` (
@@ -380,7 +286,6 @@ public class Plugin : BasePlugin
 			string connectionString = _moduleServices.GetConnectionString();
 			using var connection = new MySqlConnection(connectionString);
 			await connection.OpenAsync();
-
 			await connection.ExecuteAsync(createWeaponStatsTable);
 			await connection.ExecuteAsync(createMapStatsTable);
 		}
@@ -393,18 +298,16 @@ public class Plugin : BasePlugin
 	private void OnZenithPlayerLoaded(CCSPlayerController player)
 	{
 		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer is null) return;
-
-		var stats = new PlayerStats(zenithPlayer, this);
-		_playerStats[zenithPlayer.SteamID] = stats;
+		if (zenithPlayer != null)
+		{
+			_playerStats[zenithPlayer.SteamID] = new PlayerStats(zenithPlayer, this);
+		}
 	}
 
 	private async void OnZenithPlayerUnloaded(CCSPlayerController player)
 	{
 		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer is null) return;
-
-		if (_playerStats.TryGetValue(zenithPlayer.SteamID, out var stats))
+		if (zenithPlayer != null && _playerStats.TryGetValue(zenithPlayer.SteamID, out var stats))
 		{
 			try
 			{
@@ -426,251 +329,82 @@ public class Plugin : BasePlugin
 		catch { return null; }
 	}
 
-	private void OnStatsCommand(CCSPlayerController? player, CommandInfo command)
+	private void OnMapStart(string mapName)
 	{
-		if (player == null) return;
-
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer == null) return;
-
-		if (_playerStats.TryGetValue(player.SteamID, out var stats))
+		AddTimer(1.0f, () =>
 		{
-			List<MenuItem> items =
-			[
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {CalculateAccuracy(zenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kpr"]}:</font> {CalculateKPR(zenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kda"]}:</font> {CalculateKDA(zenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kd"]}:</font> {CalculateKD(zenithPlayer)}")),
-			];
-
-			var statNames = new[]
+			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
+			foreach (var player in GetValidPlayers())
 			{
-				"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
-				"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
-				"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
-				"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
-				"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
-				"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
-				"RevengeKill", "AssistFlash"
-			};
-
-			foreach (var statName in statNames)
-			{
-				int value = stats.GetGlobalStat(statName);
-				if (value != 0)
-				{
-					string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
-					items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{localizedName}:</font> {value:N0}")));
-				}
+				_playerStats[player.SteamID] = new PlayerStats(player, this);
 			}
-
-			if (items.Count == 0)
-			{
-				items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
-			}
-
-			Menu?.ShowScrollableMenu(player, Localizer["k4.stats.title"], items, (buttons, menu, selected) =>
-			{
-				// No selection handle as all items are just for display
-			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
-		}
-		else
-		{
-			zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
-		}
+		});
 	}
 
-	private void OnWeaponStatsCommand(CCSPlayerController? player, CommandInfo command)
+	private void OnMapEnd()
 	{
-		try
+		Task.Run(async () =>
 		{
-			if (player == null)
-				return;
-
-			var zenithPlayer = GetZenithPlayer(player);
-			if (zenithPlayer == null)
+			foreach (var playerStats in _playerStats.Values)
 			{
-				Logger.LogWarning($"Failed to get ZenithPlayer for {player.PlayerName}");
-				return;
+				await playerStats.SaveWeaponStats();
+				await playerStats.SaveMapStats();
+				playerStats.ResetStats();
 			}
-
-			if (!_coreAccessor.GetValue<bool>("Config", "EnableWeaponStats"))
-			{
-				zenithPlayer.Print(Localizer["k4.stats.weapon-disabled"]);
-				return;
-			}
-
-			if (!_playerStats.TryGetValue(player.SteamID, out var stats) || stats == null)
-			{
-				zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
-				return;
-			}
-
-			if (stats.WeaponStats == null)
-			{
-				zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
-				return;
-			}
-
-			List<MenuItem> items = new List<MenuItem>();
-			var defaultValues = new Dictionary<int, object>();
-			var weaponStatsMap = new Dictionary<int, string>();
-
-			int index = 0;
-			foreach (var weaponStat in stats.WeaponStats)
-			{
-				if (string.IsNullOrEmpty(weaponStat.Key))
-					continue;
-
-				string weaponName = weaponStat.Key.ToUpper();
-				items.Add(new MenuItem(MenuItemType.Button, new List<MenuValue> { new MenuValue(weaponName) }));
-				defaultValues[index] = weaponName;
-				weaponStatsMap[index] = weaponStat.Key;
-				index++;
-			}
-
-			if (items.Count == 0)
-			{
-				items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
-			}
-
-			Menu.ShowScrollableMenu(player, Localizer["k4.weaponstats.title"], items, (buttons, menu, selected) =>
-			{
-				if (selected == null) return;
-
-				switch (buttons)
-				{
-					case MenuButtons.Select:
-						if (weaponStatsMap.TryGetValue(menu.Option, out var weaponKey))
-						{
-							if (stats.WeaponStats.TryGetValue(weaponKey, out var weaponStat))
-							{
-								ShowWeaponDetails(player, weaponStat);
-							}
-						}
-						break;
-				}
-			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), 5, defaultValues, !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
-		}
-		catch (Exception ex)
-		{
-			Logger.LogError($"Error in OnWeaponStatsCommand: {ex.Message}\n{ex.StackTrace}");
-		}
+		});
+		_playerStats.Clear();
+		playerSpawned.Clear();
 	}
 
-	public IEnumerable<IPlayerServices> GetValidPlayers()
+	private HookResult OnRoundPrestart(EventRoundPrestart @event, GameEventInfo info)
 	{
+		playerSpawned.Clear();
+		return HookResult.Continue;
+	}
+
+	private HookResult OnPlayerSpawn(EventPlayerSpawn @event, GameEventInfo info)
+	{
+		CCSPlayerController? player = @event.Userid;
+		if (player == null || player.IsBot || player.IsHLTV)
+			return HookResult.Continue;
+
+		int requiredPlayers = _coreAccessor.GetValue<int>("Config", "MinPlayers");
+		if (requiredPlayers > Utilities.GetPlayers().Count(p => p.IsValid && !p.IsBot && !p.IsHLTV) &&
+			_playerStats.TryGetValue(player.SteamID, out var stats) &&
+			stats.SpawnMessageTimer == null)
+		{
+			_moduleServices!.PrintForPlayer(player, Localizer["k4.stats.stats_disabled", requiredPlayers]);
+			stats.SpawnMessageTimer = AddTimer(3.0f, () => { stats.SpawnMessageTimer = null; });
+		}
+
+		playerSpawned.Add(player);
+		return HookResult.Continue;
+	}
+
+	private void InitializePlayerStats()
+	{
+		_moduleServices!.LoadAllOnlinePlayerData();
 		foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
 		{
 			var zenithPlayer = GetZenithPlayer(player);
 			if (zenithPlayer != null)
 			{
-				yield return zenithPlayer;
+				_playerStats[player.SteamID] = new PlayerStats(zenithPlayer, this);
 			}
 		}
 	}
 
-	private void ShowWeaponDetails(CCSPlayerController player, WeaponStats weaponStat)
+	public IEnumerable<IPlayerServices> GetValidPlayers()
 	{
-		List<MenuItem> items = new List<MenuItem>
-		{
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kills"]}:</font> {weaponStat.Kills:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.shoots"]}:</font> {weaponStat.Shots:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.hitsgiven"]}:</font> {weaponStat.Hits:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {(weaponStat.Shots > 0 ? Math.Min((float)weaponStat.Hits / weaponStat.Shots * 100, 100) : 0):F2}%")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.headshots"]}:</font> {weaponStat.Headshots:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.chesthits"]}:</font> {weaponStat.ChestHits:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.stomachhits"]}:</font> {weaponStat.StomachHits:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.leftarmhits"]}:</font> {weaponStat.LeftArmHits:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.rightarmhits"]}:</font> {weaponStat.RightArmHits:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.leftleghits"]}:</font> {weaponStat.LeftLegHits:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.rightleghits"]}:</font> {weaponStat.RightLegHits:N0}")),
-			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.neckhits"]}:</font> {weaponStat.NeckHits:N0}"))
-		};
-
-		Menu?.ShowScrollableMenu(player, weaponStat.Weapon.ToUpper(), items, (buttons, menu, selected) => { }, true, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
-	}
-
-	private void OnMapStatsCommand(CCSPlayerController? player, CommandInfo command)
-	{
-		try
-		{
-			if (player == null)
-				return;
-
-			var zenithPlayer = GetZenithPlayer(player);
-			if (zenithPlayer == null)
-			{
-				Logger.LogWarning($"Failed to get ZenithPlayer for {player.PlayerName}");
-				return;
-			}
-
-			if (!_coreAccessor.GetValue<bool>("Config", "EnableMapStats"))
-			{
-				zenithPlayer.Print(Localizer["k4.stats.map-disabled"]);
-				return;
-			}
-
-			if (_playerStats.TryGetValue(player.SteamID, out var stats))
-			{
-				ShowMapStats(player, stats);
-			}
-			else
-				zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
-		}
-		catch (Exception ex)
-		{
-			Logger.LogError($"Error in OnMapStatsCommand: {ex.Message}\n{ex.StackTrace}");
-		}
-	}
-
-	private void ShowMapStats(CCSPlayerController player, PlayerStats playerStats)
-	{
-		try
-		{
-			List<MenuItem> items = new List<MenuItem>();
-
-			var statNames = new[]
-			{
-				"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
-				"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
-				"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
-				"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
-				"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
-				"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
-				"RevengeKill", "AssistFlash"
-			};
-
-			foreach (var statName in statNames)
-			{
-				int value = playerStats.GetMapStat(statName);
-				if (value != 0)
-				{
-					string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
-					items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{localizedName}:</font> {value:N0}")));
-				}
-			}
-
-			if (items.Count == 0)
-			{
-				items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
-			}
-
-			Menu?.ShowScrollableMenu(player, playerStats.CurrentMapStats.MapName.ToUpper(), items, (buttons, menu, selected) =>
-			{
-				// No selection handle as all items are just for display
-			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
-		}
-		catch (Exception ex)
-		{
-			Logger.LogError($"Error in ShowMapStats: {ex.Message}\n{ex.StackTrace}");
-		}
+		return Utilities.GetPlayers()
+			.Where(p => p.IsValid && !p.IsBot && !p.IsHLTV)
+			.Select(GetZenithPlayer)
+			.Where(p => p != null)!;
 	}
 
 	private void Initialize_Events()
 	{
 		_eventManager = new EventManager(this);
-
 		foreach (var eventEntry in _eventTargets)
 		{
 			RegisterMassEventHandler(eventEntry.Key);
@@ -686,11 +420,9 @@ public class Plugin : BasePlugin
 			if (eventType != null && typeof(GameEvent).IsAssignableFrom(eventType))
 			{
 				MethodInfo? baseRegisterMethod = typeof(BasePlugin).GetMethod(nameof(RegisterEventHandler), BindingFlags.Public | BindingFlags.Instance);
-
 				if (baseRegisterMethod != null)
 				{
 					MethodInfo registerMethod = baseRegisterMethod.MakeGenericMethod(eventType);
-
 					MethodInfo? methodInfo = typeof(EventManager).GetMethod(nameof(EventManager.OnEventHappens), BindingFlags.Public | BindingFlags.Instance)?.MakeGenericMethod(eventType);
 					if (methodInfo != null)
 					{
@@ -721,6 +453,202 @@ public class Plugin : BasePlugin
 		}
 	}
 
+	private void OnStatsCommand(CCSPlayerController? player, CommandInfo command)
+	{
+		if (player == null) return;
+
+		var zenithPlayer = GetZenithPlayer(player);
+		if (zenithPlayer == null) return;
+
+		if (_playerStats.TryGetValue(player.SteamID, out var stats))
+		{
+			List<MenuItem> items = new()
+			{
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {CalculateAccuracy(zenithPlayer)}")),
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kpr"]}:</font> {CalculateKPR(zenithPlayer)}")),
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kda"]}:</font> {CalculateKDA(zenithPlayer)}")),
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kd"]}:</font> {CalculateKD(zenithPlayer)}")),
+			};
+
+			var statNames = new[]
+			{
+				"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
+				"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
+				"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
+				"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
+				"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
+				"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
+				"RevengeKill", "AssistFlash"
+			};
+
+			foreach (var statName in statNames)
+			{
+				int value = stats.GetGlobalStat(statName);
+				if (value != 0)
+				{
+					string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
+					items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{localizedName}:</font> {value:N0}")));
+				}
+			}
+
+			if (items.Count == 4) // Only the initial 4 items
+			{
+				items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
+			}
+
+			Menu?.ShowScrollableMenu(player, Localizer["k4.stats.title"], items, (buttons, menu, selected) =>
+			{
+				// No selection handle as all items are just for display
+			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+		}
+		else
+		{
+			zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
+		}
+	}
+
+	private void OnWeaponStatsCommand(CCSPlayerController? player, CommandInfo command)
+	{
+		if (player == null) return;
+
+		var zenithPlayer = GetZenithPlayer(player);
+		if (zenithPlayer == null)
+		{
+			Logger.LogWarning($"Failed to get ZenithPlayer for {player.PlayerName}");
+			return;
+		}
+
+		if (!_coreAccessor.GetValue<bool>("Config", "EnableWeaponStats"))
+		{
+			zenithPlayer.Print(Localizer["k4.stats.weapon-disabled"]);
+			return;
+		}
+
+		if (!_playerStats.TryGetValue(player.SteamID, out var stats) || stats.WeaponStats.Count == 0)
+		{
+			zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
+			return;
+		}
+
+		List<MenuItem> items = new();
+		var defaultValues = new Dictionary<int, object>();
+		var weaponStatsMap = new Dictionary<int, string>();
+
+		int index = 0;
+		foreach (var weaponStat in stats.WeaponStats)
+		{
+			if (string.IsNullOrEmpty(weaponStat.Key)) continue;
+
+			string weaponName = weaponStat.Key.ToUpper();
+			items.Add(new MenuItem(MenuItemType.Button, new List<MenuValue> { new MenuValue(weaponName) }));
+			defaultValues[index] = weaponName;
+			weaponStatsMap[index] = weaponStat.Key;
+			index++;
+		}
+
+		if (items.Count == 0)
+		{
+			items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
+		}
+
+		Menu.ShowScrollableMenu(player, Localizer["k4.weaponstats.title"], items, (buttons, menu, selected) =>
+		{
+			if (selected == null) return;
+
+			if (buttons == MenuButtons.Select && weaponStatsMap.TryGetValue(menu.Option, out var weaponKey))
+			{
+				if (stats.WeaponStats.TryGetValue(weaponKey, out var weaponStat))
+				{
+					ShowWeaponDetails(player, weaponStat);
+				}
+			}
+		}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), 5, defaultValues, !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+	}
+
+	private void OnMapStatsCommand(CCSPlayerController? player, CommandInfo command)
+	{
+		if (player == null) return;
+
+		var zenithPlayer = GetZenithPlayer(player);
+		if (zenithPlayer == null)
+		{
+			Logger.LogWarning($"Failed to get ZenithPlayer for {player.PlayerName}");
+			return;
+		}
+
+		if (!_coreAccessor.GetValue<bool>("Config", "EnableMapStats"))
+		{
+			zenithPlayer.Print(Localizer["k4.stats.map-disabled"]);
+			return;
+		}
+
+		if (_playerStats.TryGetValue(player.SteamID, out var stats))
+		{
+			ShowMapStats(player, stats);
+		}
+		else
+		{
+			zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
+		}
+	}
+
+	private void ShowWeaponDetails(CCSPlayerController player, WeaponStats weaponStat)
+	{
+		List<MenuItem> items = new()
+		{
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kills"]}:</font> {weaponStat.Kills:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.shoots"]}:</font> {weaponStat.Shots:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.hitsgiven"]}:</font> {weaponStat.Hits:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {(weaponStat.Shots > 0 ? Math.Min((float)weaponStat.Hits / weaponStat.Shots * 100, 100) : 0):F2}%")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.headshots"]}:</font> {weaponStat.Headshots:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.chesthits"]}:</font> {weaponStat.ChestHits:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.stomachhits"]}:</font> {weaponStat.StomachHits:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.leftarmhits"]}:</font> {weaponStat.LeftArmHits:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.rightarmhits"]}:</font> {weaponStat.RightArmHits:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.leftleghits"]}:</font> {weaponStat.LeftLegHits:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.rightleghits"]}:</font> {weaponStat.RightLegHits:N0}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.neckhits"]}:</font> {weaponStat.NeckHits:N0}"))
+		};
+
+		Menu?.ShowScrollableMenu(player, weaponStat.Weapon.ToUpper(), items, (buttons, menu, selected) => { }, true, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+	}
+
+	private void ShowMapStats(CCSPlayerController player, PlayerStats playerStats)
+	{
+		List<MenuItem> items = new();
+
+		var statNames = new[]
+		{
+			"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
+			"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
+			"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
+			"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
+			"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
+			"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
+			"RevengeKill", "AssistFlash"
+		};
+
+		foreach (var statName in statNames)
+		{
+			int value = playerStats.GetMapStat(statName);
+			if (value != 0)
+			{
+				string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
+				items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{localizedName}:</font> {value:N0}")));
+			}
+		}
+
+		if (items.Count == 0)
+		{
+			items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
+		}
+
+		Menu?.ShowScrollableMenu(player, playerStats.CurrentMapStats.MapName.ToUpper(), items, (buttons, menu, selected) =>
+		{
+			// No selection handle as all items are just for display
+		}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+	}
+
 	public class EventManager
 	{
 		private readonly Plugin _plugin;
@@ -736,45 +664,43 @@ public class Plugin : BasePlugin
 			if (!IsStatsAllowed())
 				return HookResult.Continue;
 
-			string eventType = typeof(T).Name;
-
-			switch (eventType)
+			switch (eventObj)
 			{
-				case "EventPlayerDeath":
-					HandlePlayerDeath(eventObj as EventPlayerDeath);
+				case EventPlayerDeath e:
+					HandlePlayerDeath(e);
 					break;
-				case "EventGrenadeThrown":
-					HandleGrenadeThrown(eventObj as EventGrenadeThrown);
+				case EventGrenadeThrown e:
+					HandleGrenadeThrown(e);
 					break;
-				case "EventPlayerHurt":
-					HandlePlayerHurt(eventObj as EventPlayerHurt);
+				case EventPlayerHurt e:
+					HandlePlayerHurt(e);
 					break;
-				case "EventRoundStart":
+				case EventRoundStart:
 					FirstBlood = false;
 					break;
-				case "EventBombPlanted":
-					HandleBombPlanted(eventObj as EventBombPlanted);
+				case EventBombPlanted e:
+					HandleBombPlanted(e);
 					break;
-				case "EventHostageRescued":
-					HandleHostageRescued(eventObj as EventHostageRescued);
+				case EventHostageRescued e:
+					HandleHostageRescued(e);
 					break;
-				case "EventHostageKilled":
-					HandleHostageKilled(eventObj as EventHostageKilled);
+				case EventHostageKilled e:
+					HandleHostageKilled(e);
 					break;
-				case "EventBombDefused":
-					HandleBombDefused(eventObj as EventBombDefused);
+				case EventBombDefused e:
+					HandleBombDefused(e);
 					break;
-				case "EventRoundEnd":
-					HandleRoundEnd(eventObj as EventRoundEnd);
+				case EventRoundEnd e:
+					HandleRoundEnd(e);
 					break;
-				case "EventWeaponFire":
-					HandleWeaponFire(eventObj as EventWeaponFire);
+				case EventWeaponFire e:
+					HandleWeaponFire(e);
 					break;
-				case "EventRoundMvp":
-					HandleRoundMvp(eventObj as EventRoundMvp);
+				case EventRoundMvp e:
+					HandleRoundMvp(e);
 					break;
-				case "EventCsWinPanelMatch":
-					HandleCsWinPanelMatch(eventObj as EventCsWinPanelMatch);
+				case EventCsWinPanelMatch e:
+					HandleCsWinPanelMatch(e);
 					break;
 			}
 
@@ -783,39 +709,32 @@ public class Plugin : BasePlugin
 
 		private bool IsStatsAllowed()
 		{
-			int notBots = Utilities.GetPlayers().Count(player => !player.IsBot && !player.IsHLTV);
+			int notBots = _plugin.GetValidPlayers().Count();
 			bool warmupStats = _plugin._coreAccessor.GetValue<bool>("Config", "WarmupStats");
 			int minPlayers = _plugin._coreAccessor.GetValue<int>("Config", "MinPlayers");
 
 			return _plugin.GameRules != null && (!_plugin.GameRules.WarmupPeriod || warmupStats) && (minPlayers <= notBots);
 		}
 
-		private void HandlePlayerDeath(EventPlayerDeath? @event)
+		private void HandlePlayerDeath(EventPlayerDeath @event)
 		{
-			if (@event == null)
-				return;
-
 			bool statsForBots = _plugin._coreAccessor.GetValue<bool>("Config", "StatsForBots");
 
 			var victim = _plugin.GetZenithPlayer(@event.Userid);
 			var attacker = _plugin.GetZenithPlayer(@event.Attacker);
 			var assister = _plugin.GetZenithPlayer(@event.Assister);
 
-			bool isVictimBot = victim == null;
-			bool isAttackerBot = attacker == null;
-			bool isAssisterBot = assister == null;
-
-			if (!isVictimBot && _plugin._playerStats.TryGetValue(@event.Userid!.SteamID, out var victimStats))
+			if (victim != null && _plugin._playerStats.TryGetValue(victim.Controller.SteamID, out var victimStats))
 			{
-				if (statsForBots || !isAttackerBot)
+				if (statsForBots || attacker != null)
 				{
 					victimStats.IncrementStat("Deaths");
 				}
 			}
 
-			if (!isAttackerBot && attacker != victim && _plugin._playerStats.TryGetValue(@event.Attacker!.SteamID, out var attackerStats))
+			if (attacker != null && attacker != victim && _plugin._playerStats.TryGetValue(attacker.Controller.SteamID, out var attackerStats))
 			{
-				if (statsForBots || !isVictimBot)
+				if (statsForBots || victim != null)
 				{
 					attackerStats.IncrementStat("Kills");
 					if (!FirstBlood)
@@ -835,9 +754,9 @@ public class Plugin : BasePlugin
 				}
 			}
 
-			if (!isAssisterBot && _plugin._playerStats.TryGetValue(@event.Assister!.SteamID, out var assisterStats))
+			if (assister != null && _plugin._playerStats.TryGetValue(assister.Controller.SteamID, out var assisterStats))
 			{
-				if (statsForBots || (!isVictimBot && !isAttackerBot))
+				if (statsForBots || (victim != null && attacker != null))
 				{
 					assisterStats.IncrementStat("Assists");
 					if (@event.Assistedflash) assisterStats.IncrementStat("AssistFlash");
@@ -845,10 +764,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleGrenadeThrown(EventGrenadeThrown? @event)
+		private void HandleGrenadeThrown(EventGrenadeThrown @event)
 		{
-			if (@event == null) return;
-
 			var player = _plugin.GetZenithPlayer(@event.Userid);
 			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
 			{
@@ -856,10 +773,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandlePlayerHurt(EventPlayerHurt? @event)
+		private void HandlePlayerHurt(EventPlayerHurt @event)
 		{
-			if (@event == null) return;
-
 			var victim = _plugin.GetZenithPlayer(@event.Userid);
 			var attacker = _plugin.GetZenithPlayer(@event.Attacker);
 
@@ -874,10 +789,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleBombPlanted(EventBombPlanted? @event)
+		private void HandleBombPlanted(EventBombPlanted @event)
 		{
-			if (@event == null) return;
-
 			var player = _plugin.GetZenithPlayer(@event.Userid);
 			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
 			{
@@ -885,10 +798,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleHostageRescued(EventHostageRescued? @event)
+		private void HandleHostageRescued(EventHostageRescued @event)
 		{
-			if (@event == null) return;
-
 			var player = _plugin.GetZenithPlayer(@event.Userid);
 			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
 			{
@@ -896,10 +807,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleHostageKilled(EventHostageKilled? @event)
+		private void HandleHostageKilled(EventHostageKilled @event)
 		{
-			if (@event == null) return;
-
 			var player = _plugin.GetZenithPlayer(@event.Userid);
 			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
 			{
@@ -907,10 +816,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleBombDefused(EventBombDefused? @event)
+		private void HandleBombDefused(EventBombDefused @event)
 		{
-			if (@event == null) return;
-
 			var player = _plugin.GetZenithPlayer(@event.Userid);
 			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
 			{
@@ -918,10 +825,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleRoundEnd(EventRoundEnd? @event)
+		private void HandleRoundEnd(EventRoundEnd @event)
 		{
-			if (@event == null) return;
-
 			foreach (var playerStats in _plugin._playerStats.Values)
 			{
 				if (_plugin.playerSpawned.Contains(playerStats.ZenithPlayer.Controller))
@@ -945,10 +850,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleWeaponFire(EventWeaponFire? @event)
+		private void HandleWeaponFire(EventWeaponFire @event)
 		{
-			if (@event == null) return;
-
 			var player = _plugin.GetZenithPlayer(@event.Userid);
 			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
 			{
@@ -959,10 +862,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleRoundMvp(EventRoundMvp? @event)
+		private void HandleRoundMvp(EventRoundMvp @event)
 		{
-			if (@event == null) return;
-
 			var player = _plugin.GetZenithPlayer(@event.Userid);
 			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
 			{
@@ -970,10 +871,8 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleCsWinPanelMatch(EventCsWinPanelMatch? @event)
+		private void HandleCsWinPanelMatch(EventCsWinPanelMatch @event)
 		{
-			if (@event == null) return;
-
 			if (!IsStatsAllowed())
 				return;
 
@@ -995,15 +894,9 @@ public class Plugin : BasePlugin
 			}
 			else
 			{
-				int ctScore = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager")
-					.Where(team => team.Teamname == "CT")
-					.Select(team => team.Score)
-					.FirstOrDefault();
-
-				int tScore = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager")
-					.Where(team => team.Teamname == "TERRORIST")
-					.Select(team => team.Score)
-					.FirstOrDefault();
+				var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager").ToList();
+				int ctScore = teams.FirstOrDefault(t => t.Teamname == "CT")?.Score ?? 0;
+				int tScore = teams.FirstOrDefault(t => t.Teamname == "TERRORIST")?.Score ?? 0;
 
 				CsTeam winnerTeam = ctScore > tScore ? CsTeam.CounterTerrorist : tScore > ctScore ? CsTeam.Terrorist : CsTeam.None;
 
@@ -1011,14 +904,7 @@ public class Plugin : BasePlugin
 				{
 					foreach (var player in players.Where(p => p.ZenithPlayer.Controller.Team > CsTeam.Spectator))
 					{
-						if (player.ZenithPlayer.Controller.Team == winnerTeam)
-						{
-							player.IncrementStat("GameWin");
-						}
-						else
-						{
-							player.IncrementStat("GameLose");
-						}
+						player.IncrementStat(player.ZenithPlayer.Controller.Team == winnerTeam ? "GameWin" : "GameLose");
 					}
 				}
 			}
@@ -1032,11 +918,11 @@ public class Plugin : BasePlugin
 		public MapStats CurrentMapStats { get; private set; }
 		public CounterStrikeSharp.API.Modules.Timers.Timer? SpawnMessageTimer = null;
 
-		private readonly Dictionary<string, DateTime> _lastShotTime = [];
+		private readonly Dictionary<string, DateTime> _lastShotTime = new();
 		private const double HIT_COOLDOWN = 0.1;
 
-		private string _steamId;
-		private string _currentMapName;
+		private readonly string _steamId;
+		private readonly string _currentMapName;
 
 		public PlayerStats(IPlayerServices player, Plugin plugin)
 		{
@@ -1066,9 +952,9 @@ public class Plugin : BasePlugin
 			await connection.OpenAsync();
 
 			string query = $@"
-				SELECT `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`
-				FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats`
-				WHERE `steam_id` = @SteamId";
+			SELECT `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`
+			FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats`
+			WHERE `steam_id` = @SteamId";
 
 			try
 			{
@@ -1110,16 +996,12 @@ public class Plugin : BasePlugin
 			await connection.OpenAsync();
 
 			string query = $@"
-				SELECT * FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats`
-				WHERE `steam_id` = @SteamId AND `map_name` = @MapName";
+			SELECT * FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats`
+			WHERE `steam_id` = @SteamId AND `map_name` = @MapName";
 
 			try
 			{
-				var result = await connection.QueryFirstOrDefaultAsync<dynamic>(query, new
-				{
-					SteamId = _steamId,
-					MapName = _currentMapName
-				});
+				var result = await connection.QueryFirstOrDefaultAsync<dynamic>(query, new { SteamId = _steamId, MapName = _currentMapName });
 
 				if (result != null)
 				{
@@ -1177,17 +1059,11 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		public Dictionary<string, WeaponStats> WeaponStats { get; private set; } = [];
+		public Dictionary<string, WeaponStats> WeaponStats { get; private set; } = new();
 
-		public int GetGlobalStat(string statName)
-		{
-			return ZenithPlayer.GetStorage<int>(statName);
-		}
+		public int GetGlobalStat(string statName) => ZenithPlayer.GetStorage<int>(statName);
 
-		public void SetGlobalStat(string statName, int value)
-		{
-			ZenithPlayer.SetStorage(statName, value);
-		}
+		public void SetGlobalStat(string statName, int value) => ZenithPlayer.SetStorage(statName, value);
 
 		public int GetMapStat(string statName)
 		{
@@ -1198,10 +1074,7 @@ public class Plugin : BasePlugin
 		public void SetMapStat(string statName, int value)
 		{
 			var property = typeof(MapStats).GetProperty(statName);
-			if (property != null)
-			{
-				property.SetValue(CurrentMapStats, value);
-			}
+			property?.SetValue(CurrentMapStats, value);
 		}
 
 		public void IncrementStat(string statName)
@@ -1212,21 +1085,21 @@ public class Plugin : BasePlugin
 
 		public void AddWeaponKill(EventPlayerDeath @event)
 		{
-			string weapon = @event.Weapon;
+			string weapon = NormalizeWeaponName(@event.Weapon);
 
-			if (weapon.Contains("knife") || weapon.Contains("bayonet"))
-				weapon = "knife";
-
-			if (new List<string> { "world" }.Contains(weapon))
+			if (weapon == "world")
 				return;
 
-			if (!WeaponStats.ContainsKey(weapon))
-				WeaponStats[weapon] = new WeaponStats { Weapon = weapon };
+			if (!WeaponStats.TryGetValue(weapon, out var weaponStat))
+			{
+				weaponStat = new WeaponStats { Weapon = weapon };
+				WeaponStats[weapon] = weaponStat;
+			}
 
-			WeaponStats[weapon].Kills++;
+			weaponStat.Kills++;
 
 			if (@event.Headshot)
-				WeaponStats[weapon].Headshots++;
+				weaponStat.Headshots++;
 		}
 
 		public void AddWeaponShot(string weapon)
@@ -1236,11 +1109,12 @@ public class Plugin : BasePlugin
 			if (weapon == "world")
 				return;
 
-			if (!WeaponStats.ContainsKey(weapon))
+			if (!WeaponStats.TryGetValue(weapon, out var weaponStat))
 			{
-				WeaponStats[weapon] = new WeaponStats { Weapon = weapon };
+				weaponStat = new WeaponStats { Weapon = weapon };
+				WeaponStats[weapon] = weaponStat;
 			}
-			WeaponStats[weapon].Shots++;
+			weaponStat.Shots++;
 			IncrementStat("Shoots");
 		}
 
@@ -1251,52 +1125,53 @@ public class Plugin : BasePlugin
 			if (weapon == "world")
 				return;
 
-			if (!WeaponStats.ContainsKey(weapon))
+			if (!WeaponStats.TryGetValue(weapon, out var weaponStat))
 			{
-				WeaponStats[weapon] = new WeaponStats { Weapon = weapon };
+				weaponStat = new WeaponStats { Weapon = weapon };
+				WeaponStats[weapon] = weaponStat;
 			}
 
-			if (!_lastShotTime.TryGetValue(weapon, out DateTime value) || (DateTime.Now - value).TotalSeconds >= HIT_COOLDOWN)
+			if (!_lastShotTime.TryGetValue(weapon, out DateTime lastShot) || (DateTime.Now - lastShot).TotalSeconds >= HIT_COOLDOWN)
 			{
-				WeaponStats[weapon].Hits++;
+				weaponStat.Hits++;
 				IncrementStat("HitsGiven");
 
 				switch ((HitGroup_t)hitgroup)
 				{
 					case HitGroup_t.HITGROUP_HEAD:
-						WeaponStats[weapon].HeadHits++;
+						weaponStat.HeadHits++;
 						IncrementStat("HeadHits");
 						break;
 					case HitGroup_t.HITGROUP_CHEST:
-						WeaponStats[weapon].ChestHits++;
+						weaponStat.ChestHits++;
 						IncrementStat("ChestHits");
 						break;
 					case HitGroup_t.HITGROUP_STOMACH:
-						WeaponStats[weapon].StomachHits++;
+						weaponStat.StomachHits++;
 						IncrementStat("StomachHits");
 						break;
 					case HitGroup_t.HITGROUP_LEFTARM:
-						WeaponStats[weapon].LeftArmHits++;
+						weaponStat.LeftArmHits++;
 						IncrementStat("LeftArmHits");
 						break;
 					case HitGroup_t.HITGROUP_RIGHTARM:
-						WeaponStats[weapon].RightArmHits++;
+						weaponStat.RightArmHits++;
 						IncrementStat("RightArmHits");
 						break;
 					case HitGroup_t.HITGROUP_LEFTLEG:
-						WeaponStats[weapon].LeftLegHits++;
+						weaponStat.LeftLegHits++;
 						IncrementStat("LeftLegHits");
 						break;
 					case HitGroup_t.HITGROUP_RIGHTLEG:
-						WeaponStats[weapon].RightLegHits++;
+						weaponStat.RightLegHits++;
 						IncrementStat("RightLegHits");
 						break;
 					case HitGroup_t.HITGROUP_NECK:
-						WeaponStats[weapon].NeckHits++;
+						weaponStat.NeckHits++;
 						IncrementStat("NeckHits");
 						break;
 					case HitGroup_t.HITGROUP_GEAR:
-						WeaponStats[weapon].GearHits++;
+						weaponStat.GearHits++;
 						IncrementStat("GearHits");
 						break;
 				}
@@ -1312,24 +1187,20 @@ public class Plugin : BasePlugin
 			if (weapon.Contains("knife") || weapon.Contains("bayonet"))
 				return "knife";
 
-			// ? From some event for usp returned hkp2000 and m4a1s as m4a1
-			if (new List<string> { "m4a1", "hkp2000", "usp_silencer", "weapon_m4a1_silencer", "weapon_mp7", "weapon_mp5sd", "deagle", "revolver" }.Contains(weapon))
+			if (new[] { "m4a1", "hkp2000", "usp_silencer", "weapon_m4a1_silencer", "weapon_mp7", "weapon_mp5sd", "deagle", "revolver" }.Contains(weapon))
 			{
 				var activeWeapon = ZenithPlayer.Controller.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value;
-				if (activeWeapon?.AttributeManager.Item.ItemDefinitionIndex == 60)
-					return "m4a1-s";
-
-				if (activeWeapon?.AttributeManager.Item.ItemDefinitionIndex == 61)
-					return "usp-s";
-
-				if (activeWeapon?.AttributeManager.Item.ItemDefinitionIndex == 23)
-					return "mp5-sd";
-
-				if (activeWeapon?.AttributeManager.Item.ItemDefinitionIndex == 64)
-					return "revolver";
-
-				if (activeWeapon?.AttributeManager.Item.ItemDefinitionIndex == 63)
-					return "cz75-auto";
+				if (activeWeapon != null)
+				{
+					switch (activeWeapon.AttributeManager.Item.ItemDefinitionIndex)
+					{
+						case 60: return "m4a1-s";
+						case 61: return "usp-s";
+						case 23: return "mp5-sd";
+						case 64: return "revolver";
+						case 63: return "cz75-auto";
+					}
+				}
 			}
 
 			return weapon;
@@ -1337,37 +1208,27 @@ public class Plugin : BasePlugin
 
 		public async Task SaveWeaponStats()
 		{
-			if (!_plugin._coreAccessor.GetValue<bool>("Config", "EnableWeaponStats"))
-				return;
-
-			if (_plugin._moduleServices == null)
+			if (!_plugin._coreAccessor.GetValue<bool>("Config", "EnableWeaponStats") || _plugin._moduleServices == null)
 				return;
 
 			try
 			{
-				string connectionString = _plugin._moduleServices?.GetConnectionString()!;
+				string connectionString = _plugin._moduleServices.GetConnectionString();
 				using var connection = new MySqlConnection(connectionString);
 				await connection.OpenAsync();
 
+				string query = $@"
+			INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats`
+			(`steam_id`, `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`)
+			VALUES (@SteamId, @Weapon, @Kills, @Shots, @Hits, @Headshots, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits, @NeckHits, @GearHits)
+			ON DUPLICATE KEY UPDATE
+				`kills` = @Kills, `shots` = @Shots, `hits` = @Hits, `headshots` = @Headshots,
+				`chest_hits` = @ChestHits, `stomach_hits` = @StomachHits, `left_arm_hits` = @LeftArmHits,
+				`right_arm_hits` = @RightArmHits, `left_leg_hits` = @LeftLegHits, `right_leg_hits` = @RightLegHits,
+				`neck_hits` = @NeckHits, `gear_hits` = @GearHits";
+
 				foreach (var weaponStat in WeaponStats.Values)
 				{
-					string query = $@"
-					INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats` (`steam_id`, `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`)
-					VALUES (@SteamId, @Weapon, @Kills, @Shots, @Hits, @Headshots, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits, @NeckHits, @GearHits)
-					ON DUPLICATE KEY UPDATE
-						`kills` = @Kills,
-						`shots` = @Shots,
-						`hits` = @Hits,
-						`headshots` = @Headshots,
-						`chest_hits` = @ChestHits,
-						`stomach_hits` = @StomachHits,
-						`left_arm_hits` = @LeftArmHits,
-						`right_arm_hits` = @RightArmHits,
-						`left_leg_hits` = @LeftLegHits,
-						`right_leg_hits` = @RightLegHits,
-						`neck_hits` = @NeckHits,
-						`gear_hits` = @GearHits";
-
 					await connection.ExecuteAsync(query, new
 					{
 						SteamId = _steamId,
@@ -1397,111 +1258,81 @@ public class Plugin : BasePlugin
 
 		public async Task SaveMapStats()
 		{
-			if (!_plugin._coreAccessor.GetValue<bool>("Config", "EnableMapStats"))
-				return;
-
-			if (_plugin._moduleServices == null)
+			if (!_plugin._coreAccessor.GetValue<bool>("Config", "EnableMapStats") || _plugin._moduleServices == null)
 				return;
 
 			try
 			{
-				string connectionString = _plugin._moduleServices?.GetConnectionString()!;
+				string connectionString = _plugin._moduleServices.GetConnectionString();
 				using var connection = new MySqlConnection(connectionString);
 				await connection.OpenAsync();
 
 				string query = $@"
-				INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats` (
-					`steam_id`, `map_name`, `kills`, `first_blood`, `deaths`, `assists`, `shoots`, `hits_taken`, `hits_given`,
-					`headshots`, `head_hits`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`,
-					`neck_hits`, `gear_hits`, `grenades`, `mvp`, `round_win`, `round_lose`, `game_win`, `game_lose`,
-					`rounds_overall`, `rounds_ct`, `rounds_t`, `bomb_planted`, `bomb_defused`, `hostage_rescued`, `hostage_killed`, `no_scope_kill`,
-					`penetrated_kill`, `thru_smoke_kill`, `flashed_kill`, `dominated_kill`, `revenge_kill`, `assist_flash`
-				) VALUES (
-					@SteamId, @MapName, @Kills, @FirstBlood, @Deaths, @Assists, @Shoots, @HitsTaken, @HitsGiven,
-					@Headshots, @HeadHits, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits,
-					@NeckHits, @GearHits, @Grenades, @MVP, @RoundWin, @RoundLose, @GameWin, @GameLose,
-					@RoundsOverall, @RoundsCT, @RoundsT, @BombPlanted, @BombDefused, @HostageRescued, @HostageKilled, @NoScopeKill,
-					@PenetratedKill, @ThruSmokeKill, @FlashedKill, @DominatedKill, @RevengeKill, @AssistFlash
-				) ON DUPLICATE KEY UPDATE
-					`kills` = @Kills,
-					`first_blood` = @FirstBlood,
-					`deaths` = @Deaths,
-					`assists` = @Assists,
-					`shoots` = @Shoots,
-					`hits_taken` = @HitsTaken,
-					`hits_given` = @HitsGiven,
-					`headshots` = @Headshots,
-					`head_hits` = @HeadHits,
-					`chest_hits` = @ChestHits,
-					`stomach_hits` = @StomachHits,
-					`left_arm_hits` = @LeftArmHits,
-					`right_arm_hits` = @RightArmHits,
-					`left_leg_hits` = @LeftLegHits,
-					`right_leg_hits` = @RightLegHits,
-					`neck_hits` = @NeckHits,
-					`gear_hits` = @GearHits,
-					`grenades` = @Grenades,
-					`mvp` = @MVP,
-					`round_win` = @RoundWin,
-					`round_lose` = @RoundLose,
-					`game_win` = @GameWin,
-					`game_lose` = @GameLose,
-					`rounds_overall` = @RoundsOverall,
-					`rounds_ct` = @RoundsCT,
-					`rounds_t` = @RoundsT,
-					`bomb_planted` = @BombPlanted,
-					`bomb_defused` = @BombDefused,
-					`hostage_rescued` = @HostageRescued,
-					`hostage_killed` = @HostageKilled,
-					`no_scope_kill` = @NoScopeKill,
-					`penetrated_kill` = @PenetratedKill,
-					`thru_smoke_kill` = @ThruSmokeKill,
-					`flashed_kill` = @FlashedKill,
-					`dominated_kill` = @DominatedKill,
-					`revenge_kill` = @RevengeKill,
-					`assist_flash` = @AssistFlash";
+			INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats`
+			(`steam_id`, `map_name`, `kills`, `first_blood`, `deaths`, `assists`, `shoots`, `hits_taken`, `hits_given`,
+			`headshots`, `head_hits`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`,
+			`neck_hits`, `gear_hits`, `grenades`, `mvp`, `round_win`, `round_lose`, `game_win`, `game_lose`,
+			`rounds_overall`, `rounds_ct`, `rounds_t`, `bomb_planted`, `bomb_defused`, `hostage_rescued`, `hostage_killed`, `no_scope_kill`,
+			`penetrated_kill`, `thru_smoke_kill`, `flashed_kill`, `dominated_kill`, `revenge_kill`, `assist_flash`)
+			VALUES (@SteamId, @MapName, @Kills, @FirstBlood, @Deaths, @Assists, @Shoots, @HitsTaken, @HitsGiven,
+			@Headshots, @HeadHits, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits,
+			@NeckHits, @GearHits, @Grenades, @MVP, @RoundWin, @RoundLose, @GameWin, @GameLose,
+			@RoundsOverall, @RoundsCT, @RoundsT, @BombPlanted, @BombDefused, @HostageRescued, @HostageKilled, @NoScopeKill,
+			@PenetratedKill, @ThruSmokeKill, @FlashedKill, @DominatedKill, @RevengeKill, @AssistFlash)
+			ON DUPLICATE KEY UPDATE
+			`kills` = @Kills, `first_blood` = @FirstBlood, `deaths` = @Deaths, `assists` = @Assists,
+			`shoots` = @Shoots, `hits_taken` = @HitsTaken, `hits_given` = @HitsGiven, `headshots` = @Headshots,
+			`head_hits` = @HeadHits, `chest_hits` = @ChestHits, `stomach_hits` = @StomachHits, `left_arm_hits` = @LeftArmHits,
+			`right_arm_hits` = @RightArmHits, `left_leg_hits` = @LeftLegHits, `right_leg_hits` = @RightLegHits,
+			`neck_hits` = @NeckHits, `gear_hits` = @GearHits, `grenades` = @Grenades, `mvp` = @MVP,
+			`round_win` = @RoundWin, `round_lose` = @RoundLose, `game_win` = @GameWin, `game_lose` = @GameLose,
+			`rounds_overall` = @RoundsOverall, `rounds_ct` = @RoundsCT, `rounds_t` = @RoundsT,
+			`bomb_planted` = @BombPlanted, `bomb_defused` = @BombDefused, `hostage_rescued` = @HostageRescued,
+			`hostage_killed` = @HostageKilled, `no_scope_kill` = @NoScopeKill, `penetrated_kill` = @PenetratedKill,
+			`thru_smoke_kill` = @ThruSmokeKill, `flashed_kill` = @FlashedKill, `dominated_kill` = @DominatedKill,
+			`revenge_kill` = @RevengeKill, `assist_flash` = @AssistFlash";
 
 				await connection.ExecuteAsync(query, new
 				{
 					SteamId = _steamId,
 					MapName = _currentMapName,
-					Kills = GetMapStat("Kills"),
-					FirstBlood = GetMapStat("FirstBlood"),
-					Deaths = GetMapStat("Deaths"),
-					Assists = GetMapStat("Assists"),
-					Shoots = GetMapStat("Shoots"),
-					HitsTaken = GetMapStat("HitsTaken"),
-					HitsGiven = GetMapStat("HitsGiven"),
-					Headshots = GetMapStat("Headshots"),
-					HeadHits = GetMapStat("HeadHits"),
-					ChestHits = GetMapStat("ChestHits"),
-					StomachHits = GetMapStat("StomachHits"),
-					LeftArmHits = GetMapStat("LeftArmHits"),
-					RightArmHits = GetMapStat("RightArmHits"),
-					LeftLegHits = GetMapStat("LeftLegHits"),
-					RightLegHits = GetMapStat("RightLegHits"),
-					NeckHits = GetMapStat("NeckHits"),
-					GearHits = GetMapStat("GearHits"),
-					Grenades = GetMapStat("Grenades"),
-					MVP = GetMapStat("MVP"),
-					RoundWin = GetMapStat("RoundWin"),
-					RoundLose = GetMapStat("RoundLose"),
-					GameWin = GetMapStat("GameWin"),
-					GameLose = GetMapStat("GameLose"),
-					RoundsOverall = GetMapStat("RoundsOverall"),
-					RoundsCT = GetMapStat("RoundsCT"),
-					RoundsT = GetMapStat("RoundsT"),
-					BombPlanted = GetMapStat("BombPlanted"),
-					BombDefused = GetMapStat("BombDefused"),
-					HostageRescued = GetMapStat("HostageRescued"),
-					HostageKilled = GetMapStat("HostageKilled"),
-					NoScopeKill = GetMapStat("NoScopeKill"),
-					PenetratedKill = GetMapStat("PenetratedKill"),
-					ThruSmokeKill = GetMapStat("ThruSmokeKill"),
-					FlashedKill = GetMapStat("FlashedKill"),
-					DominatedKill = GetMapStat("DominatedKill"),
-					RevengeKill = GetMapStat("RevengeKill"),
-					AssistFlash = GetMapStat("AssistFlash")
+					CurrentMapStats.Kills,
+					CurrentMapStats.FirstBlood,
+					CurrentMapStats.Deaths,
+					CurrentMapStats.Assists,
+					CurrentMapStats.Shoots,
+					CurrentMapStats.HitsTaken,
+					CurrentMapStats.HitsGiven,
+					CurrentMapStats.Headshots,
+					CurrentMapStats.HeadHits,
+					CurrentMapStats.ChestHits,
+					CurrentMapStats.StomachHits,
+					CurrentMapStats.LeftArmHits,
+					CurrentMapStats.RightArmHits,
+					CurrentMapStats.LeftLegHits,
+					CurrentMapStats.RightLegHits,
+					CurrentMapStats.NeckHits,
+					CurrentMapStats.GearHits,
+					CurrentMapStats.Grenades,
+					CurrentMapStats.MVP,
+					CurrentMapStats.RoundWin,
+					CurrentMapStats.RoundLose,
+					CurrentMapStats.GameWin,
+					CurrentMapStats.GameLose,
+					CurrentMapStats.RoundsOverall,
+					CurrentMapStats.RoundsCT,
+					CurrentMapStats.RoundsT,
+					CurrentMapStats.BombPlanted,
+					CurrentMapStats.BombDefused,
+					CurrentMapStats.HostageRescued,
+					CurrentMapStats.HostageKilled,
+					CurrentMapStats.NoScopeKill,
+					CurrentMapStats.PenetratedKill,
+					CurrentMapStats.ThruSmokeKill,
+					CurrentMapStats.FlashedKill,
+					CurrentMapStats.DominatedKill,
+					CurrentMapStats.RevengeKill,
+					CurrentMapStats.AssistFlash
 				});
 			}
 			catch (Exception ex)
@@ -1512,18 +1343,17 @@ public class Plugin : BasePlugin
 
 		public void ResetStats()
 		{
-			foreach (var prop in typeof(PlayerStats).GetProperties())
+			foreach (var prop in typeof(MapStats).GetProperties())
 			{
-				if (prop.PropertyType == typeof(int) && prop.Name != nameof(ZenithPlayer))
+				if (prop.PropertyType == typeof(int))
 				{
-					prop.SetValue(this, 0);
+					prop.SetValue(CurrentMapStats, 0);
 				}
 			}
 			WeaponStats.Clear();
-			CurrentMapStats = new MapStats { MapName = _currentMapName };
+			CurrentMapStats = new MapStats { SteamId = _steamId, MapName = _currentMapName };
 		}
 	}
-
 
 	public class WeaponStats
 	{
@@ -1542,7 +1372,6 @@ public class Plugin : BasePlugin
 		public int NeckHits { get; set; }
 		public int GearHits { get; set; }
 	}
-
 
 	public class MapStats
 	{

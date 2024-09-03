@@ -13,16 +13,18 @@ namespace Zenith
 	{
 		public void Initialize_Settings()
 		{
-			foreach (string command in _coreAccessor.GetValue<List<string>>("Commands", "SettingsCommands"))
+			var commands = _coreAccessor.GetValue<List<string>>("Commands", "SettingsCommands");
+
+			foreach (var command in commands)
 			{
-				RegisterZenithCommand($"css_{command}", "Change player Zenith settings", (CCSPlayerController? player, CommandInfo command) =>
+				RegisterZenithCommand($"css_{command}", "Change player Zenith settings", (CCSPlayerController? player, CommandInfo commandInfo) =>
 				{
 					if (player == null) return;
 
 					var zenithPlayer = Player.Find(player);
 					if (zenithPlayer == null) return;
 
-					List<MenuItem> items = [];
+					var items = new List<MenuItem>();
 					var defaultValues = new Dictionary<int, object>();
 					var settingsMap = new Dictionary<int, (string ModuleID, string Key)>();
 
@@ -35,54 +37,49 @@ namespace Zenith
 						foreach (var setting in moduleSettings.Value.Settings)
 						{
 							string key = setting.Key;
-							object? defaultValue = setting.Value;
-							object? currentValue = zenithPlayer.GetData<object>(key, zenithPlayer.Settings, moduleID);
+							var defaultValue = setting.Value;
+							var currentValue = zenithPlayer.GetData<object>(key, zenithPlayer.Settings, moduleID) ?? defaultValue;
 
-							currentValue ??= defaultValue;
+							var displayName = moduleLocalizer != null ? $"{moduleLocalizer[$"settings.{key}"]}: " : $"{moduleID}.{key}: ";
 
-							string displayName = moduleLocalizer != null ? $"{moduleLocalizer[$"settings.{key}"]}: " : $"{moduleID}.{key}: ";
-
-							if (currentValue is JsonElement jsonElement)
+							switch (currentValue)
 							{
-								switch (jsonElement.ValueKind)
-								{
-									case JsonValueKind.True:
-									case JsonValueKind.False:
-										items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
-										defaultValues[index] = jsonElement.GetBoolean();
-										break;
-									case JsonValueKind.Number:
-										items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-										defaultValues[index] = jsonElement.GetInt32().ToString();
-										break;
-									case JsonValueKind.String:
-										items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-										defaultValues[index] = jsonElement.GetString() ?? string.Empty;
-										break;
-									default:
-										Logger.LogWarning($"Unsupported JsonElement type for {moduleID}.{key}: {jsonElement.ValueKind}");
-										continue;
-								}
-							}
-							else if (currentValue is bool boolValue)
-							{
-								items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
-								defaultValues[index] = boolValue;
-							}
-							else if (currentValue is int intValue)
-							{
-								items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-								defaultValues[index] = intValue.ToString();
-							}
-							else if (currentValue is string stringValue)
-							{
-								items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-								defaultValues[index] = stringValue;
-							}
-							else
-							{
-								Logger.LogWarning($"Unknown setting type for {moduleID}.{key} ({currentValue?.GetType().Name ?? "null"})");
-								continue;
+								case JsonElement jsonElement:
+									switch (jsonElement.ValueKind)
+									{
+										case JsonValueKind.True:
+										case JsonValueKind.False:
+											items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
+											defaultValues[index] = jsonElement.GetBoolean();
+											break;
+										case JsonValueKind.Number:
+											items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+											defaultValues[index] = jsonElement.GetInt32().ToString();
+											break;
+										case JsonValueKind.String:
+											items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+											defaultValues[index] = jsonElement.GetString() ?? string.Empty;
+											break;
+										default:
+											Logger.LogWarning($"Unsupported JsonElement type for {moduleID}.{key}: {jsonElement.ValueKind}");
+											continue;
+									}
+									break;
+								case bool boolValue:
+									items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
+									defaultValues[index] = boolValue;
+									break;
+								case int intValue:
+									items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+									defaultValues[index] = intValue.ToString();
+									break;
+								case string stringValue:
+									items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+									defaultValues[index] = stringValue;
+									break;
+								default:
+									Logger.LogWarning($"Unknown setting type for {moduleID}.{key} ({currentValue?.GetType().Name ?? "null"})");
+									continue;
 							}
 
 							settingsMap[index] = (moduleID, key);
@@ -114,47 +111,47 @@ namespace Zenith
 									break;
 								case MenuButtons.Input:
 									string newValue = selected.DataString ?? string.Empty;
-									object? currentValue = zenithPlayer.GetSetting<object>(key);
+									var currentValue = zenithPlayer.GetSetting<object>(key);
 
-									if (currentValue is JsonElement jsonElement)
+									switch (currentValue)
 									{
-										switch (jsonElement.ValueKind)
-										{
-											case JsonValueKind.Number:
-												if (int.TryParse(newValue, out int intValue))
-												{
-													zenithPlayer.SetSetting(key, intValue, true);
-													zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {intValue}");
-												}
-												else
-												{
-													zenithPlayer.Print(Localizer["k4.settings.invalid-input"]);
-													selected.DataString = jsonElement.GetInt32().ToString();
-												}
-												break;
-											case JsonValueKind.String:
-												zenithPlayer.SetSetting(key, newValue, true);
-												zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {newValue}");
-												break;
-										}
-									}
-									else if (currentValue is int)
-									{
-										if (int.TryParse(newValue, out int intValue))
-										{
-											zenithPlayer.SetSetting(key, intValue, true);
-											zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {intValue}");
-										}
-										else
-										{
-											zenithPlayer.Print(Localizer["k4.settings.invalid-input"]);
-											selected.DataString = currentValue.ToString()!;
-										}
-									}
-									else if (currentValue is string)
-									{
-										zenithPlayer.SetSetting(key, newValue, true);
-										zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {newValue}");
+										case JsonElement jsonElement:
+											switch (jsonElement.ValueKind)
+											{
+												case JsonValueKind.Number:
+													if (int.TryParse(newValue, out int parsedValue))
+													{
+														zenithPlayer.SetSetting(key, parsedValue, true);
+														zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {parsedValue}");
+													}
+													else
+													{
+														zenithPlayer.Print(Localizer["k4.settings.invalid-input"]);
+														selected.DataString = jsonElement.GetInt32().ToString();
+													}
+													break;
+												case JsonValueKind.String:
+													zenithPlayer.SetSetting(key, newValue, true);
+													zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {newValue}");
+													break;
+											}
+											break;
+										case int:
+											if (int.TryParse(newValue, out int intValue))
+											{
+												zenithPlayer.SetSetting(key, intValue, true);
+												zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {intValue}");
+											}
+											else
+											{
+												zenithPlayer.Print(Localizer["k4.settings.invalid-input"]);
+												selected.DataString = currentValue.ToString()!;
+											}
+											break;
+										case string:
+											zenithPlayer.SetSetting(key, newValue, true);
+											zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {newValue}");
+											break;
 									}
 									break;
 							}

@@ -10,38 +10,60 @@ namespace Zenith
 {
 	public sealed partial class Plugin : BasePlugin
 	{
-		private readonly ConcurrentDictionary<string, List<CommandDefinition>> _pluginCommands = [];
-		private readonly ConcurrentDictionary<string, string> _commandPermissions = [];
+		private readonly ConcurrentDictionary<string, List<CommandDefinition>> _pluginCommands = new();
+		private readonly ConcurrentDictionary<string, string> _commandPermissions = new();
 
 		public void RegisterZenithCommand(string command, string description, CommandInfo.CommandCallback handler, CommandUsage usage = CommandUsage.CLIENT_AND_SERVER, int argCount = 0, string? helpText = null, string? permission = null)
 		{
-			if (!command.StartsWith("css_"))
-				command = "css_" + command;
-
+			command = EnsureCommandPrefix(command);
 			string callingPlugin = CallerIdentifier.GetCallingPluginName();
 
+			var existingCommand = FindExistingCommand(command);
+
+			if (existingCommand.HasValue)
+			{
+				if (existingCommand.Value.Plugin != callingPlugin)
+				{
+					Logger.LogError($"Command '{command}' is already registered by plugin '{existingCommand.Value.Plugin}'. Registration by '{callingPlugin}' is not allowed.");
+					return;
+				}
+
+				RemoveExistingCommand(existingCommand);
+				Logger.LogWarning($"Command '{command}' already exists for plugin '{callingPlugin}', overwriting.");
+			}
+
+			RegisterNewCommand(command, description, handler, usage, argCount, helpText, permission, callingPlugin);
+		}
+
+		private string EnsureCommandPrefix(string command) => command.StartsWith("css_") ? command : "css_" + command;
+
+		private (string Plugin, CommandDefinition Command)? FindExistingCommand(string command)
+		{
 			var existingCommand = _pluginCommands
 				.SelectMany(kvp => kvp.Value.Select(cmd => new { Plugin = kvp.Key, Command = cmd }))
 				.FirstOrDefault(x => x.Command.Name == command);
 
 			if (existingCommand != null)
 			{
-				if (existingCommand.Plugin != callingPlugin)
-				{
-					Logger.LogError($"Command '{command}' is already registered by plugin '{existingCommand.Plugin}'. Registration by '{callingPlugin}' is not allowed.");
-					return;
-				}
-				else
-				{
-					CommandManager.RemoveCommand(existingCommand.Command);
-					_pluginCommands[callingPlugin].Remove(existingCommand.Command);
-					Logger.LogWarning($"Command '{command}' already exists for plugin '{callingPlugin}', overwriting.");
-				}
+				// Convert the anonymous type to a tuple
+				return (existingCommand.Plugin, existingCommand.Command);
 			}
 
-			if (!_pluginCommands.ContainsKey(callingPlugin))
-				_pluginCommands[callingPlugin] = [];
+			return null; // Return null if no command is found
+		}
 
+		private void RemoveExistingCommand((string Plugin, CommandDefinition Command)? existingCommand)
+		{
+			// Ensure the tuple is not null before accessing its members
+			if (existingCommand.HasValue)
+			{
+				CommandManager.RemoveCommand(existingCommand.Value.Command);
+				_pluginCommands[existingCommand.Value.Plugin].Remove(existingCommand.Value.Command);
+			}
+		}
+
+		private void RegisterNewCommand(string command, string description, CommandInfo.CommandCallback handler, CommandUsage usage, int argCount, string? helpText, string? permission, string callingPlugin)
+		{
 			var newCommand = new CommandDefinition(command, description, (controller, info) =>
 			{
 				if (!CommandHelper(controller, info, usage, argCount, helpText, permission))
@@ -50,9 +72,8 @@ namespace Zenith
 				handler(controller, info);
 			});
 
-			// ? Using CommandManager due to AddCommand cannot unregister modular commands
 			CommandManager.RegisterCommand(newCommand);
-			_pluginCommands[callingPlugin].Add(newCommand);
+			_pluginCommands.GetOrAdd(callingPlugin, _ => new List<CommandDefinition>()).Add(newCommand);
 			_commandPermissions[command] = permission ?? string.Empty;
 		}
 
@@ -65,7 +86,10 @@ namespace Zenith
 					CommandManager.RemoveCommand(command);
 				}
 				_pluginCommands.TryRemove(callingPlugin, out _);
-				_commandPermissions.TryRemove(callingPlugin, out _);
+				_commandPermissions.Keys
+					.Where(cmd => cmd.StartsWith(callingPlugin + "_"))
+					.ToList()
+					.ForEach(cmd => _commandPermissions.TryRemove(cmd, out _));
 			}
 		}
 
@@ -73,31 +97,31 @@ namespace Zenith
 		{
 			if (pluginName != null)
 			{
-				if (_pluginCommands.TryGetValue(pluginName, out var pluginCommands))
-				{
-					PrintToConsole($"Commands for plugin '{pluginName}':", player);
-					foreach (var command in pluginCommands)
-					{
-						string permission = _commandPermissions[command.Name];
-						PrintToConsole($"  - {command.Name}: {command.Description} {(string.IsNullOrEmpty(permission) ? "" : $"({permission})")}", player);
-					}
-				}
-				else
-				{
-					PrintToConsole($"No commands found for plugin '{pluginName}'.", player);
-				}
+				PrintPluginCommands(pluginName, player);
 			}
 			else
 			{
 				foreach (var pluginEntry in _pluginCommands)
 				{
-					PrintToConsole($"Commands for plugin '{pluginEntry.Key}':", player);
-					foreach (var command in pluginEntry.Value)
-					{
-						string permission = _commandPermissions[command.Name];
-						PrintToConsole($"  - {command.Name}: {command.Description} {(string.IsNullOrEmpty(permission) ? "" : $"({permission})")}", player);
-					}
+					PrintPluginCommands(pluginEntry.Key, player);
 				}
+			}
+		}
+
+		private void PrintPluginCommands(string pluginName, CCSPlayerController? player)
+		{
+			if (_pluginCommands.TryGetValue(pluginName, out var pluginCommands))
+			{
+				PrintToConsole($"Commands for plugin '{pluginName}':", player);
+				foreach (var command in pluginCommands)
+				{
+					string permission = _commandPermissions[command.Name];
+					PrintToConsole($"  - {command.Name}: {command.Description} {(string.IsNullOrEmpty(permission) ? "" : $"({permission})")}", player);
+				}
+			}
+			else
+			{
+				PrintToConsole($"No commands found for plugin '{pluginName}'.", player);
 			}
 		}
 
@@ -117,7 +141,7 @@ namespace Zenith
 
 		public void RegisterZenithCommand(List<string> commands, string description, CommandInfo.CommandCallback handler, CommandUsage usage = CommandUsage.CLIENT_AND_SERVER, int argCount = 0, string? helpText = null, string? permission = null)
 		{
-			foreach (string command in commands)
+			foreach (var command in commands)
 			{
 				RegisterZenithCommand(command, description, handler, usage, argCount, helpText, permission);
 			}
@@ -127,46 +151,58 @@ namespace Zenith
 		{
 			Player? player = Player.Find(controller);
 
+			if (!IsCommandUsageValid(player, info, usage))
+				return false;
+
+			if (!HasPermission(player, controller, info, permission))
+				return false;
+
+			if (IsArgumentCountInvalid(info, argCount, helpText))
+				return false;
+
+			return true;
+		}
+
+		private bool IsCommandUsageValid(Player? player, CommandInfo info, CommandUsage usage)
+		{
 			switch (usage)
 			{
-				case CommandUsage.CLIENT_ONLY:
-					if (player == null || !player.IsValid)
-					{
-						info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.client-only"]}");
-						return false;
-					}
-					break;
-				case CommandUsage.SERVER_ONLY:
-					if (player != null)
-					{
-						info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.server-only"]}");
-						return false;
-					}
-					break;
-			}
-
-			if (permission != null && permission.Length > 0)
-			{
-				if (player != null && !AdminManager.PlayerHasPermissions(controller, permission) && !AdminManager.PlayerHasPermissions(controller, "@zenith/root") && !AdminManager.PlayerHasCommandOverride(controller, @info.GetArg(0)))
-				{
-					info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.no-permission"]}");
+				case CommandUsage.CLIENT_ONLY when player == null || !player.IsValid:
+					info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.client-only"]}");
 					return false;
-				}
-			}
-
-			if (argCount > 0 && helpText != null)
-			{
-				int checkArgCount = argCount + 1;
-				if (info.ArgCount < checkArgCount)
-				{
-					info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.help", info.ArgByIndex(0), helpText]}");
+				case CommandUsage.SERVER_ONLY when player != null:
+					info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.server-only"]}");
 					return false;
-				}
+				default:
+					return true;
+			}
+		}
+
+		private bool HasPermission(Player? player, CCSPlayerController? controller, CommandInfo info, string? permission)
+		{
+			if (string.IsNullOrEmpty(permission))
+				return true;
+
+			if (player != null && !AdminManager.PlayerHasPermissions(controller, permission) &&
+				!AdminManager.PlayerHasPermissions(controller, "@zenith/root") &&
+				!AdminManager.PlayerHasPermissions(controller, "@css/root") &&
+				!AdminManager.PlayerHasCommandOverride(controller, info.GetArg(0)))
+			{
+				info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.no-permission"]}");
+				return false;
 			}
 
 			return true;
 		}
+
+		private bool IsArgumentCountInvalid(CommandInfo info, int argCount, string? helpText)
+		{
+			if (argCount > 0 && info.ArgCount < argCount + 1 && helpText != null)
+			{
+				info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.command.help", info.ArgByIndex(0), helpText]}");
+				return true;
+			}
+			return false;
+		}
 	}
 }
-
-

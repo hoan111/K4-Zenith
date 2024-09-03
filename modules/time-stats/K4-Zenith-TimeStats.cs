@@ -18,7 +18,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.0";
+	public override string ModuleVersion => "1.0.1";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -26,7 +26,7 @@ public class Plugin : BasePlugin
 	private IZenithEvents? _zenithEvents;
 	private IModuleServices? _moduleServices;
 
-	private Dictionary<ulong, PlayerTimeData> _playerTimes = new Dictionary<ulong, PlayerTimeData>();
+	private readonly Dictionary<ulong, PlayerTimeData> _playerTimes = new Dictionary<ulong, PlayerTimeData>();
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
@@ -174,6 +174,10 @@ public class Plugin : BasePlugin
 
 	private void OnTimerElapsed()
 	{
+		int interval = _coreAccessor.GetValue<int>("Config", "NotificationInterval");
+		if (interval <= 0)
+			return;
+
 		foreach (var player in Utilities.GetPlayers())
 		{
 			var playerServices = GetZenithPlayer(player);
@@ -181,7 +185,16 @@ public class Plugin : BasePlugin
 				continue;
 
 			UpdatePlaytime(playerServices);
-			CheckAndSendNotification(playerServices);
+
+			bool hasPlaytime = playerServices.GetStorage<double>("TotalPlaytime") > 1 ||
+								playerServices.GetStorage<double>("TerroristPlaytime") > 1 ||
+								playerServices.GetStorage<double>("CounterTerroristPlaytime") > 1 ||
+								playerServices.GetStorage<double>("SpectatorPlaytime") > 1 ||
+								playerServices.GetStorage<double>("AlivePlaytime") > 1 ||
+								playerServices.GetStorage<double>("DeadPlaytime") > 1;
+
+			if (hasPlaytime)
+				CheckAndSendNotification(playerServices, interval);
 		}
 	}
 
@@ -215,11 +228,10 @@ public class Plugin : BasePlugin
 		timeData.LastUpdateTime = currentTime;
 	}
 
-	private void CheckAndSendNotification(IPlayerServices playerServices)
+	private void CheckAndSendNotification(IPlayerServices playerServices, int interval)
 	{
-		int interval = _coreAccessor.GetValue<int>("Config", "NotificationInterval");
-		if (interval <= 0)
-			return;
+		// do not check or notify if all times are 0 of player
+
 
 		bool showPlaytime = playerServices.GetSetting<bool>("ShowPlaytime");
 		if (!showPlaytime) return;

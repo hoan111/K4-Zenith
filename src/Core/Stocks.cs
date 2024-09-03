@@ -1,20 +1,20 @@
-using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API;
-using CounterStrikeSharp.API.Modules.Cvars;
-using Microsoft.Extensions.Logging;
-using MaxMind.GeoIP2;
-using Zenith.Models;
-using System.Reflection;
-using CounterStrikeSharp.API.Modules.Utils;
 using System.Collections.Concurrent;
 using System.Text;
+using CounterStrikeSharp.API;
+using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Cvars;
+using CounterStrikeSharp.API.Modules.Utils;
+using MaxMind.GeoIP2;
+using Microsoft.Extensions.Logging;
+using Zenith.Models;
+using System.Reflection;
 
 namespace Zenith
 {
 	public sealed partial class Plugin : BasePlugin
 	{
-		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<CCSPlayerController, string>>> _pluginPlayerPlaceholders = [];
-		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<string>>> _pluginServerPlaceholders = [];
+		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<CCSPlayerController, string>>> _pluginPlayerPlaceholders = new();
+		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<string>>> _pluginServerPlaceholders = new();
 
 		private void Initialize_Placeholders()
 		{
@@ -69,10 +69,9 @@ namespace Zenith
 			if (string.IsNullOrEmpty(input) || input.Length < 2)
 				return input;
 
-			if (input[0] == ' ' && IsColorCode(input[1]))
-				return input.Substring(1);
-
-			return input;
+			return input[0] == ' ' && IsColorCode(input[1])
+				? input[1..]
+				: input;
 		}
 
 		private bool IsColorCode(char c)
@@ -88,38 +87,36 @@ namespace Zenith
 		{
 			string callingPlugin = CallerIdentifier.GetCallingPluginName();
 
-			if (!_pluginPlayerPlaceholders.ContainsKey(callingPlugin))
-				_pluginPlayerPlaceholders.TryAdd(callingPlugin, new ConcurrentDictionary<string, Func<CCSPlayerController, string>>());
+			var placeholders = _pluginPlayerPlaceholders.GetOrAdd(callingPlugin, _ => new ConcurrentDictionary<string, Func<CCSPlayerController, string>>());
 
-			if (_pluginPlayerPlaceholders[callingPlugin].ContainsKey(key))
+			if (placeholders.ContainsKey(key))
 			{
 				Logger.LogWarning($"Player placeholder '{key}' already exists for plugin '{callingPlugin}', overwriting.");
 			}
 
-			_pluginPlayerPlaceholders[callingPlugin][key] = valueFunc;
+			placeholders[key] = valueFunc;
 		}
 
 		public void RegisterZenithServerPlaceholder(string key, Func<string> valueFunc)
 		{
 			string callingPlugin = CallerIdentifier.GetCallingPluginName();
 
-			if (!_pluginServerPlaceholders.ContainsKey(callingPlugin))
-				_pluginServerPlaceholders.TryAdd(callingPlugin, new ConcurrentDictionary<string, Func<string>>());
+			var placeholders = _pluginServerPlaceholders.GetOrAdd(callingPlugin, _ => new ConcurrentDictionary<string, Func<string>>());
 
-			if (_pluginServerPlaceholders[callingPlugin].ContainsKey(key))
+			if (placeholders.ContainsKey(key))
 			{
 				Logger.LogWarning($"Server placeholder '{key}' already exists for plugin '{callingPlugin}', overwriting.");
 			}
 
-			_pluginServerPlaceholders[callingPlugin][key] = valueFunc;
+			placeholders[key] = valueFunc;
 		}
 
 		public void RemoveModulePlaceholders(string? callingPlugin = null)
 		{
 			if (callingPlugin != null)
 			{
-				_pluginPlayerPlaceholders.Remove(callingPlugin, out _);
-				_pluginServerPlaceholders.Remove(callingPlugin, out _);
+				_pluginPlayerPlaceholders.TryRemove(callingPlugin, out _);
+				_pluginServerPlaceholders.TryRemove(callingPlugin, out _);
 			}
 			else
 			{
@@ -202,10 +199,9 @@ namespace Zenith
 
 		private (string ShortName, string LongName) GetCountryFromIP(CCSPlayerController? player)
 		{
-			if (player == null)
-				return ("??", "Unknown");
-
-			return GetCountryFromIP(player.IpAddress?.Split(':')[0]);
+			return player == null
+				? ("??", "Unknown")
+				: GetCountryFromIP(player.IpAddress?.Split(':')[0]);
 		}
 
 		private (string ShortName, string LongName) GetCountryFromIP(string? ipAddress)
@@ -222,14 +218,13 @@ namespace Zenith
 				using var reader = new DatabaseReader(databasePath);
 				var response = reader.Country(ipAddress);
 
-				string shortName = response.Country.IsoCode ?? "??";
-				string longName = response.Country.Name ?? "Unknown";
-
-				return (shortName, longName);
+				return (
+					response.Country.IsoCode ?? "??",
+					response.Country.Name ?? "Unknown"
+				);
 			}
-			catch (Exception ex)
+			catch
 			{
-				Logger.LogInformation($"Error getting country information: {ex.Message}");
 				return ("??", "Unknown");
 			}
 		}
@@ -243,9 +238,9 @@ namespace Zenith
 				.GetFields(BindingFlags.Public | BindingFlags.Static)
 				.Where(f => f.FieldType == typeof(char))
 				.Select(f => (char?)f.GetValue(null))
-				.ToArray();
+				.ToHashSet();
 
-			StringBuilder result = new StringBuilder(input.Length);
+			var result = new StringBuilder(input.Length);
 
 			foreach (char c in input)
 			{

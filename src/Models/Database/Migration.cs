@@ -22,7 +22,7 @@ namespace Zenith.Models
 
 		private readonly Dictionary<string, List<MigrationStep>> _migrations = new()
 		{
-			{ "1.0.9", new List<MigrationStep>
+			{ "1.9", new List<MigrationStep>
 				{
 					new MigrationStep
 					{
@@ -51,8 +51,21 @@ namespace Zenith.Models
 					}
 				}
 			},
-            // Add other migrations here as needed
-        };
+			{ "1.10", new List<MigrationStep>
+				{
+					new MigrationStep
+					{
+						TableName = "zenith_bans_players",
+						SqlQuery = @"
+						ALTER TABLE `{prefix}zenith_bans_players`
+						ADD COLUMN IF NOT EXISTS `current_server` VARCHAR(50)
+						CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+						DEFAULT NULL;"
+					},
+				}
+			},
+			// Add other migrations here as needed
+		};
 
 		private async Task<string> GetCurrentDatabaseVersionAsync(MySqlConnection connection)
 		{
@@ -67,11 +80,11 @@ namespace Zenith.Models
 		private async Task EnsureVersionTableExistsAsync(MySqlConnection connection)
 		{
 			await connection.ExecuteAsync($@"
-                CREATE TABLE IF NOT EXISTS {TablePrefix}{INFO_TABLE} (
-                    `key` VARCHAR(50) PRIMARY KEY,
-                    value VARCHAR(50) NOT NULL
-                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-            ");
+				CREATE TABLE IF NOT EXISTS {TablePrefix}{INFO_TABLE} (
+					`key` VARCHAR(50) PRIMARY KEY,
+					value VARCHAR(50) NOT NULL
+				) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+			");
 		}
 
 		private async Task CreateDatabaseBackupAsync()
@@ -139,10 +152,11 @@ namespace Zenith.Models
 				serverType = await GetServerTypeAsync(connection);
 			}
 
+			plugin.Logger.LogInformation($"Current database version: {currentVersion}");
 			plugin.Logger.LogInformation($"Database server type: {serverType}");
 
 			var pendingMigrations = _migrations
-				.Where(m => string.Compare(m.Key, currentVersion, StringComparison.Ordinal) > 0)
+				.Where(m => IsNewerVersion(m.Key, currentVersion))
 				.OrderBy(m => m.Key)
 				.ToList();
 
@@ -168,6 +182,7 @@ namespace Zenith.Models
 
 			foreach (var migration in pendingMigrations)
 			{
+				plugin.Logger.LogInformation($"Applying migration: {migration.Key}");
 				const int maxRetries = 3;
 				for (int retry = 0; retry < maxRetries; retry++)
 				{
@@ -212,6 +227,29 @@ namespace Zenith.Models
 			}
 
 			plugin.Logger.LogInformation($"Database migration completed. Current version: {latestAppliedVersion}");
+		}
+
+		private static bool IsNewerVersion(string version1, string version2)
+		{
+			var v1Parts = version1.Split('.').Select(int.Parse).ToArray();
+			var v2Parts = version2.Split('.').Select(int.Parse).ToArray();
+
+			for (int i = 0; i < Math.Max(v1Parts.Length, v2Parts.Length); i++)
+			{
+				var v1Part = i < v1Parts.Length ? v1Parts[i] : 0;
+				var v2Part = i < v2Parts.Length ? v2Parts[i] : 0;
+
+				if (v1Part > v2Part)
+				{
+					return true;
+				}
+				else if (v1Part < v2Part)
+				{
+					return false;
+				}
+			}
+
+			return false;
 		}
 
 		private async Task<bool> TableExistsAsync(MySqlConnection connection, string tableName, MySqlTransaction transaction)

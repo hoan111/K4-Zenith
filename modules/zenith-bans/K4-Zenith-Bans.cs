@@ -18,7 +18,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.0";
+	public override string ModuleVersion => "1.0.1";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -33,6 +33,18 @@ public sealed partial class Plugin : BasePlugin
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
+		string pluginDirectory = Path.GetDirectoryName(ModuleDirectory)!;
+		List<string> blockPlugins = ["CS2-SimpleAdmin"];
+		foreach (var p in blockPlugins)
+		{
+			if (Directory.GetDirectories(pluginDirectory, p).Any())
+			{
+				Logger.LogCritical($"This module is not compatible with {p}. You can use only one of them. Unloading...");
+				Server.ExecuteCommand($"css_plugins unload {Path.GetFileNameWithoutExtension(ModulePath)}");
+				return;
+			}
+		}
+
 		try
 		{
 			_playerServicesCapability = new("zenith:player-services");
@@ -88,8 +100,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Config", "DisconnectMaxPlayers", "Maximum number of disconnected players to store", 20);
 
 		_moduleServices.RegisterModuleConfig("Config", "GlobalPunishments", "Whether to apply punishments globally on all your servers", false);
-		_moduleServices.RegisterModuleConfig("Config", "ConnectAdminInfo", "Whether to show admin info on player connect (With @zenith-admin/admin permission)", true);
-		_moduleServices.RegisterModuleConfig("Config", "ShowActivity", "Specifies how admin activity should be relayed to users (1: Show to non-admins, 2: Show admin names to non-admins, 4: Show to admins, 8: Show admin names to admins, 16: Always show admin names to root users (admins are @zenith-admin/admin)). Default is 13 due to 1+4+8", 13, ConfigFlag.Global);
+		_moduleServices.RegisterModuleConfig("Config", "ConnectAdminInfo", "Whether to show admin info on player connect (With @zenith/admin permission)", true);
 		_moduleServices.RegisterModuleConfig("Config", "ApplyIPBans", "(NOT RECOMMENDED )Whether to apply IP bans along with player bans. Not recommended due to Cloud Gaming, you ban everyone who use that data center.", false);
 		_moduleServices.RegisterModuleConfig("Config", "DiscordWebhookUrl", "Discord webhook URL for sending notifications", "", ConfigFlag.Protected);
 		_moduleServices.RegisterModuleConfig("Config", "DelayPlayerRemoval", "Delay in seconds before removing a player from the server on kick / ban to show a message about it. (0 - Instantly)", 5);
@@ -111,9 +122,11 @@ public sealed partial class Plugin : BasePlugin
 
 		AddTimer(60.0f, () =>
 		{
+			var onlineSteamIds = GetOnlinePlayersSteamIdsAsync();
 			Task.Run(async () =>
 			{
-				await RemoveExpiredPunishmentsAsync();
+				await RemoveOfflinePlayersFromServerAsync(onlineSteamIds);
+				await RemoveExpiredPunishmentsAsync(onlineSteamIds);
 			});
 		}, TimerFlags.REPEAT);
 
@@ -123,6 +136,25 @@ public sealed partial class Plugin : BasePlugin
 			Task.Run(async () =>
 			{
 				await ImportAdminGroupsFromJsonAsync(directory);
+			});
+		}
+
+		if (hotReload)
+		{
+			AddTimer(3.0f, () =>
+			{
+				_moduleServices.LoadAllOnlinePlayerData();
+				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
+				{
+					string playerName = player.PlayerName;
+					ulong steamID = player.SteamID;
+					string ipAddress = player.IpAddress!;
+
+					Task.Run(async () =>
+					{
+						await LoadOrUpdatePlayerDataAsync(steamID, playerName, ipAddress);
+					});
+				});
 			});
 		}
 
