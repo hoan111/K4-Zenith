@@ -1,0 +1,24 @@
+{
+  "k4.general.prefix": "{silver}- {gold}+ Zenith + {silver}- ",
+
+  "k4.tag.all": "{white}[WSZYSCY] ",
+  "k4.tag.dead": "{grey}[MARTWY] ",
+  "k4.tag.team.ct": "{lightblue}[CT] ",
+  "k4.tag.team.t": "{yellow}[T] ",
+  "k4.tag.team.spectator": "{white}[OBS] ",
+  "k4.tag.team.unassigned": "{white}[NIEPRZYDZIELONY] ",
+  "k4.tag.separator": "{white}: ",
+
+  "k4.command.help": "{silver}Oczekiwane użycie: {lime}!{0} {1}",
+  "k4.command.no-permission": "{lightred}Nie masz uprawnień do użycia tej komendy.",
+  "k4.command.server-only": "{lightred}Ta komenda może być użyta tylko przez serwer.",
+  "k4.command.client-only": "{lightred}Ta komenda może być użyta tylko przez klientów.",
+
+  "k4.settings.title": " + Ustawienia +",
+  "k4.settings.disabled": "Wyłączone",
+  "k4.settings.enabled": "Włączone",
+  "k4.settings.invalid-input": "Nieprawidłowe dane. Proszę wprowadzić poprawną liczbę całkowitą.",
+
+  "settings.ShowClanTags": "Wyświetlaj tag klanu",
+  "settings.ShowChatTags": "Wyświetlaj tag czatu"
+}
