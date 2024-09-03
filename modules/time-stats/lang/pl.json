@@ -1,0 +1,13 @@
+{
+  "timestats.notification": "{silver}Twój całkowity czas gry na serwerze wynosi {gold}{0}{silver}. Dziękujemy za spędzony z nami czas!",
+  "timestats.center.title": "+ Statystyki Czasu Gry +",
+  "timestats.center.total.label": "Łącznie:",
+  "timestats.center.teams.label": "Drużyny:",
+  "timestats.center.teams.value": "T: {0} | CT: {1}",
+  "timestats.center.spectator.label": "Obserwator:",
+  "timestats.center.status.label": "Status:",
+  "timestats.center.status.value": "Żywy: {0} | Martwy: {1}",
+  "timestats.time.format": "{0}d {1}h {2}m",
+
+  "settings.ShowPlaytime": "Powiadomienia o Czasie Gry"
+}
