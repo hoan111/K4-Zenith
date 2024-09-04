@@ -61,7 +61,7 @@ namespace Zenith
 
 			RegisterListener<Listeners.OnTick>(() =>
 			{
-				foreach (var player in Player.List)
+				foreach (var player in Player.List.Values)
 				{
 					if (player.IsValid && player.IsPlayer)
 						player.ShowCenterMessage();
@@ -70,7 +70,6 @@ namespace Zenith
 
 			if (hotReload)
 			{
-				// log here an ascii art saying WARNING
 				Logger.LogCritical(@"*");
 				Logger.LogCritical(@"*");
 				Logger.LogCritical(@"*    ██╗    ██╗ █████╗ ██████╗ ███╗   ██╗██╗███╗   ██╗ ██████╗");
@@ -84,13 +83,22 @@ namespace Zenith
 				Logger.LogCritical(@"*    More information: https://github.com/roflmuffin/CounterStrikeSharp/issues/565");
 				Logger.LogCritical(@"*");
 
-				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player => new Player(this, player, true));
+				var players = Utilities.GetPlayers();
+
+				foreach (var player in players)
+				{
+					if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+					{
+						_ = new Player(this, player, true);
+					}
+				}
+
 				Player.LoadAllOnlinePlayerData(this);
 			}
 
 			AddTimer(3.0f, () =>
 			{
-				foreach (var player in Player.List)
+				foreach (var player in Player.List.Values)
 				{
 					if (player.IsValid && player.IsPlayer)
 						player.EnforcePluginValues();

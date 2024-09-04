@@ -18,7 +18,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.1";
+	public override string ModuleVersion => "1.0.2";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -70,7 +70,7 @@ public sealed partial class Plugin : BasePlugin
 		AddTimer(hotReload ? 3.0f : 0.01f, () => // ? Sometimes CS2 server use a default port at start, so we need to wait a bit
 		{
 			int port = ConVar.Find("hostport")!.GetPrimitiveValue<int>();
-			Task.Run(async () => await InitializeServerIpAsync(port));
+			_ = Task.Run(async () => await InitializeServerIpAsync(port));
 		});
 
 		Menu = new KitsuneMenu(this);
@@ -122,8 +122,8 @@ public sealed partial class Plugin : BasePlugin
 
 		AddTimer(60.0f, () =>
 		{
-			var onlineSteamIds = GetOnlinePlayersSteamIdsAsync();
-			Task.Run(async () =>
+			var onlineSteamIds = GetOnlinePlayersSteamIds();
+			_ = Task.Run(async () =>
 			{
 				await RemoveOfflinePlayersFromServerAsync(onlineSteamIds);
 				await RemoveExpiredPunishmentsAsync(onlineSteamIds);
@@ -133,7 +133,7 @@ public sealed partial class Plugin : BasePlugin
 		if (_coreAccessor.GetValue<bool>("Config", "FetchAdminGroups"))
 		{
 			string directory = Server.GameDirectory;
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await ImportAdminGroupsFromJsonAsync(directory);
 			});
@@ -144,17 +144,29 @@ public sealed partial class Plugin : BasePlugin
 			AddTimer(3.0f, () =>
 			{
 				_moduleServices.LoadAllOnlinePlayerData();
-				Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
-				{
-					string playerName = player.PlayerName;
-					ulong steamID = player.SteamID;
-					string ipAddress = player.IpAddress!;
+				var players = Utilities.GetPlayers();
 
-					Task.Run(async () =>
+				foreach (var player in players)
+				{
+					if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 					{
-						await LoadOrUpdatePlayerDataAsync(steamID, playerName, ipAddress);
-					});
-				});
+						string playerName = player.PlayerName;
+						ulong steamID = player.SteamID;
+						string ipAddress = player.IpAddress ?? string.Empty;
+
+						_ = Task.Run(async () =>
+						{
+							try
+							{
+								await LoadOrUpdatePlayerDataAsync(steamID, playerName, ipAddress);
+							}
+							catch (Exception ex)
+							{
+								Logger.LogError($"Error updating player data: {ex.Message}");
+							}
+						});
+					}
+				}
 			});
 		}
 

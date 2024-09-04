@@ -28,10 +28,14 @@ namespace Zenith_Bans
 
 				Server.NextWorldUpdate(() =>
 				{
-					Utilities.GetPlayers()
-						.Where(p => p.IsValid && !p.IsBot && !p.IsHLTV)
-						.ToList()
-						.ForEach(p => ProcessPlayerData(p, false));
+					var players = Utilities.GetPlayers();
+					foreach (var player in players)
+					{
+						if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+						{
+							ProcessPlayerData(player, false);
+						}
+					}
 				});
 			}
 			catch (Exception ex)
@@ -236,7 +240,7 @@ namespace Zenith_Bans
 			ulong? callerSteamId = caller?.SteamID;
 			ulong targetSteamId = steamId.SteamId64;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				string targetName = await GetPlayerNameAsync(targetSteamId);
 				await ApplyPunishmentInternal(callerName, callerSteamId, targetSteamId, targetName, type, duration, reason);
@@ -250,7 +254,7 @@ namespace Zenith_Bans
 			ulong targetSteamId = target.SteamID;
 			string targetName = target.PlayerName;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await ApplyPunishmentInternal(callerName, callerSteamId, targetSteamId, targetName, type, duration, reason);
 			});
@@ -265,19 +269,16 @@ namespace Zenith_Bans
 
 			int punishmentId = await AddPunishmentAsync(targetSteamId, type, duration, reason, callerSteamId);
 
-			Server.NextFrame(() =>
+			Server.NextWorldUpdate(() =>
 			{
+				BroadcastPunishment(type, targetName, targetSteamId, duration, reason, callerName, callerSteamId);
+				SendDiscordWebhook(type, targetName, targetSteamId, duration, reason, callerName, callerSteamId);
+
 				var target = Utilities.GetPlayerFromSteamId(targetSteamId);
 				if (target != null && _playerCache.TryGetValue(targetSteamId, out var playerData))
 				{
 					UpdatePlayerCache(playerData, punishmentId, type, duration, callerName, reason, callerSteamId);
 					ApplyPunishmentEffect(target, type, reason);
-					BroadcastPunishment(type, targetName, targetSteamId, duration, reason, callerName, callerSteamId);
-					SendDiscordWebhook(type, targetName, targetSteamId, duration, reason, callerName, callerSteamId);
-				}
-				else
-				{
-					Logger.LogWarning($"Failed to find player or player data for {targetName} ({targetSteamId})");
 				}
 			});
 		}
@@ -316,9 +317,9 @@ namespace Zenith_Bans
 
 			if (!isValid)
 			{
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
-					CCSPlayerController? caller = Utilities.GetPlayerFromSteamId(callerSteamId ?? 0);
+					CCSPlayerController? caller = callerSteamId != null ? Utilities.GetPlayerFromSteamId((ulong)callerSteamId) : null;
 					_moduleServices?.PrintForPlayer(caller, errorMessage);
 				});
 			}
@@ -350,15 +351,20 @@ namespace Zenith_Bans
 
 			Logger.LogWarning($"Player {targetName} ({targetSteamId}) was {type.ToString().ToLower()}ed by {callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")} {(type != PunishmentType.Kick && type != PunishmentType.Warn ? $"for {durationString} " : "")}({reason})");
 
-			foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
+			var players = Utilities.GetPlayers();
+
+			foreach (var player in players)
 			{
-				if (ShouldShowActivity(callerSteamId, player, true))
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 				{
-					BroadcastToPlayer(player, localizationKey, callerName, targetName, durationString, reason);
-				}
-				else if (ShouldShowActivity(callerSteamId, player, false))
-				{
-					BroadcastToPlayer(player, localizationKey, Localizer["k4.general.admin"], targetName, durationString, reason);
+					if (ShouldShowActivity(callerSteamId, player, true))
+					{
+						BroadcastToPlayer(player, localizationKey, callerName, targetName, durationString, reason);
+					}
+					else if (ShouldShowActivity(callerSteamId, player, false))
+					{
+						BroadcastToPlayer(player, localizationKey, Localizer["k4.general.admin"], targetName, durationString, reason);
+					}
 				}
 			}
 		}
@@ -434,7 +440,7 @@ namespace Zenith_Bans
 
 			ApplyPunishment(null, target, PunishmentType.Ban, banLength, reason);
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await RemovePunishmentAsync(target.SteamID, PunishmentType.Warn, null);
 				if (_playerCache.TryGetValue(target.SteamID, out var playerData))
@@ -459,7 +465,7 @@ namespace Zenith_Bans
 				{
 					playerData.Punishments.RemoveAll(p => p.Type == PunishmentType.Mute || p.Type == PunishmentType.Gag);
 
-					Task.Run(async () =>
+					_ = Task.Run(async () =>
 					{
 						await RemovePunishmentAsync(target.SteamID, PunishmentType.Mute, null);
 						await RemovePunishmentAsync(target.SteamID, PunishmentType.Gag, null);
@@ -519,7 +525,7 @@ namespace Zenith_Bans
 			ulong targetSteamId = target.SteamID;
 			string targetName = target.PlayerName;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				bool removed = await RemovePunishmentAsync(targetSteamId, type, callerSteamId);
 				ProcessRemovePunishment(removed, caller, callerName, callerSteamId, targetSteamId, targetName, type);
@@ -532,7 +538,7 @@ namespace Zenith_Bans
 			ulong? callerSteamId = caller?.SteamID;
 			ulong targetSteamId = steamId.SteamId64;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				bool removed = await RemovePunishmentAsync(targetSteamId, type, callerSteamId);
 				string targetName = await GetPlayerNameAsync(targetSteamId);
@@ -542,7 +548,7 @@ namespace Zenith_Bans
 
 		private void ProcessRemovePunishment(bool removed, CCSPlayerController? caller, string callerName, ulong? callerSteamId, ulong targetSteamId, string targetName, PunishmentType type)
 		{
-			Server.NextFrame(() =>
+			Server.NextWorldUpdate(() =>
 			{
 				if (removed)
 				{
@@ -577,15 +583,22 @@ namespace Zenith_Bans
 
 		private void BroadcastRemovePunishment(string callerName, ulong? callerSteamId, string targetName, PunishmentType type)
 		{
-			foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
+			var players = Utilities.GetPlayers();
+			string punishmentKey = $"k4.chat.un{type.ToString().ToLower()}";
+			string adminName = Localizer["k4.general.admin"];
+
+			foreach (var player in players)
 			{
-				if (ShouldShowActivity(callerSteamId, player, true))
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 				{
-					_moduleServices?.PrintForPlayer(player, Localizer[$"k4.chat.un{type.ToString().ToLower()}", callerName, targetName]);
-				}
-				else if (ShouldShowActivity(callerSteamId, player, false))
-				{
-					_moduleServices?.PrintForPlayer(player, Localizer[$"k4.chat.un{type.ToString().ToLower()}", Localizer["k4.general.admin"], targetName]);
+					if (ShouldShowActivity(callerSteamId, player, true))
+					{
+						_moduleServices?.PrintForPlayer(player, Localizer[punishmentKey, callerName, targetName]);
+					}
+					else if (ShouldShowActivity(callerSteamId, player, false))
+					{
+						_moduleServices?.PrintForPlayer(player, Localizer[punishmentKey, adminName, targetName]);
+					}
 				}
 			}
 		}
@@ -612,7 +625,7 @@ namespace Zenith_Bans
 		{
 			if (target == null || checker == null) return;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				var punishments = _playerCache.TryGetValue(target.SteamID, out var playerData)
 					? playerData.Punishments
@@ -621,7 +634,7 @@ namespace Zenith_Bans
 				var mutePunishment = punishments.FirstOrDefault(p => p.Type == PunishmentType.Mute || p.Type == PunishmentType.Silence);
 				var gagPunishment = punishments.FirstOrDefault(p => p.Type == PunishmentType.Gag || p.Type == PunishmentType.Silence);
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					_moduleServices?.PrintForPlayer(checker, Localizer["k4.commscheck.header", target.PlayerName]);
 					ProcessCommsPunishment(checker, mutePunishment, "k4.commscheck.mute", "k4.commscheck.no-mute");
@@ -682,16 +695,16 @@ namespace Zenith_Bans
 
 			ulong steamId = target.SteamID;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				var punishments = _playerCache.TryGetValue(steamId, out var playerData) ? playerData.Punishments : await GetActivePunishmentsAsync(steamId);
 				var warnings = punishments.Where(p => p.Type == PunishmentType.Warn).ToList();
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					_moduleServices?.PrintForPlayer(checker, Localizer["k4.warncheck.header", target.PlayerName, warnings.Count]);
 
-					if (warnings.Any())
+					if (warnings.Count > 0)
 					{
 						for (int i = 0; i < warnings.Count; i++)
 						{
@@ -724,7 +737,7 @@ namespace Zenith_Bans
 			string playerName = player.PlayerName;
 			string ipAddress = player.IpAddress.Split(":")[0];
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				PlayerData? playerData = await LoadOrUpdatePlayerDataAsync(steamId, playerName, ipAddress);
 				if (playerData == null)
@@ -733,26 +746,33 @@ namespace Zenith_Bans
 					return;
 				}
 
-				if (_coreAccessor.GetValue<bool>("Config", "ApplyIPBans") && await IsIpBannedAsync(ipAddress))
-				{
-					Server.NextFrame(() => player.Disconnect(NetworkDisconnectionReason.NETWORK_DISCONNECT_REJECT_BANNED));
-					return;
-				}
+				bool applyIPBans = _coreAccessor.GetValue<bool>("Config", "ApplyIPBans");
+				bool isIpBanned = applyIPBans && await IsIpBannedAsync(ipAddress);
+				bool connectAdminInfo = _coreAccessor.GetValue<bool>("Config", "ConnectAdminInfo");
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
+					if (isIpBanned)
+					{
+						player.Disconnect(NetworkDisconnectionReason.NETWORK_DISCONNECT_REJECT_BANNED);
+						return;
+					}
+
 					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Ban && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.UtcNow))
 					{
 						player.Disconnect(NetworkDisconnectionReason.NETWORK_DISCONNECT_REJECT_BANNED);
 						return;
 					}
 
-					if (playerData.Punishments.Count > 0 && connect && _coreAccessor.GetValue<bool>("Config", "ConnectAdminInfo"))
+					if (playerData.Punishments.Count > 0 && connect && connectAdminInfo)
 					{
-						Utilities.GetPlayers()
-							.Where(p => p.IsValid && !p.IsBot && !p.IsHLTV && AdminManager.PlayerHasPermissions(p, "@zenith/admin"))
-							.ToList()
-							.ForEach(p => ShowPunishmentSummary(p, player, playerData));
+						foreach (var admin in Utilities.GetPlayers())
+						{
+							if (admin != null && admin.IsValid && !admin.IsBot && !admin.IsHLTV && AdminManager.PlayerHasPermissions(admin, "@zenith/admin"))
+							{
+								ShowPunishmentSummary(admin, player, playerData);
+							}
+						}
 					}
 
 					AdminManager.SetPlayerImmunity(player, (uint)playerData.Immunity.GetValueOrDefault());
@@ -766,7 +786,6 @@ namespace Zenith_Bans
 						playerServices?.SetGag(true, ActionPriority.High);
 
 					_playerCache[steamId] = playerData;
-
 					_disconnectedPlayers.RemoveAll(p => p.SteamId == steamId);
 				});
 			});
@@ -777,12 +796,12 @@ namespace Zenith_Bans
 			string callerName = controller?.PlayerName ?? Localizer["k4.general.console"];
 			ulong targetSteamId = target.SteamID;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await AddAdminAsync(targetSteamId, group);
 				var (permissions, immunity) = await GetGroupDetailsAsync(group);
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					_moduleServices?.PrintForAll(Localizer["k4.addadmin.success", callerName, target.PlayerName, group]);
 
@@ -807,10 +826,20 @@ namespace Zenith_Bans
 			});
 		}
 
-		private List<ulong> GetOnlinePlayersSteamIdsAsync()
+		private List<ulong> GetOnlinePlayersSteamIds()
 		{
-			var onlinePlayers = Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList();
-			return onlinePlayers.Select(p => p.SteamID).ToList();
+			var players = Utilities.GetPlayers();
+			List<ulong> steamIds = new List<ulong>();
+
+			foreach (var player in players)
+			{
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+				{
+					steamIds.Add(player.SteamID);
+				}
+			}
+
+			return steamIds;
 		}
 
 		private void RemoveAdmin(CCSPlayerController? controller, CCSPlayerController target)
@@ -820,11 +849,11 @@ namespace Zenith_Bans
 
 			Logger.LogError($"Removing admin {target.PlayerName} ({targetSteamId})");
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await RemoveAdminAsync(targetSteamId);
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					_moduleServices?.PrintForAll(Localizer["k4.removeadmin.success", callerName, target.PlayerName]);
 
@@ -850,11 +879,11 @@ namespace Zenith_Bans
 		private void AddOfflineAdmin(CCSPlayerController? controller, SteamID steamId, string group)
 		{
 			string callerName = controller?.PlayerName ?? Localizer["k4.general.console"];
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await AddAdminAsync(steamId.SteamId64, group);
 				string targetName = await GetPlayerNameAsync(steamId.SteamId64);
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					_moduleServices?.PrintForAll(Localizer["k4.addadmin.success", callerName, targetName, group]);
 				});
@@ -866,12 +895,12 @@ namespace Zenith_Bans
 			string callerName = controller?.PlayerName ?? Localizer["k4.general.console"];
 			ulong targetSteamId = steamId.SteamId64;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await RemoveAdminAsync(targetSteamId);
 				string targetName = await GetPlayerNameAsync(targetSteamId);
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					_moduleServices?.PrintForAll(Localizer["k4.removeadmin.success", callerName, targetName]);
 				});
@@ -925,7 +954,7 @@ namespace Zenith_Bans
 
 			try
 			{
-				Task.Run(async () =>
+				_ = Task.Run(async () =>
 				{
 					var response = await _httpClient.PostAsync(_webhookUrl, content);
 					if (!response.IsSuccessStatusCode)

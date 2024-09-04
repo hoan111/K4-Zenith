@@ -5,13 +5,29 @@ namespace Zenith.Models;
 
 public sealed partial class Player
 {
-	public static readonly ConcurrentBag<Player> List = [];
+	public static ConcurrentDictionary<ulong, Player> List { get; } = new ConcurrentDictionary<ulong, Player>();
 
 	public static Player? Find(ulong steamID)
 	{
-		var player = List.FirstOrDefault(player => player.SteamID == steamID);
+		if (List.TryGetValue(steamID, out var player))
+		{
+			if (!player.IsValid)
+			{
+				player.Dispose();
+				return null;
+			}
+			return player;
+		}
+		return null;
+	}
 
-		if (player?.IsValid == false)
+	public static Player? Find(CCSPlayerController? controller)
+	{
+		if (controller == null) return null;
+
+		var player = List.Values.FirstOrDefault(p => p.Controller == controller);
+
+		if (player != null && !player.IsValid)
 		{
 			player.Dispose();
 			return null;
@@ -20,18 +36,13 @@ public sealed partial class Player
 		return player;
 	}
 
-	public static Player? Find(CCSPlayerController? controller)
+	public static void AddToList(Player player)
 	{
-		if (controller == null) return null;
+		List[player.SteamID] = player;
+	}
 
-		var player = List.FirstOrDefault(player => player.Controller == controller);
-
-		if (player?.IsValid == false)
-		{
-			player.Dispose();
-			return null;
-		}
-
-		return player;
+	public static void RemoveFromList(Player playerToRemove)
+	{
+		List.TryRemove(playerToRemove.SteamID, out _);
 	}
 }

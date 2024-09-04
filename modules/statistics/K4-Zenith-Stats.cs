@@ -25,7 +25,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.2";
+	public override string ModuleVersion => "1.0.3";
 
 	public KitsuneMenu Menu { get; private set; } = null!;
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
@@ -343,7 +343,7 @@ public class Plugin : BasePlugin
 
 	private void OnMapEnd()
 	{
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			foreach (var playerStats in _playerStats.Values)
 			{
@@ -384,8 +384,13 @@ public class Plugin : BasePlugin
 	private void InitializePlayerStats()
 	{
 		_moduleServices!.LoadAllOnlinePlayerData();
-		foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
+		var players = Utilities.GetPlayers();
+		for (int i = 0; i < players.Count; i++)
 		{
+			var player = players[i];
+			if (player == null || !player.IsValid || player.IsBot || player.IsHLTV)
+				continue;
+
 			var zenithPlayer = GetZenithPlayer(player);
 			if (zenithPlayer != null)
 			{
@@ -396,10 +401,17 @@ public class Plugin : BasePlugin
 
 	public IEnumerable<IPlayerServices> GetValidPlayers()
 	{
-		return Utilities.GetPlayers()
-			.Where(p => p.IsValid && !p.IsBot && !p.IsHLTV)
-			.Select(GetZenithPlayer)
-			.Where(p => p != null)!;
+		foreach (var player in Utilities.GetPlayers())
+		{
+			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+			{
+				var zenithPlayer = GetZenithPlayer(player);
+				if (zenithPlayer != null)
+				{
+					yield return zenithPlayer;
+				}
+			}
+		}
 	}
 
 	private void Initialize_Events()
@@ -415,37 +427,17 @@ public class Plugin : BasePlugin
 	{
 		try
 		{
-			string fullyQualifiedTypeName = $"CounterStrikeSharp.API.Core.{eventName}, CounterStrikeSharp.API";
-			Type? eventType = Type.GetType(fullyQualifiedTypeName);
+			Type? eventType = Type.GetType($"CounterStrikeSharp.API.Core.{eventName}, CounterStrikeSharp.API");
 			if (eventType != null && typeof(GameEvent).IsAssignableFrom(eventType))
 			{
-				MethodInfo? baseRegisterMethod = typeof(BasePlugin).GetMethod(nameof(RegisterEventHandler), BindingFlags.Public | BindingFlags.Instance);
-				if (baseRegisterMethod != null)
+				var methodInfo = typeof(EventManager).GetMethod(nameof(EventManager.OnEventHappens))?.MakeGenericMethod(eventType);
+				var handlerDelegate = methodInfo != null ? Delegate.CreateDelegate(typeof(GameEventHandler<>).MakeGenericType(eventType), _eventManager, methodInfo) : null;
+				if (handlerDelegate != null)
 				{
-					MethodInfo registerMethod = baseRegisterMethod.MakeGenericMethod(eventType);
-					MethodInfo? methodInfo = typeof(EventManager).GetMethod(nameof(EventManager.OnEventHappens), BindingFlags.Public | BindingFlags.Instance)?.MakeGenericMethod(eventType);
-					if (methodInfo != null)
-					{
-						Delegate? handlerDelegate = Delegate.CreateDelegate(typeof(GameEventHandler<>).MakeGenericType(eventType), _eventManager, methodInfo);
-						if (handlerDelegate != null)
-						{
-							registerMethod.Invoke(this, new object[] { handlerDelegate, HookMode.Post });
-						}
-						else
-						{
-							Logger.LogError($"Failed to create delegate for event type {eventType.Name}.");
-						}
-					}
-					else
-					{
-						Logger.LogError($"OnEventHappens method not found for event type {eventType.Name}.");
-					}
+					var registerMethod = typeof(BasePlugin).GetMethod(nameof(RegisterEventHandler))?.MakeGenericMethod(eventType);
+					registerMethod?.Invoke(this, [handlerDelegate, HookMode.Post]);
 				}
-				else
-					Logger.LogError("RegisterEventHandler method not found.");
 			}
-			else
-				Logger.LogError($"Event type not found in specified assembly. Event: {eventName}.");
 		}
 		catch (Exception ex)
 		{
@@ -876,33 +868,79 @@ public class Plugin : BasePlugin
 			if (!IsStatsAllowed())
 				return;
 
-			var players = _plugin._playerStats.Values.Where(p => p.ZenithPlayer.Controller.IsValid && p.ZenithPlayer.Controller.PlayerPawn.Value!.IsValid).ToList();
+			bool ffaMode = _plugin._coreAccessor.GetValue<bool>("Config", "FFAMode");
+			var players = new List<PlayerStats>();
 
-			if (_plugin._coreAccessor.GetValue<bool>("Config", "FFAMode"))
+			foreach (var playerStat in _plugin._playerStats.Values)
 			{
-				var winner = players.OrderByDescending(p => p.ZenithPlayer.Controller.Score).FirstOrDefault();
-
-				if (winner != null)
+				if (playerStat.ZenithPlayer.Controller.IsValid && playerStat.ZenithPlayer.Controller.PlayerPawn.Value!.IsValid)
 				{
-					winner.IncrementStat("GameWin");
+					players.Add(playerStat);
 				}
+			}
 
-				foreach (var player in players.Where(p => p != winner))
+			if (ffaMode)
+			{
+				HandleFFAMode(players);
+			}
+			else
+			{
+				HandleTeamMode(players);
+			}
+		}
+
+		private static void HandleFFAMode(List<PlayerStats> players)
+		{
+			PlayerStats? winner = null;
+			int highestScore = int.MinValue;
+
+			foreach (var player in players)
+			{
+				int score = player.ZenithPlayer.Controller.Score;
+				if (score > highestScore)
+				{
+					highestScore = score;
+					winner = player;
+				}
+			}
+
+			if (winner != null)
+			{
+				winner.IncrementStat("GameWin");
+			}
+
+			foreach (var player in players)
+			{
+				if (player != winner)
 				{
 					player.IncrementStat("GameLose");
 				}
 			}
-			else
+		}
+
+		private static void HandleTeamMode(List<PlayerStats> players)
+		{
+			int ctScore = 0;
+			int tScore = 0;
+
+			var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+			foreach (var team in teams)
 			{
-				var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager").ToList();
-				int ctScore = teams.FirstOrDefault(t => t.Teamname == "CT")?.Score ?? 0;
-				int tScore = teams.FirstOrDefault(t => t.Teamname == "TERRORIST")?.Score ?? 0;
+				if (team.Teamname == "CT")
+					ctScore = team.Score;
+				else if (team.Teamname == "TERRORIST")
+					tScore = team.Score;
+			}
 
-				CsTeam winnerTeam = ctScore > tScore ? CsTeam.CounterTerrorist : tScore > ctScore ? CsTeam.Terrorist : CsTeam.None;
+			CsTeam winnerTeam = ctScore > tScore ? CsTeam.CounterTerrorist :
+								tScore > ctScore ? CsTeam.Terrorist :
+								CsTeam.None;
 
-				if (winnerTeam > CsTeam.Spectator)
+			if (winnerTeam > CsTeam.Spectator)
+			{
+				foreach (var player in players)
 				{
-					foreach (var player in players.Where(p => p.ZenithPlayer.Controller.Team > CsTeam.Spectator))
+					if (player.ZenithPlayer.Controller.Team > CsTeam.Spectator)
 					{
 						player.IncrementStat(player.ZenithPlayer.Controller.Team == winnerTeam ? "GameWin" : "GameLose");
 					}
@@ -935,7 +973,7 @@ public class Plugin : BasePlugin
 			if (_plugin._moduleServices == null)
 				return;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await LoadCurrentMapStats(_plugin._moduleServices);
 				await LoadWeaponStats(_plugin._moduleServices);
@@ -952,9 +990,9 @@ public class Plugin : BasePlugin
 			await connection.OpenAsync();
 
 			string query = $@"
-			SELECT `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`
-			FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats`
-			WHERE `steam_id` = @SteamId";
+				SELECT `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`
+				FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats`
+				WHERE `steam_id` = @SteamId";
 
 			try
 			{
@@ -996,8 +1034,8 @@ public class Plugin : BasePlugin
 			await connection.OpenAsync();
 
 			string query = $@"
-			SELECT * FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats`
-			WHERE `steam_id` = @SteamId AND `map_name` = @MapName";
+				SELECT * FROM `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats`
+				WHERE `steam_id` = @SteamId AND `map_name` = @MapName";
 
 			try
 			{
@@ -1060,6 +1098,8 @@ public class Plugin : BasePlugin
 		}
 
 		public Dictionary<string, WeaponStats> WeaponStats { get; private set; } = new();
+
+		private static readonly string[] sourceArray = ["m4a1", "hkp2000", "usp_silencer", "weapon_m4a1_silencer", "weapon_mp7", "weapon_mp5sd", "deagle", "revolver"];
 
 		public int GetGlobalStat(string statName) => ZenithPlayer.GetStorage<int>(statName);
 
@@ -1187,7 +1227,7 @@ public class Plugin : BasePlugin
 			if (weapon.Contains("knife") || weapon.Contains("bayonet"))
 				return "knife";
 
-			if (new[] { "m4a1", "hkp2000", "usp_silencer", "weapon_m4a1_silencer", "weapon_mp7", "weapon_mp5sd", "deagle", "revolver" }.Contains(weapon))
+			if (sourceArray.Contains(weapon))
 			{
 				var activeWeapon = ZenithPlayer.Controller.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value;
 				if (activeWeapon != null)
@@ -1218,14 +1258,14 @@ public class Plugin : BasePlugin
 				await connection.OpenAsync();
 
 				string query = $@"
-			INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats`
-			(`steam_id`, `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`)
-			VALUES (@SteamId, @Weapon, @Kills, @Shots, @Hits, @Headshots, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits, @NeckHits, @GearHits)
-			ON DUPLICATE KEY UPDATE
-				`kills` = @Kills, `shots` = @Shots, `hits` = @Hits, `headshots` = @Headshots,
-				`chest_hits` = @ChestHits, `stomach_hits` = @StomachHits, `left_arm_hits` = @LeftArmHits,
-				`right_arm_hits` = @RightArmHits, `left_leg_hits` = @LeftLegHits, `right_leg_hits` = @RightLegHits,
-				`neck_hits` = @NeckHits, `gear_hits` = @GearHits";
+					INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_weapon_stats`
+					(`steam_id`, `weapon`, `kills`, `shots`, `hits`, `headshots`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`, `neck_hits`, `gear_hits`)
+					VALUES (@SteamId, @Weapon, @Kills, @Shots, @Hits, @Headshots, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits, @NeckHits, @GearHits)
+					ON DUPLICATE KEY UPDATE
+						`kills` = @Kills, `shots` = @Shots, `hits` = @Hits, `headshots` = @Headshots,
+						`chest_hits` = @ChestHits, `stomach_hits` = @StomachHits, `left_arm_hits` = @LeftArmHits,
+						`right_arm_hits` = @RightArmHits, `left_leg_hits` = @LeftLegHits, `right_leg_hits` = @RightLegHits,
+						`neck_hits` = @NeckHits, `gear_hits` = @GearHits";
 
 				foreach (var weaponStat in WeaponStats.Values)
 				{
@@ -1268,29 +1308,29 @@ public class Plugin : BasePlugin
 				await connection.OpenAsync();
 
 				string query = $@"
-			INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats`
-			(`steam_id`, `map_name`, `kills`, `first_blood`, `deaths`, `assists`, `shoots`, `hits_taken`, `hits_given`,
-			`headshots`, `head_hits`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`,
-			`neck_hits`, `gear_hits`, `grenades`, `mvp`, `round_win`, `round_lose`, `game_win`, `game_lose`,
-			`rounds_overall`, `rounds_ct`, `rounds_t`, `bomb_planted`, `bomb_defused`, `hostage_rescued`, `hostage_killed`, `no_scope_kill`,
-			`penetrated_kill`, `thru_smoke_kill`, `flashed_kill`, `dominated_kill`, `revenge_kill`, `assist_flash`)
-			VALUES (@SteamId, @MapName, @Kills, @FirstBlood, @Deaths, @Assists, @Shoots, @HitsTaken, @HitsGiven,
-			@Headshots, @HeadHits, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits,
-			@NeckHits, @GearHits, @Grenades, @MVP, @RoundWin, @RoundLose, @GameWin, @GameLose,
-			@RoundsOverall, @RoundsCT, @RoundsT, @BombPlanted, @BombDefused, @HostageRescued, @HostageKilled, @NoScopeKill,
-			@PenetratedKill, @ThruSmokeKill, @FlashedKill, @DominatedKill, @RevengeKill, @AssistFlash)
-			ON DUPLICATE KEY UPDATE
-			`kills` = @Kills, `first_blood` = @FirstBlood, `deaths` = @Deaths, `assists` = @Assists,
-			`shoots` = @Shoots, `hits_taken` = @HitsTaken, `hits_given` = @HitsGiven, `headshots` = @Headshots,
-			`head_hits` = @HeadHits, `chest_hits` = @ChestHits, `stomach_hits` = @StomachHits, `left_arm_hits` = @LeftArmHits,
-			`right_arm_hits` = @RightArmHits, `left_leg_hits` = @LeftLegHits, `right_leg_hits` = @RightLegHits,
-			`neck_hits` = @NeckHits, `gear_hits` = @GearHits, `grenades` = @Grenades, `mvp` = @MVP,
-			`round_win` = @RoundWin, `round_lose` = @RoundLose, `game_win` = @GameWin, `game_lose` = @GameLose,
-			`rounds_overall` = @RoundsOverall, `rounds_ct` = @RoundsCT, `rounds_t` = @RoundsT,
-			`bomb_planted` = @BombPlanted, `bomb_defused` = @BombDefused, `hostage_rescued` = @HostageRescued,
-			`hostage_killed` = @HostageKilled, `no_scope_kill` = @NoScopeKill, `penetrated_kill` = @PenetratedKill,
-			`thru_smoke_kill` = @ThruSmokeKill, `flashed_kill` = @FlashedKill, `dominated_kill` = @DominatedKill,
-			`revenge_kill` = @RevengeKill, `assist_flash` = @AssistFlash";
+					INSERT INTO `{_plugin._coreAccessor.GetValue<string>("Database", "TablePrefix")}zenith_map_stats`
+					(`steam_id`, `map_name`, `kills`, `first_blood`, `deaths`, `assists`, `shoots`, `hits_taken`, `hits_given`,
+					`headshots`, `head_hits`, `chest_hits`, `stomach_hits`, `left_arm_hits`, `right_arm_hits`, `left_leg_hits`, `right_leg_hits`,
+					`neck_hits`, `gear_hits`, `grenades`, `mvp`, `round_win`, `round_lose`, `game_win`, `game_lose`,
+					`rounds_overall`, `rounds_ct`, `rounds_t`, `bomb_planted`, `bomb_defused`, `hostage_rescued`, `hostage_killed`, `no_scope_kill`,
+					`penetrated_kill`, `thru_smoke_kill`, `flashed_kill`, `dominated_kill`, `revenge_kill`, `assist_flash`)
+					VALUES (@SteamId, @MapName, @Kills, @FirstBlood, @Deaths, @Assists, @Shoots, @HitsTaken, @HitsGiven,
+					@Headshots, @HeadHits, @ChestHits, @StomachHits, @LeftArmHits, @RightArmHits, @LeftLegHits, @RightLegHits,
+					@NeckHits, @GearHits, @Grenades, @MVP, @RoundWin, @RoundLose, @GameWin, @GameLose,
+					@RoundsOverall, @RoundsCT, @RoundsT, @BombPlanted, @BombDefused, @HostageRescued, @HostageKilled, @NoScopeKill,
+					@PenetratedKill, @ThruSmokeKill, @FlashedKill, @DominatedKill, @RevengeKill, @AssistFlash)
+					ON DUPLICATE KEY UPDATE
+					`kills` = @Kills, `first_blood` = @FirstBlood, `deaths` = @Deaths, `assists` = @Assists,
+					`shoots` = @Shoots, `hits_taken` = @HitsTaken, `hits_given` = @HitsGiven, `headshots` = @Headshots,
+					`head_hits` = @HeadHits, `chest_hits` = @ChestHits, `stomach_hits` = @StomachHits, `left_arm_hits` = @LeftArmHits,
+					`right_arm_hits` = @RightArmHits, `left_leg_hits` = @LeftLegHits, `right_leg_hits` = @RightLegHits,
+					`neck_hits` = @NeckHits, `gear_hits` = @GearHits, `grenades` = @Grenades, `mvp` = @MVP,
+					`round_win` = @RoundWin, `round_lose` = @RoundLose, `game_win` = @GameWin, `game_lose` = @GameLose,
+					`rounds_overall` = @RoundsOverall, `rounds_ct` = @RoundsCT, `rounds_t` = @RoundsT,
+					`bomb_planted` = @BombPlanted, `bomb_defused` = @BombDefused, `hostage_rescued` = @HostageRescued,
+					`hostage_killed` = @HostageKilled, `no_scope_kill` = @NoScopeKill, `penetrated_kill` = @PenetratedKill,
+					`thru_smoke_kill` = @ThruSmokeKill, `flashed_kill` = @FlashedKill, `dominated_kill` = @DominatedKill,
+					`revenge_kill` = @RevengeKill, `assist_flash` = @AssistFlash";
 
 				await connection.ExecuteAsync(query, new
 				{

@@ -66,13 +66,39 @@ namespace Zenith_Bans
 
 		private void OnUnbanCommand(CCSPlayerController? controller, CommandInfo info)
 		{
-			SteamID steamID = GetSteamID(info.GetArg(1));
-			if (steamID.IsValid())
+			string input = info.GetArg(1);
+
+			if (SteamID.TryParse(input, out SteamID? steamID) && steamID != null)
 			{
 				RemovePunishment(controller, steamID, PunishmentType.Ban);
 			}
 			else
-				_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-usage", "unban <SteamID64>"]);
+			{
+				_ = Task.Run(async () =>
+				{
+					var matchingPlayers = await FindPlayersByNameOrPartialNameAsync(input);
+
+					Server.NextWorldUpdate(() =>
+					{
+						if (matchingPlayers.Count == 0)
+						{
+							_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.noplayersfound"]);
+						}
+						else if (matchingPlayers.Count == 1)
+						{
+							RemovePunishment(controller, new SteamID(matchingPlayers.First().SteamID), PunishmentType.Ban);
+						}
+						else
+						{
+							_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.multiple-players-found"]);
+							foreach (var player in matchingPlayers)
+							{
+								_moduleServices?.PrintForPlayer(controller, $"{player.PlayerName} ({player.SteamID})");
+							}
+						}
+					});
+				});
+			}
 		}
 
 		// +------------------------+
@@ -168,11 +194,11 @@ namespace Zenith_Bans
 			ulong targetSteamId = target.SteamID;
 			string targetName = target.PlayerName;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				bool removed = await RemovePunishmentAsync(targetSteamId, PunishmentType.Warn, callerSteamId);
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					if (removed)
 					{
@@ -198,12 +224,12 @@ namespace Zenith_Bans
 
 			ulong targetSteamId = steamId.SteamId64;
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				bool removed = await RemovePunishmentAsync(targetSteamId, PunishmentType.Warn, callerSteamId);
 				string targetName = await GetPlayerNameAsync(targetSteamId);
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					if (removed)
 					{
@@ -338,11 +364,11 @@ namespace Zenith_Bans
 
 			ProcessTargetAction(controller, info.GetArgTargetResult(1), (target) =>
 			{
-				Task.Run(async () =>
+				_ = Task.Run(async () =>
 				{
 					var groups = await GetAdminGroupsAsync();
 
-					Server.NextFrame(() =>
+					Server.NextWorldUpdate(() =>
 					{
 						if (argCount == 2)
 						{
@@ -406,11 +432,11 @@ namespace Zenith_Bans
 			if (argCount > 2 && info.GetArg(2).Length > 0)
 				group = info.GetArg(2);
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				var groups = await GetAdminGroupsAsync();
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					if (argCount == 2)
 					{

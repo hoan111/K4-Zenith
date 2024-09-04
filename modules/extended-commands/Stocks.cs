@@ -81,17 +81,23 @@ public sealed partial class Plugin : BasePlugin
 
 	private void ShowActivityToPlayers(ulong? callerSteamId, string localizerKey, params object[] args)
 	{
-		foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
+		var players = Utilities.GetPlayers();
+		for (int i = 0; i < players.Count; i++)
 		{
+			var player = players[i];
+			if (player == null || !player.IsValid || player.IsBot || player.IsHLTV)
+				continue;
+
 			if (ShouldShowActivity(callerSteamId, player, true))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer[localizerKey, args]);
 			}
 			else if (ShouldShowActivity(callerSteamId, player, false))
 			{
-				var anonymousArgs = args.ToList();
+				var anonymousArgs = new object[args.Length];
+				Array.Copy(args, anonymousArgs, args.Length);
 				anonymousArgs[0] = Localizer["k4.general.admin"];
-				_moduleServices?.PrintForPlayer(player, Localizer[localizerKey, anonymousArgs.ToArray()]);
+				_moduleServices?.PrintForPlayer(player, Localizer[localizerKey, anonymousArgs]);
 			}
 		}
 	}

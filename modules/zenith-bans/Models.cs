@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Entities;
 using MySqlConnector;
 
 namespace Zenith_Bans
@@ -62,6 +64,21 @@ namespace Zenith_Bans
 			public ulong SteamId { get; set; }
 			public required string PlayerName { get; set; }
 			public DateTime DisconnectedAt { get; set; }
+		}
+
+		private class PlayerInfo
+		{
+			public required ulong SteamID { get; set; }
+			public required string PlayerName { get; set; }
+		}
+
+		private class AdminGroupInfo
+		{
+			[JsonPropertyName("flags")]
+			public List<string> Flags { get; set; } = [];
+
+			[JsonPropertyName("immunity")]
+			public int Immunity { get; set; }
 		}
 	}
 }

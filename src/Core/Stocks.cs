@@ -16,6 +16,12 @@ namespace Zenith
 		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<CCSPlayerController, string>>> _pluginPlayerPlaceholders = new();
 		private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Func<string>>> _pluginServerPlaceholders = new();
 
+		private static readonly HashSet<char> _chatColorChars = typeof(ChatColors)
+			.GetFields(BindingFlags.Public | BindingFlags.Static)
+			.Where(f => f.FieldType == typeof(char))
+			.Select(f => (char)f.GetValue(null)!)
+			.ToHashSet();
+
 		private void Initialize_Placeholders()
 		{
 			RegisterZenithPlayerPlaceholder("userid", p => p.UserId?.ToString() ?? "Unknown");
@@ -64,7 +70,7 @@ namespace Zenith
 			return text;
 		}
 
-		public string RemoveLeadingSpaceBeforeColorCode(string input)
+		public static string RemoveLeadingSpaceBeforeColorCode(string input)
 		{
 			if (string.IsNullOrEmpty(input) || input.Length < 2)
 				return input;
@@ -74,13 +80,9 @@ namespace Zenith
 				: input;
 		}
 
-		private bool IsColorCode(char c)
+		private static bool IsColorCode(char c)
 		{
-			return typeof(ChatColors)
-				.GetFields(BindingFlags.Public | BindingFlags.Static)
-				.Where(f => f.FieldType == typeof(char))
-				.Select(f => (char?)f.GetValue(null))
-				.Contains(c);
+			return _chatColorChars.Contains(c);
 		}
 
 		public void RegisterZenithPlayerPlaceholder(string key, Func<CCSPlayerController, string> valueFunc)
@@ -229,22 +231,16 @@ namespace Zenith
 			}
 		}
 
-		public string RemoveColorChars(string input)
+		public static string RemoveColorChars(string input)
 		{
 			if (string.IsNullOrEmpty(input))
 				return input;
-
-			var chatColorChars = typeof(ChatColors)
-				.GetFields(BindingFlags.Public | BindingFlags.Static)
-				.Where(f => f.FieldType == typeof(char))
-				.Select(f => (char?)f.GetValue(null))
-				.ToHashSet();
 
 			var result = new StringBuilder(input.Length);
 
 			foreach (char c in input)
 			{
-				if (!chatColorChars.Contains(c))
+				if (!_chatColorChars.Contains(c))
 				{
 					result.Append(c);
 				}

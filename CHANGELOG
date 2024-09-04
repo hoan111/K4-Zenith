@@ -1,10 +1,26 @@
-# 2024.09.02 - 1.0.11h
+# 2024.09.04 - 1.0.12
+
+- feat: Unban offline player by name, return multiple find
+- fix: Migration table created table with wrong initial db_version
+- fix: CustomTags didnt load due to ChatColors duble darkred
+- fix: CustomTags didnt set properly selected menu tag
+- fix: Disconnect cache handling malfunctions
+- fix: Random issue thta blocked using the commands after some time
+- fix: Entity is not valid error on some modules
+- fix: Ban commands not worked when server hibernated
+- fix: Remove unused logs when offline banning
+- fix: Punishment not broadcasted if not online (no chat msg)
+- optimise: Removed LINQ from some functions to optimise performance, help garbage collector
+- optimise: Menu API
+- optimise: Rank module playtime point timer
+
+# 2024.09.03 - 1.0.11h
 
 - fix: Migration commands
 - fix: Removed debug logs
 - fix: Bans mariadb table creation issues
 
-# 2024.09.02 - 1.0.11
+# 2024.09.03 - 1.0.11
 
 - feat: Added auto save on timer for long gamemodes (#2)
 - feat: Bans module now store the server ip where the player is online currently (#2)

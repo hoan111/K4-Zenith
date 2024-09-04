@@ -118,7 +118,7 @@ namespace Zenith
 				=> _player.SaveAll();
 
 			public void LoadPlayerData()
-				=> Task.Run(_player.LoadPlayerData);
+				=> _ = Task.Run(_player.LoadPlayerData);
 
 			public void ResetModuleSettings()
 				=> _player.ResetModuleSettings();
@@ -145,21 +145,31 @@ namespace Zenith
 			public void PrintForAll(string message, bool showPrefix = true)
 			{
 				Console.ForegroundColor = ConsoleColor.DarkYellow;
-				Console.WriteLine($"{_plugin.RemoveColorChars(_plugin.Localizer["k4.general.prefix"])}{message}");
+				Console.WriteLine($"{RemoveColorChars(_plugin.Localizer["k4.general.prefix"])}{message}");
 				Console.ResetColor();
 
-				Player.List.ToList().ForEach(p => p.Print(message, showPrefix));
+				foreach (var player in Player.List.Values)
+				{
+					if (player.IsValid && player.IsPlayer)
+						player.Print(message, showPrefix);
+				}
 			}
 
 			public void PrintForTeam(CsTeam team, string message, bool showPrefix = true)
-				=> Player.List.Where(p => p.Controller!.Team == team).ToList().ForEach(p => p.Print(message, showPrefix));
+			{
+				foreach (var player in Player.List.Values)
+				{
+					if (player.IsValid && player.IsPlayer && player.Controller!.Team == team)
+						player.Print(message, showPrefix);
+				}
+			}
 
 			public void PrintForPlayer(CCSPlayerController? player, string message, bool showPrefix = true)
 			{
 				if (player == null)
 				{
 					Console.ForegroundColor = ConsoleColor.DarkYellow;
-					Console.WriteLine($"{_plugin.RemoveColorChars(_plugin.Localizer["k4.general.prefix"])}{message}");
+					Console.WriteLine($"{RemoveColorChars(_plugin.Localizer["k4.general.prefix"])}{message}");
 					Console.ResetColor();
 					return;
 				}

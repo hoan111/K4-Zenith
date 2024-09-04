@@ -6,6 +6,7 @@ using CounterStrikeSharp.API;
 using Microsoft.Extensions.Localization;
 using MySqlConnector;
 using System.Reflection;
+using CounterStrikeSharp.API.Core;
 
 namespace Zenith.Models;
 
@@ -18,6 +19,7 @@ public sealed partial class Player
 	public ConcurrentDictionary<string, object?> Storage = new();
 	public static readonly ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultSettings = new();
 	public static readonly ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultStorage = new();
+	private static readonly bool[] function = new[] { false, true };
 
 	public static async Task CreateTablesAsync(Plugin plugin)
 	{
@@ -55,11 +57,11 @@ public sealed partial class Player
 	{
 		string callerPlugin = CallerIdentifier.GetCallingPluginName();
 
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			await RegisterModuleDataAsync(plugin, callerPlugin, TABLE_PLAYER_SETTINGS);
 
-			Server.NextFrame(() =>
+			Server.NextWorldUpdate(() =>
 			{
 				moduleDefaultSettings[callerPlugin] = (new ConcurrentDictionary<string, object?>(defaultSettings), localizer);
 			});
@@ -70,11 +72,11 @@ public sealed partial class Player
 	{
 		string callerPlugin = CallerIdentifier.GetCallingPluginName();
 
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			await RegisterModuleDataAsync(plugin, callerPlugin, TABLE_PLAYER_STORAGE);
 
-			Server.NextFrame(() =>
+			Server.NextWorldUpdate(() =>
 			{
 				moduleDefaultStorage[callerPlugin] = (new ConcurrentDictionary<string, object?>(defaultStorage), null);
 			});
@@ -147,7 +149,7 @@ public sealed partial class Player
 
 		if (saveImmediately)
 		{
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				await SavePlayerDataAsync(fullKey.Split('.')[0], targetDict == Storage);
 			});
@@ -307,7 +309,7 @@ public sealed partial class Player
 		await LoadDataAsync(Settings, TABLE_PLAYER_SETTINGS, moduleDefaultSettings);
 		await LoadDataAsync(Storage, TABLE_PLAYER_STORAGE, moduleDefaultStorage);
 
-		Server.NextFrame(() =>
+		Server.NextWorldUpdate(() =>
 		{
 			_plugin._moduleServices?.InvokeZenithPlayerLoaded(Controller!);
 		});
@@ -327,7 +329,7 @@ public sealed partial class Player
 
 			await UpdateLastOnline();
 
-			Server.NextFrame(() =>
+			Server.NextWorldUpdate(() =>
 			{
 				if (result != null)
 				{
@@ -401,7 +403,7 @@ public sealed partial class Player
 
 	private void SavePlayerData(string? moduleID, bool? isStorage)
 	{
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			if (moduleID != null)
 			{
@@ -447,16 +449,23 @@ public sealed partial class Player
 
 			var columnName = isStorage ? $"{moduleID}.storage" : $"{moduleID}.settings";
 			var targetDict = isStorage ? Storage : Settings;
-			var moduleData = targetDict
-				.Where(kvp => kvp.Key.StartsWith($"{moduleID}."))
-				.ToDictionary(kvp => kvp.Key.Split('.')[1], kvp => kvp.Value);
+			var moduleData = new Dictionary<string, object?>();
+
+			foreach (var kvp in targetDict)
+			{
+				if (kvp.Key.StartsWith($"{moduleID}."))
+				{
+					var key = kvp.Key.Split('.')[1];
+					moduleData[key] = kvp.Value;
+				}
+			}
 
 			var jsonValue = JsonSerializer.Serialize(moduleData);
 
 			var query = $@"
-				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `{MySqlHelper.EscapeString(columnName)}`)
-				VALUES (@SteamID, @JsonValue)
-				ON DUPLICATE KEY UPDATE `{MySqlHelper.EscapeString(columnName)}` = @JsonValue;";
+            INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `{MySqlHelper.EscapeString(columnName)}`)
+            VALUES (@SteamID, @JsonValue)
+            ON DUPLICATE KEY UPDATE `{MySqlHelper.EscapeString(columnName)}` = @JsonValue;";
 
 			await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString(), JsonValue = jsonValue });
 		}
@@ -546,13 +555,19 @@ public sealed partial class Player
 	public static void LoadAllOnlinePlayerData(Plugin plugin, bool blockEvent = false)
 	{
 		string tablePrefix = plugin.Database.TablePrefix;
-		List<string> steamIds = [];
+		var steamIds = new List<string>();
+		var playerList = new List<CCSPlayerController>();
 
-		var playerList = Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV);
+		foreach (var player in Utilities.GetPlayers())
+		{
+			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+			{
+				steamIds.Add(player.SteamID.ToString());
+				playerList.Add(player);
+			}
+		}
 
-		steamIds = playerList.Select(p => p.SteamID.ToString()).ToList();
-
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			if (steamIds.Count == 0)
 				return;
@@ -563,16 +578,16 @@ public sealed partial class Player
 				await connection.OpenAsync();
 
 				var settingsQuery = $@"
-					SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}`
-					WHERE `steam_id` IN @SteamIDs;";
+                SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}`
+                WHERE `steam_id` IN @SteamIDs;";
 				var settingsResults = await connection.QueryAsync(settingsQuery, new { SteamIDs = steamIds });
 
 				var storageQuery = $@"
-					SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}`
-					WHERE `steam_id` IN @SteamIDs;";
+                SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}`
+                WHERE `steam_id` IN @SteamIDs;";
 				var storageResults = await connection.QueryAsync(storageQuery, new { SteamIDs = steamIds });
 
-				Server.NextFrame(() =>
+				Server.NextWorldUpdate(() =>
 				{
 					foreach (var controller in playerList)
 					{
@@ -611,11 +626,14 @@ public sealed partial class Player
 		string tablePrefix = plugin.Database.TablePrefix;
 		var playerDataToSave = new ConcurrentDictionary<string, (Dictionary<string, string> Settings, Dictionary<string, string> Storage)>();
 
-		if (!List.Any(p => p.IsValid))
+		if (!List.Values.Any(p => p.IsValid))
 			return;
 
-		foreach (var player in List.Where(p => p.IsValid))
+		foreach (var player in List.Values)
 		{
+			if (!player.IsValid)
+				continue;
+
 			var settingsData = new Dictionary<string, string>();
 			var storageData = new Dictionary<string, string>();
 
@@ -635,7 +653,7 @@ public sealed partial class Player
 			playerDataToSave[player.SteamID.ToString()] = (settingsData, storageData);
 		}
 
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			if (playerDataToSave.IsEmpty)
 				return;
@@ -645,7 +663,7 @@ public sealed partial class Player
 				using var connection = plugin.Database.CreateConnection();
 				await connection.OpenAsync();
 
-				foreach (var isStorage in new[] { false, true })
+				foreach (var isStorage in function)
 				{
 					string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
 
@@ -681,7 +699,7 @@ public sealed partial class Player
 
 				if (dipose)
 				{
-					foreach (var player in List)
+					foreach (var player in List.Values)
 					{
 						player.Settings.Clear();
 						player.Storage.Clear();
@@ -741,10 +759,10 @@ public sealed partial class Player
 	{
 		SaveAllOnlinePlayerData(plugin, false);
 
-		foreach (var player in List.Where(p => p.IsValid))
+		foreach (var player in List.Values)
 		{
-			player.Storage.TryRemove(callerPlugin, out _);
 			player.Settings.TryRemove(callerPlugin, out _);
+			player.Storage.TryRemove(callerPlugin, out _);
 		}
 
 		moduleDefaultSettings.TryRemove(callerPlugin, out _);

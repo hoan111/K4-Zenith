@@ -65,7 +65,7 @@ namespace Zenith
 			if (player is null || !player.IsValid || player.IsHLTV || player.IsBot)
 				return HookResult.Continue;
 
-			new Player(this, player);
+			_ = new Player(this, player);
 			return HookResult.Continue;
 		}
 

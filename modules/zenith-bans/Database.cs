@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Entities;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
@@ -429,7 +430,7 @@ namespace Zenith_Bans
 			return await connection.ExecuteScalarAsync<string>(query, new { SteamId = steamId }) ?? "Unknown";
 		}
 
-		private async Task RemoveOfflinePlayersFromServerAsync(List<ulong> onlineSteamIds)
+		private async Task RemoveOfflinePlayersFromServerAsync(IEnumerable<ulong> onlineSteamIds)
 		{
 			try
 			{
@@ -451,7 +452,7 @@ namespace Zenith_Bans
 			}
 		}
 
-		private async Task RemoveExpiredPunishmentsAsync(List<ulong> onlineSteamIds)
+		private async Task RemoveExpiredPunishmentsAsync(IEnumerable<ulong> onlineSteamIds)
 		{
 			try
 			{
@@ -592,13 +593,34 @@ namespace Zenith_Bans
 			}
 		}
 
-		private class AdminGroupInfo
+		private async Task<List<PlayerInfo>> FindPlayersByNameOrPartialNameAsync(string name)
 		{
-			[JsonPropertyName("flags")]
-			public List<string> Flags { get; set; } = [];
+			var results = new List<dynamic>();
+			var players = new List<PlayerInfo>();
 
-			[JsonPropertyName("immunity")]
-			public int Immunity { get; set; }
+			try
+			{
+				using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
+				await connection.OpenAsync();
+
+				string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
+				var query = $@"
+					SELECT steam_id, name FROM `{MySqlHelper.EscapeString(prefix)}zenith_bans_players`
+					WHERE name LIKE @Name";
+				results = (await connection.QueryAsync(query, new { Name = $"%{name}%" })).ToList();
+
+				players = results.Select(r => new PlayerInfo
+				{
+					SteamID = (ulong)r.steam_id,
+					PlayerName = r.name
+				}).ToList();
+			}
+			catch (Exception ex)
+			{
+				Logger.LogError($"Error querying players by name: {ex.Message}");
+			}
+
+			return players;
 		}
 	}
 }

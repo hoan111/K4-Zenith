@@ -16,11 +16,16 @@ namespace Zenith_Bans
 			var playerMap = new Dictionary<int, CCSPlayerController>();
 
 			int index = 0;
-			foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && (includeBots || (!p.IsBot && !p.IsHLTV)) && p != caller && AdminManager.CanPlayerTarget(caller, p)))
+			var players = Utilities.GetPlayers();
+
+			foreach (var player in players)
 			{
-				items.Add(new MenuItem(MenuItemType.Button, [new MenuValue($"#{player.UserId} | {player.PlayerName}")]));
-				playerMap[index] = player;
-				index++;
+				if (player != null && player.IsValid && (includeBots || (!player.IsBot && !player.IsHLTV)) && player != caller && AdminManager.CanPlayerTarget(caller, player))
+				{
+					items.Add(new MenuItem(MenuItemType.Button, new MenuValue($"#{player.UserId} | {player.PlayerName}")));
+					playerMap[index] = player;
+					index++;
+				}
 			}
 
 			if (items.Count == 0)

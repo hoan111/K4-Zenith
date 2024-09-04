@@ -17,7 +17,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.1";
+	public override string ModuleVersion => "1.0.2";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -123,7 +123,7 @@ public sealed partial class Plugin : BasePlugin
 	private void SetupTimers()
 	{
 		AddTimer(3.0f, () => _moduleServices!.LoadAllOnlinePlayerData());
-		AddTimer(1, CheckPlaytime, TimerFlags.REPEAT);
+		AddTimer(30.0f, CheckPlaytime, TimerFlags.REPEAT);
 	}
 
 	private void CheckPlaytime()

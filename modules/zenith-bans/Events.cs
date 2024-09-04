@@ -25,7 +25,7 @@ namespace Zenith_Bans
 				if (player?.IsValid == true && !player.IsBot && !player.IsHLTV)
 				{
 					ulong steamID = player.SteamID;
-					Task.Run(async () =>
+					_ = Task.Run(async () =>
 					{
 						await HandlePlayerDisconnectAsync(steamID);
 					});

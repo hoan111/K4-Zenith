@@ -16,7 +16,8 @@
   "k4.general.time-ago": "{0} min ago",
   "k4.general.no-reason": "No reason specified",
   "k4.general.invalid-steamid": "{lightred}Invalid SteamID64 provided.",
-  "k4.general.noplayersfound": "No players found",
+  "k4.general.noplayersfound": "{lightred}No players found",
+  "k4.general.multiple-players-found": "{lightred}Multiple players found",
 
   "k4.chat.kick": "{lightred}{0} kicked {1} from the server. Reason: {2}",
   "k4.chat.ban": "{lightred}{0} banned {1} for {2}. Reason: {3}",

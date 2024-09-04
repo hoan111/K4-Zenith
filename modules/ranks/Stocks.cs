@@ -3,7 +3,6 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Utils;
-using Microsoft.Extensions.Logging;
 using ZenithAPI;
 
 namespace Zenith_Ranks;
@@ -19,7 +18,7 @@ public sealed partial class Plugin : BasePlugin
 
 	private static readonly Regex _colorRegex = new(@"\b(?<color>\w+)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-	public string ApplyPrefixColors(string msg)
+	public static string ApplyPrefixColors(string msg)
 	{
 		return _colorRegex.Replace(msg, match =>
 		{
@@ -32,7 +31,7 @@ public sealed partial class Plugin : BasePlugin
 	{
 		foreach (var player in Utilities.GetPlayers())
 		{
-			if (player.IsValid && !player.IsBot && !player.IsHLTV)
+			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 			{
 				var zenithPlayer = GetZenithPlayer(player);
 				if (zenithPlayer != null)

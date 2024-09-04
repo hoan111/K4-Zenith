@@ -1,11 +1,6 @@
 using MySqlConnector;
 using Dapper;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Zenith.Models
 {
@@ -85,6 +80,20 @@ namespace Zenith.Models
 					value VARCHAR(50) NOT NULL
 				) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 			");
+
+			var versionExists = await connection.ExecuteScalarAsync<int>($@"
+				SELECT COUNT(*)
+				FROM {TablePrefix}{INFO_TABLE}
+				WHERE `key` = @Key
+			", new { Key = VERSION_KEY });
+
+			if (versionExists == 0)
+			{
+				await connection.ExecuteAsync($@"
+					INSERT INTO {TablePrefix}{INFO_TABLE} (`key`, value)
+					VALUES (@Key, @Value)
+				", new { Key = VERSION_KEY, Value = _migrations.Last().Key });
+			}
 		}
 
 		private async Task CreateDatabaseBackupAsync()
@@ -145,6 +154,7 @@ namespace Zenith.Models
 		{
 			string currentVersion;
 			string serverType;
+
 			using (var connection = CreateConnection())
 			{
 				await connection.OpenAsync();
@@ -152,19 +162,18 @@ namespace Zenith.Models
 				serverType = await GetServerTypeAsync(connection);
 			}
 
-			plugin.Logger.LogInformation($"Current database version: {currentVersion}");
-			plugin.Logger.LogInformation($"Database server type: {serverType}");
-
-			var pendingMigrations = _migrations
-				.Where(m => IsNewerVersion(m.Key, currentVersion))
-				.OrderBy(m => m.Key)
-				.ToList();
-
-			if (!pendingMigrations.Any())
+			var pendingMigrations = new List<KeyValuePair<string, List<MigrationStep>>>();
+			foreach (var migration in _migrations)
 			{
-				plugin.Logger.LogInformation("No pending migrations.");
-				return;
+				if (IsNewerVersion(migration.Key, currentVersion))
+				{
+					pendingMigrations.Add(migration);
+				}
 			}
+			pendingMigrations.Sort((x, y) => string.Compare(x.Key, y.Key, StringComparison.Ordinal));
+
+			if (pendingMigrations.Count == 0)
+				return;
 
 			plugin.Logger.LogInformation($"Starting database migration from version {currentVersion} to {plugin.ModuleVersion}");
 
@@ -192,13 +201,15 @@ namespace Zenith.Models
 						using var transaction = await connection.BeginTransactionAsync();
 						try
 						{
+							bool changesMade = false;
 							foreach (var step in migration.Value)
 							{
 								if (await TableExistsAsync(connection, step.TableName, transaction))
 								{
 									var formattedSql = step.SqlQuery.Replace("{prefix}", TablePrefix);
 									plugin.Logger.LogDebug($"Executing SQL on table {step.TableName}: {formattedSql}");
-									await connection.ExecuteAsync(formattedSql, transaction: transaction);
+									var result = await connection.ExecuteAsync(formattedSql, transaction: transaction);
+									if (result > 0) changesMade = true;
 								}
 								else
 								{
@@ -206,9 +217,17 @@ namespace Zenith.Models
 								}
 							}
 
-							await SetDatabaseVersionAsync(connection, migration.Key, transaction);
+							if (changesMade || migration.Value.Count == 0)
+							{
+								await SetDatabaseVersionAsync(connection, migration.Key, transaction);
+								latestAppliedVersion = migration.Key;
+							}
+							else
+							{
+								plugin.Logger.LogInformation($"No changes were made for migration {migration.Key}. Version not updated.");
+							}
+
 							await transaction.CommitAsync();
-							latestAppliedVersion = migration.Key;
 							break; // Success, exit retry loop
 						}
 						catch (Exception ex)

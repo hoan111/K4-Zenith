@@ -18,7 +18,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.1";
+	public override string ModuleVersion => "1.0.2";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -96,15 +96,21 @@ public class Plugin : BasePlugin
 		AddTimer(3.0f, () =>
 		{
 			_moduleServices.LoadAllOnlinePlayerData();
-			Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(player =>
+			var players = Utilities.GetPlayers();
+			long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+			foreach (var player in players)
 			{
-				_playerTimes[player.SteamID] = new PlayerTimeData
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 				{
-					LastUpdateTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-					CurrentTeam = player.Team,
-					IsAlive = player.PlayerPawn.Value?.Health > 0
-				};
-			});
+					_playerTimes[player.SteamID] = new PlayerTimeData
+					{
+						LastUpdateTime = currentTime,
+						CurrentTeam = player.Team,
+						IsAlive = player.PlayerPawn.Value?.Health > 0
+					};
+				}
+			}
 		});
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);

@@ -164,7 +164,7 @@ namespace Zenith_Ranks
 					if (handlerDelegate != null)
 					{
 						var registerMethod = typeof(BasePlugin).GetMethod(nameof(RegisterEventHandler))?.MakeGenericMethod(eventType);
-						registerMethod?.Invoke(this, new object[] { handlerDelegate, HookMode.Post });
+						registerMethod?.Invoke(this, [handlerDelegate, HookMode.Post]);
 					}
 				}
 			}

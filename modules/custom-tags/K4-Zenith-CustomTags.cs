@@ -26,7 +26,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.2";
+	public override string ModuleVersion => "1.0.3";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -39,6 +39,12 @@ public class Plugin : BasePlugin
 
 	private Dictionary<string, TagConfig>? _tagConfigs;
 	private Dictionary<string, PredefinedTagConfig>? _predefinedConfigs;
+
+	private static readonly Dictionary<string, char> _chatColors = typeof(ChatColors).GetFields()
+		.Where(f => f.FieldType == typeof(char))
+		.GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+		.Select(g => g.First()) // This will take the first occurrence if there are duplicates (DarkRed and Darkred)
+		.ToDictionary(f => f.Name, f => (char)f.GetValue(null)!, StringComparer.OrdinalIgnoreCase);
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
@@ -96,7 +102,16 @@ public class Plugin : BasePlugin
 		AddTimer(5.0f, () =>
 		{
 			_moduleServices?.LoadAllOnlinePlayerData();
-			Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV).ToList().ForEach(ApplyTagConfig);
+
+			var players = Utilities.GetPlayers();
+			for (int i = 0; i < players.Count; i++)
+			{
+				var player = players[i];
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+				{
+					ApplyTagConfig(player);
+				}
+			}
 		});
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
@@ -114,7 +129,8 @@ public class Plugin : BasePlugin
 		_predefinedConfigs ??= GetPredefinedTagConfigs();
 
 		List<MenuItem> items = [];
-		HashSet<string> availableConfigs = new();
+		List<string> configKeys = [];
+		HashSet<string> availableConfigs = [];
 
 		if (_tagConfigs.TryGetValue("all", out var allConfig) && allConfig.AvailableConfigs != null)
 		{
@@ -134,10 +150,12 @@ public class Plugin : BasePlugin
 		}
 
 		items.Add(new MenuItem(MenuItemType.Button, [new MenuValue(Localizer["customtags.menu.none"])]));
+		configKeys.Add("none");
 
 		if (hasCustomConfig)
 		{
 			items.Add(new MenuItem(MenuItemType.Button, [new MenuValue(Localizer["customtags.menu.default"])]));
+			configKeys.Add("default");
 		}
 
 		foreach (var configName in availableConfigs)
@@ -145,6 +163,7 @@ public class Plugin : BasePlugin
 			if (_predefinedConfigs.TryGetValue(configName, out var config))
 			{
 				items.Add(new MenuItem(MenuItemType.Button, [new MenuValue(config.Name)]));
+				configKeys.Add(configName);
 			}
 		}
 
@@ -159,27 +178,34 @@ public class Plugin : BasePlugin
 			{
 				if (selected == null) return;
 
-				string selectedConfigName = selected.Values![0].Value;
-
-				if (buttons == MenuButtons.Select)
+				if (menu.Option >= 0 && menu.Option < configKeys.Count)
 				{
-					if (selectedConfigName == Localizer["customtags.menu.default"])
+					string selectedConfigKey = configKeys[menu.Option];
+
+					if (buttons == MenuButtons.Select)
 					{
-						_playerSelectedConfigs.Remove(player.SteamID);
-						ApplyTagConfig(player);
-						_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.default"]);
-					}
-					else if (selectedConfigName == Localizer["customtags.menu.none"])
-					{
-						_playerSelectedConfigs[player.SteamID] = "none";
-						ApplyNullConfig(player);
-						_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.none"]);
-					}
-					else if (_predefinedConfigs.TryGetValue(selectedConfigName.ToLower(), out var selectedPredefinedConfig))
-					{
-						_playerSelectedConfigs[player.SteamID] = selectedConfigName.ToLower();
-						ApplyPredefinedConfig(player, selectedPredefinedConfig);
-						_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.config", selectedConfigName]);
+						if (selectedConfigKey == "default")
+						{
+							_playerSelectedConfigs.Remove(player.SteamID);
+							ApplyTagConfig(player);
+							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.default"]);
+						}
+						else if (selectedConfigKey == "none")
+						{
+							_playerSelectedConfigs[player.SteamID] = "none";
+							ApplyNullConfig(player);
+							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.none"]);
+						}
+						else if (_predefinedConfigs.TryGetValue(selectedConfigKey, out var selectedPredefinedConfig))
+						{
+							_playerSelectedConfigs[player.SteamID] = selectedConfigKey;
+							ApplyPredefinedConfig(player, selectedPredefinedConfig);
+							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.config", selectedPredefinedConfig.Name]);
+						}
+						else
+						{
+							_moduleServices?.PrintForPlayer(player, $"Invalid tag configuration: {selectedConfigKey}");
+						}
 					}
 				}
 			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), 5, disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
@@ -320,9 +346,9 @@ public class Plugin : BasePlugin
 
 	private Dictionary<string, PredefinedTagConfig> GetPredefinedTagConfigs()
 	{
-		string configPath = Path.Combine(ModuleDirectory, "predefined_tags.json");
 		try
 		{
+			string configPath = Path.Combine(ModuleDirectory, "predefined_tags.json");
 			string json = File.ReadAllText(configPath);
 			string strippedJson = StripComments(json);
 			return JsonSerializer.Deserialize<Dictionary<string, PredefinedTagConfig>>(strippedJson, _jsonOptions) ?? [];
@@ -336,8 +362,25 @@ public class Plugin : BasePlugin
 
 	private static string StripComments(string json)
 	{
-		return string.Join("\n", json.Split('\n').Where(line => !line.TrimStart().StartsWith("//")));
+		if (string.IsNullOrEmpty(json))
+			return json;
+
+		var result = new System.Text.StringBuilder(json.Length);
+		using (var reader = new StringReader(json))
+		{
+			string? line;
+			while ((line = reader.ReadLine()) != null)
+			{
+				string trimmedLine = line.TrimStart();
+				if (!trimmedLine.StartsWith("//"))
+				{
+					result.AppendLine(line);
+				}
+			}
+		}
+		return result.ToString();
 	}
+
 
 	private void ApplyTagConfig(CCSPlayerController player)
 	{
@@ -356,7 +399,7 @@ public class Plugin : BasePlugin
 			}
 
 			bool configApplied = false;
-			List<string> availableConfigs = new();
+			List<string> availableConfigs = [];
 
 			if (_tagConfigs.TryGetValue("all", out var allConfig))
 			{
@@ -371,10 +414,14 @@ public class Plugin : BasePlugin
 				}
 			}
 
-			foreach (var (key, config) in _tagConfigs.Where(kvp => kvp.Key != "all"))
+			foreach (var kvp in _tagConfigs)
 			{
-				if (CheckPermissionOrSteamID(player, key))
+				if (kvp.Key == "all")
+					continue;
+
+				if (CheckPermissionOrSteamID(player, kvp.Key))
 				{
+					var config = kvp.Value;
 					if (HasTagConfigValues(config))
 					{
 						ApplyConfig(zenithPlayer, config);
@@ -491,23 +538,31 @@ public class Plugin : BasePlugin
 		zenithPlayer.SetNameTag(null);
 	}
 
-	private static char GetChatColorValue(string colorName)
-	{
-		var chatColors = typeof(ChatColors).GetFields()
-			.Where(f => f.FieldType == typeof(char))
-			.ToDictionary(f => f.Name.ToLower(), f => (char)f.GetValue(null)!);
-
-		return chatColors.TryGetValue(colorName.ToLower(), out char colorValue) ? colorValue : chatColors["default"];
-	}
-
 	public static string ApplyPrefixColors(string msg)
 	{
-		var chatColors = typeof(ChatColors).GetFields()
-			.Select(f => new { f.Name, Value = f.GetValue(null)?.ToString() })
-			.OrderByDescending(c => c.Name.Length);
+		if (string.IsNullOrEmpty(msg))
+			return msg;
 
-		return chatColors.Aggregate(msg, (current, color) =>
-			color.Value != null ? Regex.Replace(current, $@"(\{{)?{color.Name}(\}})?", color.Value, RegexOptions.IgnoreCase) : current);
+		var sortedColors = _chatColors
+			.OrderByDescending(color => color.Key.Length)
+			.ThenBy(color => color.Key)
+			.ToList();
+
+		foreach (var color in sortedColors)
+		{
+			string pattern = $@"(\{{{color.Key}\}}|{color.Key})";
+			msg = Regex.Replace(msg, pattern, color.Value.ToString(), RegexOptions.IgnoreCase);
+		}
+
+		return msg;
+	}
+
+	private static char GetChatColorValue(string colorName)
+	{
+		if (_chatColors.TryGetValue(colorName, out char color))
+			return color;
+
+		return ChatColors.Default;
 	}
 
 	private void OnZenithPlayerLoaded(CCSPlayerController player)

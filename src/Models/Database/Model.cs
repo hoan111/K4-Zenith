@@ -68,7 +68,7 @@ public partial class Database(Plugin plugin)
 
 		plugin.AddTimer((float)timeUntilMidnight.TotalSeconds, () =>
 		{
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				try
 				{

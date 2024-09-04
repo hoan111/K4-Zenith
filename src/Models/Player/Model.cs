@@ -48,12 +48,12 @@ public sealed partial class Player
 		SteamID = controller?.SteamID ?? 0;
 		Name = controller?.PlayerName ?? "Unknown";
 
-		if (List.Any(player => player.Controller == controller))
+		if (List.Values.Any(player => player.Controller == controller))
 			return;
 
-		List.Add(this);
+		AddToList(this);
 
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			try
 			{
@@ -262,7 +262,7 @@ public sealed partial class Player
 	{
 		_plugin._moduleServices?.InvokeZenithPlayerUnloaded(Controller!);
 
-		Task.Run(async () =>
+		_ = Task.Run(async () =>
 		{
 			try
 			{
@@ -274,8 +274,7 @@ public sealed partial class Player
 			}
 			finally
 			{
-				Player currentPlayer = this;
-				List.TryTake(out currentPlayer!);
+				RemoveFromList(this);
 			}
 		});
 	}

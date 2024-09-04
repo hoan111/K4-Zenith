@@ -81,15 +81,25 @@ namespace Zenith
 		{
 			if (_pluginCommands.TryGetValue(callingPlugin, out var pluginCommands))
 			{
-				foreach (var command in pluginCommands.ToList())
+				foreach (var command in pluginCommands)
 				{
 					CommandManager.RemoveCommand(command);
 				}
 				_pluginCommands.TryRemove(callingPlugin, out _);
-				_commandPermissions.Keys
-					.Where(cmd => cmd.StartsWith(callingPlugin + "_"))
-					.ToList()
-					.ForEach(cmd => _commandPermissions.TryRemove(cmd, out _));
+
+				var keysToRemove = new List<string>();
+				foreach (var cmd in _commandPermissions.Keys)
+				{
+					if (cmd.StartsWith(callingPlugin + "_"))
+					{
+						keysToRemove.Add(cmd);
+					}
+				}
+
+				foreach (var key in keysToRemove)
+				{
+					_commandPermissions.TryRemove(key, out _);
+				}
 			}
 		}
 

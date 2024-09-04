@@ -16,7 +16,7 @@ namespace Zenith
 
 			Logger.LogInformation("Downloading GeoLite2-Country.mmdb due to missing file.");
 
-			Task.Run(async () =>
+			_ = Task.Run(async () =>
 			{
 				try
 				{
