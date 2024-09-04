@@ -58,7 +58,7 @@ call :echo_message "%YELLOW%" "[ INFO ] Copying Extended Commands module..."
 rsync -a --quiet ./modules/zenith-bans/bin/K4-Zenith-ExtendedCommands/ ./Zenith/plugins/K4-Zenith-ExtendedCommands/
 
 call :echo_message "%YELLOW%" "[ INFO ] Copying Custom Tags module..."
-rsync -a --quiet ./modules/custom-tags/bin/K4-Zenith-CustomTags/ ./Zenith/plugins/K4-Zenith-CustomTags/
+rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modules/custom-tags/bin/K4-Zenith-CustomTags/ ./Zenith/plugins/K4-Zenith-CustomTags/
 
 :: Delete files with a specific extension from Zenith and sub-folders
 call :echo_message "%BLUE%" "[ INFO ] Cleaning up unnecessary files..."
