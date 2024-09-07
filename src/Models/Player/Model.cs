@@ -29,12 +29,16 @@ public sealed partial class Player
 	// +--------------------+
 
 	private readonly List<CenterMessage> _centerMessages = [];
+	private CenterMessage? _cachedTopMessage;
+	private float _lastUpdateTime;
+
 	private Tuple<string, ActionPriority>? _clanTag = null;
 	private Tuple<string, ActionPriority>? _nameTag = null;
 	private Tuple<char, ActionPriority>? _nameColor = null;
 	private Tuple<char, ActionPriority>? _chatColor = null;
 	public Tuple<bool, ActionPriority>? _mute = null;
 	public Tuple<bool, ActionPriority>? _gag = null;
+	public (string ShortName, string LongName) _country = ("??", "Unknown");
 
 	// +--------------------+
 	// | PLAYER CONSTRUCTOR |
@@ -73,8 +77,7 @@ public sealed partial class Player
 
 	public bool IsValid
 		=> Controller?.IsValid == true && Controller.PlayerPawn?.IsValid == true;
-	public bool IsPlayer
-		=> Controller?.IsBot == false && Controller.IsHLTV == false;
+
 	public bool IsAlive
 		=> Controller?.PlayerPawn.Value?.Health > 0;
 
@@ -102,22 +105,46 @@ public sealed partial class Player
 	public void ShowCenterMessage()
 	{
 		if (_centerMessages.Count == 0)
+		{
+			if (_cachedTopMessage.HasValue)
+				_cachedTopMessage = null;
 			return;
+		}
 
+		var currentTime = Server.CurrentTime;
+
+		if (!_cachedTopMessage.HasValue || _lastUpdateTime + 0.25f < currentTime || _centerMessages.Any(m => m.Duration <= currentTime))
+		{
+			UpdateCachedMessage(currentTime);
+		}
+
+		if (_cachedTopMessage.HasValue)
+		{
+			string finalMessage = _cachedTopMessage.Value.Message;
+			if (string.IsNullOrEmpty(finalMessage))
+				return;
+
+			if (_cachedTopMessage.Value.ShowCloseCounter)
+			{
+				var remainingSeconds = (int)(_cachedTopMessage.Value.Duration - currentTime);
+				finalMessage += $"\n\nThe message will disappear in {remainingSeconds} seconds.";
+			}
+
+			Controller?.PrintToCenterHtml(finalMessage);
+		}
+	}
+
+	private void UpdateCachedMessage(float currentTime)
+	{
 		var orderedMessages = _centerMessages
+			.Where(m => m.Duration > currentTime)
 			.OrderByDescending(m => m.Priority)
 			.ThenBy(m => m.Duration);
 
-		var topMessage = orderedMessages.First();
+		_cachedTopMessage = orderedMessages.FirstOrDefault();
+		_lastUpdateTime = currentTime;
 
-		string finalMessage = topMessage.Message;
-
-		if (topMessage.ShowCloseCounter)
-			finalMessage += "<br><br><font class=\"fontSize-s\"><font color=\"#f5a142\">The message will disappear in <font color=\"#ff3333\">" + (int)(topMessage.Duration - Server.CurrentTime) + "</font> seconds.</font></font>";
-
-		Controller?.PrintToCenterHtml(finalMessage);
-
-		_centerMessages.RemoveAll(m => m.Duration <= Server.CurrentTime);
+		_centerMessages.RemoveAll(m => m.Duration <= currentTime);
 	}
 
 	public void SetMute(bool mute, ActionPriority priority)
@@ -274,7 +301,7 @@ public sealed partial class Player
 			}
 			finally
 			{
-				RemoveFromList(this);
+				RemoveFromList(SteamID);
 			}
 		});
 	}

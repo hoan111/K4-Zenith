@@ -3,6 +3,7 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Cvars;
+using CounterStrikeSharp.API.Modules.Entities.Constants;
 using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Utils;
 
@@ -15,7 +16,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices?.RegisterModuleCommands(["hp", "health"], "Sets player health to a given value", (player, info) =>
 		{
 			int health = 100;
-			if (info.ArgCount >= 2 && !int.TryParse(info.GetArg(2), out health))
+			if (info.ArgCount >= 3 && !int.TryParse(info.GetArg(2), out health))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_health"]);
 				return;
@@ -35,7 +36,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices?.RegisterModuleCommands(["armor"], "Sets player armor to a given value", (player, info) =>
 		{
 			int armor = 100;
-			if (info.ArgCount >= 2 && !int.TryParse(info.GetArg(2), out armor))
+			if (info.ArgCount >= 3 && !int.TryParse(info.GetArg(2), out armor))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_armor"]);
 				return;
@@ -84,11 +85,15 @@ public sealed partial class Plugin : BasePlugin
 			{
 				if (target.PlayerPawn.Value != null)
 				{
-					var moveType = Schema.GetRef<MoveType_t>(target.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType");
-					bool enableNoclip = moveType != MoveType_t.MOVETYPE_NOCLIP;
-					moveType = enableNoclip ? MoveType_t.MOVETYPE_NOCLIP : MoveType_t.MOVETYPE_WALK;
+					var moveType = target.PlayerPawn.Value.MoveType;
+					MoveType_t actualMoveType = moveType == MoveType_t.MOVETYPE_NOCLIP ? MoveType_t.MOVETYPE_WALK : MoveType_t.MOVETYPE_NOCLIP;
+
+					target.PlayerPawn.Value.MoveType = actualMoveType;
+					Schema.SetSchemaValue(target.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType", actualMoveType);
+
 					Utilities.SetStateChanged(target.PlayerPawn.Value, "CBaseEntity", "m_MoveType");
-					ShowActivityToPlayers(player?.SteamID, enableNoclip ? "commands.noclip.enable" : "commands.noclip.disable", player?.PlayerName ?? Localizer["k4.general.console"]);
+
+					ShowActivityToPlayers(player?.SteamID, actualMoveType == MoveType_t.MOVETYPE_NOCLIP ? "commands.noclip.enable" : "commands.noclip.disable", player?.PlayerName ?? Localizer["k4.general.console"]);
 				}
 			}, true);
 		}, CommandUsage.CLIENT_ONLY, permission: "@zenith-commands/noclip");
@@ -122,7 +127,7 @@ public sealed partial class Plugin : BasePlugin
 			{
 				target?.Respawn();
 				ShowActivityToPlayers(player?.SteamID, "commands.respawn.success", player?.PlayerName ?? Localizer["k4.general.console"], target!.PlayerName);
-			});
+			}, false);
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/respawn");
 
 		_moduleServices?.RegisterModuleCommands(["strip"], "Strips a player of all weapons", (player, info) =>
@@ -176,7 +181,7 @@ public sealed partial class Plugin : BasePlugin
 
 		_moduleServices?.RegisterModuleCommands(["give"], "Gives a weapon to a player", (player, info) =>
 		{
-			Weapon? weapon = Weapon.List.FirstOrDefault(w => w.ClassName == info.GetArg(2));
+			Weapon? weapon = Weapon.List.FirstOrDefault(w => w.ClassName.Contains(info.GetArg(2)) || w.Aliases.Any(a => a.Contains(info.GetArg(2))));
 			if (weapon == null)
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_weapon"]);
@@ -185,11 +190,57 @@ public sealed partial class Plugin : BasePlugin
 
 			ProcessTargetAction(player, info.GetArgTargetResult(1), target =>
 			{
-				if (weapon.Slot != gear_slot_t.GEAR_SLOT_GRENADES)
-					RemoveWeaponInSlot(target, weapon.Slot); // ? Prevent crash from duplicate items
+				if (weapon.Slot == gear_slot_t.GEAR_SLOT_GRENADES)
+				{
+					int grenadeLimit = ConVar.Find("ammo_grenade_limit_total")!.GetPrimitiveValue<int>();
+					var grenades = GetItems(target, slot: gear_slot_t.GEAR_SLOT_GRENADES);
+
+					if (grenades.Count >= grenadeLimit)
+					{
+						_moduleServices?.PrintForPlayer(player, Localizer["commands.error.grenade_limit", grenadeLimit]);
+						return;
+					}
+
+					if (weapon.ClassName == "weapon_flashbang")
+					{
+						int flashbangLimit = ConVar.Find("ammo_grenade_limit_flashbang")!.GetPrimitiveValue<int>();
+						if (grenades.Count(g => g == "weapon_flashbang") >= flashbangLimit)
+						{
+							_moduleServices?.PrintForPlayer(player, Localizer["commands.error.flashbang_limit", flashbangLimit]);
+							return;
+						}
+					}
+					else
+					{
+						int defaultLimit = ConVar.Find("ammo_grenade_limit_default")!.GetPrimitiveValue<int>();
+						if (grenades.Count(g => g == weapon.ClassName) >= defaultLimit)
+						{
+							_moduleServices?.PrintForPlayer(player, Localizer["commands.error.default_limit", defaultLimit]);
+							return;
+						}
+					}
+				}
+				else if (weapon.ClassName == "weapon_healthshot")
+				{
+					int healthshotLimit = ConVar.Find("ammo_item_limit_healthshot")!.GetPrimitiveValue<int>();
+					var healthshots = GetItems(target, className: "weapon_healthshot");
+
+					if (healthshots.Count >= healthshotLimit)
+					{
+						_moduleServices?.PrintForPlayer(player, Localizer["commands.error.healthshot_limit", healthshots.Count]);
+						return;
+					}
+				}
+				else
+				{
+					if (weapon.IsWeapon)
+						RemoveWeapon(target, weapon.Slot);
+					else
+						RemoveWeapon(target, className: weapon.ClassName);
+				}
 
 				target.GiveNamedItem(weapon.ClassName);
-				ShowActivityToPlayers(player?.SteamID, "commands.give.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName, weapon.ClassName);
+				ShowActivityToPlayers(player?.SteamID, "commands.give.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName, weapon.Name);
 			}, true);
 		}, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <weapon>", "@zenith-commands/give");
 
@@ -234,12 +285,15 @@ public sealed partial class Plugin : BasePlugin
 				{
 					target.Respawn();
 
-					if (_deathLocations.ContainsKey(target))
-						target.Teleport(_deathLocations[target]);
+					Server.NextFrame(() =>
+					{
+						if (_deathLocations.TryGetValue(target, out Vector? value))
+							target.PlayerPawn.Value.Teleport(value);
+					});
 
 					ShowActivityToPlayers(player?.SteamID, "commands.revive.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName);
 				}
-			}, true);
+			}, false);
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/revive");
 
 		_moduleServices?.RegisterModuleCommands(["bury"], "Buries a player", (player, info) =>
@@ -270,7 +324,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices?.RegisterModuleCommands(["slap"], "Slaps a player", (player, info) =>
 		{
 			int damage = 0;
-			if (info.ArgCount >= 2 && !int.TryParse(info.GetArg(2), out damage))
+			if (info.ArgCount >= 3 && !int.TryParse(info.GetArg(2), out damage))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_damage"]);
 				return;
@@ -290,10 +344,12 @@ public sealed partial class Plugin : BasePlugin
 					}
 
 					pawn.Health -= damage;
+					Utilities.SetStateChanged(pawn, "CBaseEntity", "m_iHealth");
+
+					target.ExecuteClientCommand($"play /sounds/player/damage{Random.Shared.Next(1, 4)}");
 
 					Vector vel = pawn.AbsVelocity;
-
-					pawn.Teleport(pawn.AbsOrigin, pawn.AbsRotation, vel += new Vector(
+					pawn.Teleport(pawn.AbsOrigin, null, vel += new Vector(
 						RandomVelocityComponent(),
 						RandomVelocityComponent(),
 						Random.Shared.Next(200) + 100
@@ -307,7 +363,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices?.RegisterModuleCommands(["blind"], "Blinds a player", (player, info) =>
 		{
 			float value = 0;
-			if (info.ArgCount >= 2 && !float.TryParse(info.GetArg(2), out value))
+			if (info.ArgCount >= 3 && !float.TryParse(info.GetArg(2), out value))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer["commands.error.invalid_time"]);
 				return;
@@ -378,10 +434,14 @@ public sealed partial class Plugin : BasePlugin
 			{
 				if (target.PlayerPawn.Value != null)
 				{
-					target.ChangeTeam(team);
+					if (team == CsTeam.Spectator)
+						target.ChangeTeam(team);
+					else
+						target.SwitchTeam(team);
+
 					ShowActivityToPlayers(player?.SteamID, "commands.team.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName, team);
 				}
-			}, true);
+			});
 		}, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <team>", "@zenith-commands/team");
 
 		_moduleServices?.RegisterModuleCommands(["swap"], "Swaps player team to the opposite", (player, info) =>
@@ -390,10 +450,10 @@ public sealed partial class Plugin : BasePlugin
 			{
 				if (target.PlayerPawn.Value != null)
 				{
-					target.ChangeTeam(target.Team == CsTeam.Terrorist ? CsTeam.CounterTerrorist : CsTeam.Terrorist);
+					target.SwitchTeam(target.Team == CsTeam.Terrorist ? CsTeam.CounterTerrorist : CsTeam.Terrorist);
 					ShowActivityToPlayers(player?.SteamID, "commands.swap.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName);
 				}
-			}, true);
+			});
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/swap");
 
 		_moduleServices?.RegisterModuleCommands(["hide", "stealth"], "Hide yourself", (player, info) =>

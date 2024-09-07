@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Reflection;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Logging;
 
 namespace ZenithAPI
 {
@@ -30,11 +32,6 @@ namespace ZenithAPI
 		/// Checks if the player is valid and connected.
 		/// </summary>
 		bool IsValid { get; }
-
-		/// <summary>
-		/// Checks if the entity is a real player (not a bot or HLTV).
-		/// </summary>
-		bool IsPlayer { get; }
 
 		/// <summary>
 		/// Checks if the player is alive.
@@ -368,6 +365,22 @@ namespace ZenithAPI
 		event Action<bool> OnZenithCoreUnload;
 	}
 
+	public class SettingChangedEventArgs : EventArgs
+	{
+		public CCSPlayerController Controller { get; }
+		public string Key { get; }
+		public object? OldValue { get; }
+		public object? NewValue { get; }
+
+		public SettingChangedEventArgs(CCSPlayerController controller, string key, object? oldValue, object? newValue)
+		{
+			Controller = controller;
+			Key = key;
+			OldValue = oldValue;
+			NewValue = newValue;
+		}
+	}
+
 	public enum ActionPriority
 	{
 		Low = 0,
@@ -382,5 +395,134 @@ namespace ZenithAPI
 		Global = 1, // Allow all other modules to access this config value
 		Protected = 2, // Prevent this config value from retrieving the value (hidden)
 		Locked = 4 // Prevent this config value from being changed (read-only)
+	}
+
+	public static class PerformanceProfiler
+	{
+		private static readonly ConsoleColor TitleColor = ConsoleColor.Cyan;
+		private static readonly ConsoleColor ErrorColor = ConsoleColor.Red;
+		private static readonly ConsoleColor ResultColor = ConsoleColor.Green;
+		private static readonly ConsoleColor DetailColor = ConsoleColor.Yellow;
+		private static readonly ConsoleColor ValueColor = ConsoleColor.White;
+
+		public static void ProfileGenericFunction<T, TResult>(T instance, string methodName, object[] args, int iterations)
+		{
+			var method = typeof(T).GetMethod(methodName);
+			if (method == null)
+			{
+				WriteColorLine(ErrorColor, $"Method '{methodName}' not found in type {typeof(T).Name}");
+				return;
+			}
+
+			var genericMethod = method.MakeGenericMethod(typeof(TResult));
+
+			WriteColorLine(TitleColor, $"\n{"=",-20}[ Profiling Generic Method ]{"=",-20}");
+			WriteColorLine(TitleColor, $"Method: {genericMethod.DeclaringType?.FullName}.{genericMethod.Name}<{typeof(TResult).Name}>");
+			WriteColorLine(TitleColor, $"Parameter Types: {string.Join(", ", genericMethod.GetParameters().Select(p => p.ParameterType.Name))}");
+			WriteColorLine(TitleColor, $"Return Type: {genericMethod.ReturnType.Name}");
+
+			ProfileMethodExecution(genericMethod, instance, args, iterations);
+		}
+
+		public static void ProfileNonGenericFunction<T>(T instance, string methodName, object[] args, int iterations)
+		{
+			var method = typeof(T).GetMethod(methodName);
+			if (method == null)
+			{
+				WriteColorLine(ErrorColor, $"Method '{methodName}' not found in type {typeof(T).Name}");
+				return;
+			}
+
+			WriteColorLine(TitleColor, $"\n{"=",-20}[ Profiling Non-Generic Method ]{"=",-20}");
+			WriteColorLine(TitleColor, $"Method: {method.DeclaringType?.FullName}.{method.Name}");
+			WriteColorLine(TitleColor, $"Parameter Types: {string.Join(", ", method.GetParameters().Select(p => p.ParameterType.Name))}");
+			WriteColorLine(TitleColor, $"Return Type: {method.ReturnType.Name}");
+
+			ProfileMethodExecution(method, instance, args, iterations);
+		}
+
+		private static void ProfileMethodExecution(MethodInfo method, object? instance, object[] args, int iterations)
+		{
+			var parameters = method.GetParameters();
+			if (args.Length < parameters.Length)
+			{
+				var newArgs = new object[parameters.Length];
+				Array.Copy(args, newArgs, args.Length);
+				for (int i = args.Length; i < parameters.Length; i++)
+				{
+					newArgs[i] = Type.Missing;
+				}
+				args = newArgs;
+			}
+
+			var stopwatch = new Stopwatch();
+			var executionTimes = new List<long>();
+			object? result = null;
+
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
+			GC.Collect();
+
+			for (int i = 0; i < iterations; i++)
+			{
+				stopwatch.Restart();
+				result = method.Invoke(instance, args);
+				stopwatch.Stop();
+				executionTimes.Add(stopwatch.ElapsedTicks);
+			}
+
+			long totalTicks = executionTimes.Sum();
+			double avgMs = totalTicks / (double)iterations / Stopwatch.Frequency * 1000;
+			double minMs = executionTimes.Min() / (double)Stopwatch.Frequency * 1000;
+			double maxMs = executionTimes.Max() / (double)Stopwatch.Frequency * 1000;
+			double medianMs = executionTimes.OrderBy(t => t).ElementAt(iterations / 2) / (double)Stopwatch.Frequency * 1000;
+			double stdDev = Math.Sqrt(executionTimes.Select(t => Math.Pow(t / (double)Stopwatch.Frequency * 1000 - avgMs, 2)).Sum() / iterations);
+
+			WriteColorLine(ResultColor, $"\n{"=",-20}[ Performance Results ]{"=",-20}");
+			WriteColorLine(ResultColor, $"Iterations: {iterations}");
+			WriteDetailValue("Total time", $"{totalTicks / (double)Stopwatch.Frequency * 1000:F6} ms");
+			WriteDetailValue("Average time", $"{avgMs:F6} ms");
+			WriteDetailValue("Minimum time", $"{minMs:F6} ms");
+			WriteDetailValue("Maximum time", $"{maxMs:F6} ms");
+			WriteDetailValue("Median time", $"{medianMs:F6} ms");
+			WriteDetailValue("Standard deviation", $"{stdDev:F6} ms");
+
+			var memoryBefore = GC.GetTotalMemory(false);
+			result = method.Invoke(instance, args);
+			var memoryAfter = GC.GetTotalMemory(false);
+			var memoryUsedBytes = memoryAfter - memoryBefore;
+			var memoryUsedMB = (double)memoryUsedBytes / (1024 * 1024);
+
+			WriteDetailValue("Memory usage", $"{memoryUsedMB:F6} MB ({memoryUsedBytes:N0} bytes)");
+			WriteDetailValue("Return value", $"{result}");
+
+			WriteColorLine(DetailColor, $"\n{"=",-20}[ Method Attributes ]{"=",-20}");
+			foreach (var attribute in method.GetCustomAttributes(true))
+			{
+				Console.WriteLine($"- {attribute.GetType().Name}");
+			}
+
+			WriteColorLine(DetailColor, $"\n{"=",-20}[ Parameter Details ]{"=",-20}");
+			foreach (var param in method.GetParameters())
+			{
+				Console.WriteLine($"- {param.Name}: {param.ParameterType.Name} (In: {param.IsIn}, Out: {param.IsOut}, Optional: {param.IsOptional})");
+			}
+		}
+
+		private static void WriteColorLine(ConsoleColor color, string message)
+		{
+			Console.ForegroundColor = color;
+			Console.WriteLine(message);
+			Console.ResetColor();
+		}
+
+		private static void WriteDetailValue(string detail, string value)
+		{
+			Console.ForegroundColor = DetailColor;
+			Console.Write($"{detail,-20} ");
+			Console.ForegroundColor = ValueColor;
+			Console.WriteLine(value);
+			Console.ResetColor();
+		}
 	}
 }

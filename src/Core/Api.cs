@@ -32,6 +32,9 @@ namespace Zenith
 			private readonly Player _player;
 			private readonly Plugin _plugin;
 
+			public event EventHandler<SettingChangedEventArgs>? SettingChanged;
+			public event EventHandler<SettingChangedEventArgs>? StorageChanged;
+
 			public PlayerServices(CCSPlayerController player, Plugin plugin)
 			{
 				Player? zenithPlayer = Player.Find(player);
@@ -53,9 +56,6 @@ namespace Zenith
 
 			public bool IsValid
 				=> _player.IsValid;
-
-			public bool IsPlayer
-				=> _player.IsPlayer;
 
 			public bool IsAlive
 				=> _player.IsAlive;
@@ -94,13 +94,21 @@ namespace Zenith
 				=> _player.GetSetting<T>(key);
 
 			public void SetSetting(string key, object? value, bool saveImmediately = false)
-				=> _player.SetSetting(key, value, saveImmediately);
+			{
+				object? oldValue = _player.GetSetting<object>(key);
+				_player.SetSetting(key, value, saveImmediately);
+				OnSettingChanged(key, oldValue, value);
+			}
 
 			public T? GetStorage<T>(string key)
 				=> _player.GetStorage<T>(key);
 
 			public void SetStorage(string key, object? value, bool saveImmediately = false)
-				=> _player.SetStorage(key, value, saveImmediately);
+			{
+				object? oldValue = _player.GetStorage<object>(key);
+				_player.SetStorage(key, value, saveImmediately);
+				OnStorageChanged(key, oldValue, value);
+			}
 
 			public T? GetModuleStorage<T>(string module, string key)
 				=> _player.GetModuleStorage<T>(module, key);
@@ -125,6 +133,12 @@ namespace Zenith
 
 			public void ResetModuleStorage()
 				=> _player.ResetModuleStorage();
+
+			private void OnSettingChanged(string key, object? oldValue, object? newValue)
+				=> SettingChanged?.Invoke(this, new SettingChangedEventArgs(Controller, key, oldValue, newValue));
+
+			private void OnStorageChanged(string key, object? oldValue, object? newValue)
+				=> StorageChanged?.Invoke(this, new SettingChangedEventArgs(Controller, key, oldValue, newValue));
 		}
 
 		public class ModuleServices : IModuleServices
@@ -150,7 +164,7 @@ namespace Zenith
 
 				foreach (var player in Player.List.Values)
 				{
-					if (player.IsValid && player.IsPlayer)
+					if (player.IsValid)
 						player.Print(message, showPrefix);
 				}
 			}
@@ -159,7 +173,7 @@ namespace Zenith
 			{
 				foreach (var player in Player.List.Values)
 				{
-					if (player.IsValid && player.IsPlayer && player.Controller!.Team == team)
+					if (player.IsValid && player.Controller!.Team == team)
 						player.Print(message, showPrefix);
 				}
 			}

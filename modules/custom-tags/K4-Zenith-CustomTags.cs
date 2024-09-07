@@ -26,13 +26,15 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.3";
+	public override string ModuleVersion => "1.0.4";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
 
 	private IZenithEvents? _zenithEvents;
 	private IModuleServices? _moduleServices;
+
+	private readonly Dictionary<CCSPlayerController, IPlayerServices> _playerCache = [];
 
 	public KitsuneMenu Menu { get; private set; } = null!;
 	public IModuleConfigAccessor _coreAccessor = null!;
@@ -73,6 +75,7 @@ public class Plugin : BasePlugin
 		if (_zenithEvents != null)
 		{
 			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
+			_zenithEvents.OnZenithPlayerUnloaded += OnZenithPlayerUnloaded;
 			_zenithEvents.OnZenithCoreUnload += OnZenithCoreUnload;
 		}
 		else
@@ -94,8 +97,6 @@ public class Plugin : BasePlugin
 		_moduleServices?.RegisterModuleCommands(["tags", "tag"], "Change player tag configuration", (player, info) =>
 		{
 			if (player == null) return;
-			var zenithPlayer = GetZenithPlayer(player);
-			if (zenithPlayer == null) return;
 			ShowTagSelectionMenu(player);
 		}, CommandUsage.CLIENT_ONLY);
 
@@ -104,13 +105,10 @@ public class Plugin : BasePlugin
 			_moduleServices?.LoadAllOnlinePlayerData();
 
 			var players = Utilities.GetPlayers();
-			for (int i = 0; i < players.Count; i++)
+			foreach (var player in players)
 			{
-				var player = players[i];
 				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
-				{
-					ApplyTagConfig(player);
-				}
+					OnZenithPlayerLoaded(player);
 			}
 		});
 
@@ -184,6 +182,8 @@ public class Plugin : BasePlugin
 
 					if (buttons == MenuButtons.Select)
 					{
+						var zenithPlayer = _playerCache[player];
+
 						if (selectedConfigKey == "default")
 						{
 							_playerSelectedConfigs.Remove(player.SteamID);
@@ -193,13 +193,13 @@ public class Plugin : BasePlugin
 						else if (selectedConfigKey == "none")
 						{
 							_playerSelectedConfigs[player.SteamID] = "none";
-							ApplyNullConfig(player);
+							ApplyNullConfig(zenithPlayer);
 							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.none"]);
 						}
 						else if (_predefinedConfigs.TryGetValue(selectedConfigKey, out var selectedPredefinedConfig))
 						{
 							_playerSelectedConfigs[player.SteamID] = selectedConfigKey;
-							ApplyPredefinedConfig(player, selectedPredefinedConfig);
+							ApplyConfig(zenithPlayer, selectedPredefinedConfig);
 							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.config", selectedPredefinedConfig.Name]);
 						}
 						else
@@ -386,15 +386,14 @@ public class Plugin : BasePlugin
 	{
 		try
 		{
-			var zenithPlayer = GetZenithPlayer(player);
-			if (zenithPlayer is null) return;
+			var zenithPlayer = _playerCache[player];
 
 			_tagConfigs ??= GetTagConfigs();
 			_predefinedConfigs ??= GetPredefinedTagConfigs();
 
 			if (_playerSelectedConfigs.TryGetValue(player.SteamID, out var selectedConfig) && selectedConfig == "none")
 			{
-				ApplyNullConfig(player);
+				ApplyNullConfig(zenithPlayer);
 				return;
 			}
 
@@ -519,23 +518,12 @@ public class Plugin : BasePlugin
 			zenithPlayer.SetNameTag(ApplyPrefixColors(config.NameTag));
 	}
 
-	private void ApplyPredefinedConfig(CCSPlayerController player, PredefinedTagConfig config)
+	private static void ApplyNullConfig(IPlayerServices player)
 	{
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer is null) return;
-
-		ApplyConfig(zenithPlayer, config);
-	}
-
-	private void ApplyNullConfig(CCSPlayerController player)
-	{
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer is null) return;
-
-		zenithPlayer.SetChatColor(null);
-		zenithPlayer.SetClanTag(null);
-		zenithPlayer.SetNameColor(null);
-		zenithPlayer.SetNameTag(null);
+		player.SetChatColor(null);
+		player.SetClanTag(null);
+		player.SetNameColor(null);
+		player.SetNameTag(null);
 	}
 
 	public static string ApplyPrefixColors(string msg)
@@ -567,17 +555,36 @@ public class Plugin : BasePlugin
 
 	private void OnZenithPlayerLoaded(CCSPlayerController player)
 	{
-		AddTimer(3.0f, () => ApplyTagConfig(player), TimerFlags.STOP_ON_MAPCHANGE);
+		var handler = GetZenithPlayer(player);
+		if (handler == null)
+		{
+			Logger.LogError($"Failed to get player services for {player.PlayerName}");
+			return;
+		}
+
+		_playerCache[player] = handler;
+		ApplyTagConfig(player);
+	}
+
+	private void OnZenithPlayerUnloaded(CCSPlayerController player)
+	{
+		_playerCache.Remove(player);
+		_playerSelectedConfigs.Remove(player.SteamID);
 	}
 
 	public override void Unload(bool hotReload)
 	{
-		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
-		moduleServices?.DisposeModule(this.GetType().Assembly);
+		_playerCache.Clear();
+		_playerSelectedConfigs.Clear();
+
+		_moduleServicesCapability?.Get()?.DisposeModule(this.GetType().Assembly);
 	}
 
 	private void OnZenithCoreUnload(bool hotReload)
 	{
+		_playerCache.Clear();
+		_playerSelectedConfigs.Clear();
+
 		if (hotReload)
 		{
 			AddTimer(3.0f, () =>

@@ -57,7 +57,9 @@ public partial class Database(Plugin plugin)
                 WHERE `last_online` < DATE_SUB(NOW(), INTERVAL @PurgeDays DAY);";
 
 			var affectedRows = await connection.ExecuteAsync(query, new { PurgeDays = TablePurgeDays });
-			plugin.Logger.LogInformation($"Purged {affectedRows} rows older than {TablePurgeDays} days from {table} table.");
+
+			if (affectedRows > 0)
+				plugin.Logger.LogInformation($"Purged {affectedRows} rows older than {TablePurgeDays} days from {table} table.");
 		}
 	}
 

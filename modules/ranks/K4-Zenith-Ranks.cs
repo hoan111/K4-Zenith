@@ -17,7 +17,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.2";
+	public override string ModuleVersion => "1.0.3";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -27,6 +27,7 @@ public sealed partial class Plugin : BasePlugin
 	private IZenithEvents? _zenithEvents;
 	private IModuleServices? _moduleServices;
 	private readonly HashSet<CCSPlayerController> _playerSpawned = [];
+	private readonly Dictionary<CCSPlayerController, IPlayerServices> _playerCache = [];
 	private bool _isGameEnd;
 
 	public override void OnAllPluginsLoaded(bool hotReload)
@@ -106,6 +107,8 @@ public sealed partial class Plugin : BasePlugin
 		_zenithEvents = _moduleServices!.GetEventHandler();
 		if (_zenithEvents != null)
 		{
+			_zenithEvents.OnZenithPlayerLoaded += OnZenithPlayerLoaded;
+			_zenithEvents.OnZenithPlayerUnloaded += OnZenithPlayerUnloaded;
 			_zenithEvents.OnZenithCoreUnload += OnZenithCoreUnload;
 		}
 		else
@@ -122,7 +125,15 @@ public sealed partial class Plugin : BasePlugin
 
 	private void SetupTimers()
 	{
-		AddTimer(3.0f, () => _moduleServices!.LoadAllOnlinePlayerData());
+		AddTimer(3.0f, () =>
+		{
+			_moduleServices!.LoadAllOnlinePlayerData(); var players = Utilities.GetPlayers();
+			foreach (var player in players)
+			{
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+					OnZenithPlayerLoaded(player);
+			}
+		});
 		AddTimer(30.0f, CheckPlaytime, TimerFlags.REPEAT);
 	}
 
@@ -140,6 +151,25 @@ public sealed partial class Plugin : BasePlugin
 			}
 			_lastPlaytimeCheck = DateTime.UtcNow;
 		}
+	}
+
+	private void OnZenithPlayerLoaded(CCSPlayerController player)
+	{
+		var handler = GetZenithPlayer(player);
+		if (handler == null)
+		{
+			Logger.LogError($"Failed to get player services for {player.PlayerName}");
+			return;
+		}
+
+		_playerCache[player] = handler;
+		_playerSpawned.Add(player);
+	}
+
+	private void OnZenithPlayerUnloaded(CCSPlayerController player)
+	{
+		_playerCache.Remove(player);
+		_playerSpawned.Remove(player);
 	}
 
 	private void OnZenithCoreUnload(bool hotReload)
@@ -173,24 +203,31 @@ public sealed partial class Plugin : BasePlugin
 
 	private string GetRankColor(CCSPlayerController p)
 	{
-		var player = GetZenithPlayer(p);
-		if (player == null) return ChatColors.Default.ToString();
+		if (_playerCache.TryGetValue(p, out var player))
+		{
+			var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
+			return determinedRank?.ChatColor.ToString() ?? ChatColors.Default.ToString();
+		}
 
-		var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
-		return determinedRank?.ChatColor.ToString() ?? ChatColors.Default.ToString();
+		return ChatColors.Default.ToString();
 	}
 
 	private string GetRankName(CCSPlayerController p)
 	{
-		var player = GetZenithPlayer(p);
-		if (player == null) return Localizer["k4.phrases.rank.none"];
+		if (_playerCache.TryGetValue(p, out var player))
+		{
+			var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
+			return determinedRank?.Name ?? Localizer["k4.phrases.rank.none"];
+		}
 
-		var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
-		return determinedRank?.Name ?? Localizer["k4.phrases.rank.none"];
+		return Localizer["k4.phrases.rank.none"];
 	}
 
 	private string GetPlayerPoints(CCSPlayerController p)
 	{
-		return GetZenithPlayer(p)?.GetStorage<long>("Points").ToString() ?? "0";
+		if (_playerCache.TryGetValue(p, out var player))
+			return player.GetStorage<long>("Points").ToString();
+
+		return "0";
 	}
 }

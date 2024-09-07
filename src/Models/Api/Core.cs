@@ -46,6 +46,7 @@ namespace Zenith
 public static class CallerIdentifier
 {
 	private static readonly string CurrentPluginName = Assembly.GetExecutingAssembly().GetName().Name!;
+	private static readonly string[] BlockAssemblies = ["System.", "K4-ZenithAPI", "KitsuneMenu"];
 
 	public static string GetCallingPluginName()
 	{
@@ -60,7 +61,7 @@ public static class CallerIdentifier
 			if (assemblyName == "CounterStrikeSharp.API")
 				break;
 
-			if (assemblyName != CurrentPluginName && assemblyName != null && !assemblyName.StartsWith("System.") && !assemblyName.Equals("KitsuneMenu"))
+			if (assemblyName != CurrentPluginName && assemblyName != null && !BlockAssemblies.Any(assemblyName.StartsWith))
 			{
 				callingPlugin = assemblyName;
 				break;

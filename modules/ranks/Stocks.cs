@@ -3,6 +3,7 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Utils;
+using Microsoft.Extensions.Logging;
 using ZenithAPI;
 
 namespace Zenith_Ranks;
@@ -33,8 +34,7 @@ public sealed partial class Plugin : BasePlugin
 		{
 			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 			{
-				var zenithPlayer = GetZenithPlayer(player);
-				if (zenithPlayer != null)
+				if (_playerCache.TryGetValue(player, out var zenithPlayer))
 				{
 					yield return zenithPlayer;
 				}
@@ -77,8 +77,9 @@ public sealed partial class Plugin : BasePlugin
 	private void UpdatePlayerRank(IPlayerServices player, long points)
 	{
 		long currentPoints = player.GetStorage<long>("Points");
+
 		var (currentRank, _) = DetermineRanks(currentPoints);
-		var (determinedRank, _) = DetermineRanks(currentPoints + points);
+		var (determinedRank, _) = DetermineRanks(points);
 
 		if (determinedRank?.Id != currentRank?.Id)
 		{
@@ -92,7 +93,7 @@ public sealed partial class Plugin : BasePlugin
 
 			string htmlMessage = $@"
             <font color='{colorCode}' class='fontSize-m'>{Localizer[messageKey]}</font><br>
-            <font color='{determinedRank?.HexColor}' class='fontSize-m'>{Localizer["k4.phrases.newrank", $"{rankName}"]}</font>";
+            <font color='{determinedRank?.HexColor}' class='fontSize-m'>{Localizer["k4.phrases.newrank", rankName]}</font>";
 
 			player.PrintToCenter(htmlMessage, _configAccessor.GetValue<int>("Core", "CenterAlertTime"), ActionPriority.Normal);
 		}
@@ -131,7 +132,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public int CalculateDynamicPoints(IPlayerServices attacker, IPlayerServices victim, int basePoints)
 	{
-		if (!_configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints") || !attacker.IsPlayer || !victim.IsPlayer)
+		if (!_configAccessor.GetValue<bool>("Settings", "DynamicDeathPoints"))
 			return basePoints;
 
 		long attackerPoints = attacker.GetStorage<long>("Points");

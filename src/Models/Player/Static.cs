@@ -41,8 +41,8 @@ public sealed partial class Player
 		List[player.SteamID] = player;
 	}
 
-	public static void RemoveFromList(Player playerToRemove)
+	public static void RemoveFromList(ulong playerToRemove)
 	{
-		List.TryRemove(playerToRemove.SteamID, out _);
+		List.TryRemove(playerToRemove, out _);
 	}
 }

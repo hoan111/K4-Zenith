@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Commands;
 using CounterStrikeSharp.API.Modules.Admin;
@@ -45,16 +46,14 @@ namespace Zenith
 
 			if (existingCommand != null)
 			{
-				// Convert the anonymous type to a tuple
 				return (existingCommand.Plugin, existingCommand.Command);
 			}
 
-			return null; // Return null if no command is found
+			return null;
 		}
 
 		private void RemoveExistingCommand((string Plugin, CommandDefinition Command)? existingCommand)
 		{
-			// Ensure the tuple is not null before accessing its members
 			if (existingCommand.HasValue)
 			{
 				CommandManager.RemoveCommand(existingCommand.Value.Command);
@@ -73,7 +72,7 @@ namespace Zenith
 			});
 
 			CommandManager.RegisterCommand(newCommand);
-			_pluginCommands.GetOrAdd(callingPlugin, _ => new List<CommandDefinition>()).Add(newCommand);
+			_pluginCommands.GetOrAdd(callingPlugin, _ => []).Add(newCommand);
 			_commandPermissions[command] = permission ?? string.Empty;
 		}
 

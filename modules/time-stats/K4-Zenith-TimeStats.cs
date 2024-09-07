@@ -7,6 +7,7 @@ using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZenithAPI;
 using CounterStrikeSharp.API.Modules.Timers;
+using System.Diagnostics;
 
 namespace Zenith_TimeStats;
 
@@ -18,7 +19,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.2";
+	public override string ModuleVersion => "1.0.3";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -26,7 +27,7 @@ public class Plugin : BasePlugin
 	private IZenithEvents? _zenithEvents;
 	private IModuleServices? _moduleServices;
 
-	private readonly Dictionary<ulong, PlayerTimeData> _playerTimes = new Dictionary<ulong, PlayerTimeData>();
+	private readonly Dictionary<CCSPlayerController, PlayerTimeData> _playerTimes = [];
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
@@ -93,6 +94,29 @@ public class Plugin : BasePlugin
 
 		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "PlaytimeCommands"), "Show the playtime informations.", OnPlaytimeCommand, CommandUsage.CLIENT_ONLY);
 
+		_moduleServices.RegisterModuleCommand("profiling", "Test cmd", (p, c) =>
+		{
+			if (p == null || !_playerTimes.TryGetValue(p, out var playerData)) return;
+
+			var zenithPlayer = playerData.Zenith;
+
+			// Profiling GetStorage<double>
+			PerformanceProfiler.ProfileGenericFunction<IPlayerServices, double>(
+				zenithPlayer,
+				nameof(IPlayerServices.GetStorage),
+				["TotalPlaytime"],
+				100000 // iterations
+			);
+
+			// Profiling SetStorage
+			PerformanceProfiler.ProfileNonGenericFunction<IPlayerServices>(
+				zenithPlayer,
+				nameof(IPlayerServices.SetStorage),
+				["TotalPlaytime", 123.45, false],
+				100000 // iterations
+			);
+		}, CommandUsage.CLIENT_ONLY, permission: "@zenith/root");
+
 		AddTimer(3.0f, () =>
 		{
 			_moduleServices.LoadAllOnlinePlayerData();
@@ -103,8 +127,12 @@ public class Plugin : BasePlugin
 			{
 				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 				{
-					_playerTimes[player.SteamID] = new PlayerTimeData
+					var zenithPlayer = GetZenithPlayer(player);
+					if (zenithPlayer is null) continue;
+
+					_playerTimes[player] = new PlayerTimeData
 					{
+						Zenith = zenithPlayer,
 						LastUpdateTime = currentTime,
 						CurrentTeam = player.Team,
 						IsAlive = player.PlayerPawn.Value?.Health > 0
@@ -121,8 +149,9 @@ public class Plugin : BasePlugin
 		var zenithPlayer = GetZenithPlayer(player);
 		if (zenithPlayer is null) return;
 
-		_playerTimes[zenithPlayer.SteamID] = new PlayerTimeData
+		_playerTimes[player] = new PlayerTimeData
 		{
+			Zenith = zenithPlayer,
 			LastUpdateTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
 			CurrentTeam = CsTeam.Spectator,
 			IsAlive = false
@@ -131,12 +160,11 @@ public class Plugin : BasePlugin
 
 	private HookResult OnPlayerSpawn(EventPlayerSpawn @event, GameEventInfo info)
 	{
-		var player = GetZenithPlayer(@event.Userid);
-		if (player is null) return HookResult.Continue;
+		if (@event.Userid == null) return HookResult.Continue;
 
-		UpdatePlaytime(player);
-		if (_playerTimes.TryGetValue(player.SteamID, out var timeData))
+		if (_playerTimes.TryGetValue(@event.Userid, out var timeData))
 		{
+			UpdatePlaytime(timeData);
 			timeData.IsAlive = true;
 		}
 		return HookResult.Continue;
@@ -144,21 +172,19 @@ public class Plugin : BasePlugin
 
 	private void OnZenithPlayerUnloaded(CCSPlayerController player)
 	{
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer is null) return;
+		if (_playerTimes.TryGetValue(player, out var timeData))
+			UpdatePlaytime(timeData);
 
-		UpdatePlaytime(zenithPlayer);
-		_playerTimes.Remove(zenithPlayer.SteamID);
+		_playerTimes.Remove(player);
 	}
 
 	private HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
 	{
-		var player = GetZenithPlayer(@event.Userid);
-		if (player is null) return HookResult.Continue;
+		if (@event.Userid == null) return HookResult.Continue;
 
-		UpdatePlaytime(player);
-		if (_playerTimes.TryGetValue(player.SteamID, out var timeData))
+		if (_playerTimes.TryGetValue(@event.Userid, out var timeData))
 		{
+			UpdatePlaytime(timeData);
 			timeData.IsAlive = false;
 		}
 		return HookResult.Continue;
@@ -166,12 +192,12 @@ public class Plugin : BasePlugin
 
 	private HookResult OnPlayerTeam(EventPlayerTeam @event, GameEventInfo info)
 	{
-		var player = GetZenithPlayer(@event.Userid);
-		if (player is null) return HookResult.Continue;
+		if (@event.Userid == null) return HookResult.Continue;
 
-		UpdatePlaytime(player);
-		if (_playerTimes.TryGetValue(player.SteamID, out var timeData))
+		if (_playerTimes.TryGetValue(@event.Userid, out var timeData))
 		{
+			UpdatePlaytime(timeData);
+
 			timeData.CurrentTeam = (CsTeam)@event.Team;
 			timeData.IsAlive = @event.Team != (int)CsTeam.Spectator;
 		}
@@ -184,61 +210,51 @@ public class Plugin : BasePlugin
 		if (interval <= 0)
 			return;
 
-		foreach (var player in Utilities.GetPlayers())
+		foreach (var player in _playerTimes.Values)
 		{
-			var playerServices = GetZenithPlayer(player);
-			if (playerServices is null)
-				continue;
+			UpdatePlaytime(player);
 
-			UpdatePlaytime(playerServices);
-
-			bool hasPlaytime = playerServices.GetStorage<double>("TotalPlaytime") > 1 ||
-								playerServices.GetStorage<double>("TerroristPlaytime") > 1 ||
-								playerServices.GetStorage<double>("CounterTerroristPlaytime") > 1 ||
-								playerServices.GetStorage<double>("SpectatorPlaytime") > 1 ||
-								playerServices.GetStorage<double>("AlivePlaytime") > 1 ||
-								playerServices.GetStorage<double>("DeadPlaytime") > 1;
+			bool hasPlaytime = player.Zenith.GetStorage<double>("TotalPlaytime") > 1 ||
+								player.Zenith.GetStorage<double>("TerroristPlaytime") > 1 ||
+								player.Zenith.GetStorage<double>("CounterTerroristPlaytime") > 1 ||
+								player.Zenith.GetStorage<double>("SpectatorPlaytime") > 1 ||
+								player.Zenith.GetStorage<double>("AlivePlaytime") > 1 ||
+								player.Zenith.GetStorage<double>("DeadPlaytime") > 1;
 
 			if (hasPlaytime)
-				CheckAndSendNotification(playerServices, interval);
+				CheckAndSendNotification(player.Zenith, interval);
 		}
 	}
 
-	private void UpdatePlaytime(IPlayerServices playerServices)
+	private void UpdatePlaytime(PlayerTimeData data)
 	{
-		if (!_playerTimes.TryGetValue(playerServices.SteamID, out var timeData))
-			return;
-
 		long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-		double sessionDurationMinutes = Math.Round((currentTime - timeData.LastUpdateTime) / 60.0, 1);
+		double sessionDurationMinutes = Math.Round((currentTime - data.LastUpdateTime) / 60.0, 1);
 
-		double totalPlaytime = playerServices.GetStorage<double>("TotalPlaytime");
+		double totalPlaytime = data.Zenith.GetStorage<double>("TotalPlaytime");
 		totalPlaytime += sessionDurationMinutes;
-		playerServices.SetStorage("TotalPlaytime", totalPlaytime);
+		data.Zenith.SetStorage("TotalPlaytime", totalPlaytime);
 
-		string teamKey = timeData.CurrentTeam switch
+		string teamKey = data.CurrentTeam switch
 		{
 			CsTeam.Terrorist => "TerroristPlaytime",
 			CsTeam.CounterTerrorist => "CounterTerroristPlaytime",
 			_ => "SpectatorPlaytime"
 		};
-		double teamPlaytime = playerServices.GetStorage<double>(teamKey);
+		double teamPlaytime = data.Zenith.GetStorage<double>(teamKey);
 		teamPlaytime += sessionDurationMinutes;
-		playerServices.SetStorage(teamKey, teamPlaytime);
+		data.Zenith.SetStorage(teamKey, teamPlaytime);
 
-		string lifeStatusKey = timeData.IsAlive ? "AlivePlaytime" : "DeadPlaytime";
-		double lifeStatusPlaytime = playerServices.GetStorage<double>(lifeStatusKey);
+		string lifeStatusKey = data.IsAlive ? "AlivePlaytime" : "DeadPlaytime";
+		double lifeStatusPlaytime = data.Zenith.GetStorage<double>(lifeStatusKey);
 		lifeStatusPlaytime += sessionDurationMinutes;
-		playerServices.SetStorage(lifeStatusKey, lifeStatusPlaytime);
+		data.Zenith.SetStorage(lifeStatusKey, lifeStatusPlaytime);
 
-		timeData.LastUpdateTime = currentTime;
+		data.LastUpdateTime = currentTime;
 	}
 
 	private void CheckAndSendNotification(IPlayerServices playerServices, int interval)
 	{
-		// do not check or notify if all times are 0 of player
-
-
 		bool showPlaytime = playerServices.GetSetting<bool>("ShowPlaytime");
 		if (!showPlaytime) return;
 
@@ -264,11 +280,13 @@ public class Plugin : BasePlugin
 
 	public void OnPlaytimeCommand(CCSPlayerController? player, CommandInfo command)
 	{
-		var playerServices = GetZenithPlayer(player);
-		if (playerServices is null) return;
+		if (player is null) return;
 
-		UpdatePlaytime(playerServices);
-		SendDetailedPlaytimeStats(playerServices);
+		if (_playerTimes.TryGetValue(player, out var timeData))
+		{
+			UpdatePlaytime(timeData);
+			SendDetailedPlaytimeStats(timeData.Zenith);
+		}
 	}
 
 	private void SendDetailedPlaytimeStats(IPlayerServices playerServices)
@@ -302,20 +320,12 @@ public class Plugin : BasePlugin
 
 	public override void Unload(bool hotReload)
 	{
-		foreach (var player in Utilities.GetPlayers())
-		{
-			var playerServices = GetZenithPlayer(player);
-			if (playerServices is null) continue;
+		foreach (var player in _playerTimes.Values)
+			UpdatePlaytime(player);
 
-			UpdatePlaytime(playerServices);
-		}
 		_playerTimes.Clear();
 
-		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
-		if (moduleServices == null)
-			return;
-
-		moduleServices.DisposeModule(this.GetType().Assembly);
+		_moduleServicesCapability?.Get()?.DisposeModule(this.GetType().Assembly);
 	}
 
 	private void OnZenithCoreUnload(bool hotReload)
@@ -340,6 +350,7 @@ public class Plugin : BasePlugin
 
 public class PlayerTimeData
 {
+	public required IPlayerServices Zenith { get; set; }
 	public long LastUpdateTime { get; set; }
 	public CsTeam CurrentTeam { get; set; }
 	public bool IsAlive { get; set; }

@@ -59,6 +59,18 @@ namespace Zenith.Models
 					},
 				}
 			},
+			{ "1.11", new List<MigrationStep>
+				{
+					new MigrationStep
+					{
+						TableName = "zenith_bans_punishments",
+						SqlQuery = @"
+						ALTER TABLE `{prefix}zenith_bans_punishments`
+						ADD COLUMN `remove_reason` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci AFTER `remove_admin_steam_id`,
+						MODIFY COLUMN `status` ENUM('active', 'expired', 'removed', 'removed_console', 'warn_ban') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active';"
+					},
+				}
+			},
 			// Add other migrations here as needed
 		};
 
@@ -69,7 +81,7 @@ namespace Zenith.Models
 				$"SELECT value FROM {TablePrefix}{INFO_TABLE} WHERE `key` = @Key",
 				new { Key = VERSION_KEY }
 			);
-			return result ?? "1.0.0";
+			return result ?? "1.0";
 		}
 
 		private async Task EnsureVersionTableExistsAsync(MySqlConnection connection)
@@ -98,8 +110,9 @@ namespace Zenith.Models
 
 		private async Task CreateDatabaseBackupAsync()
 		{
-			var backupFilePath = Path.Combine(plugin.ModuleDirectory, $"db_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.sql");
-			plugin.Logger.LogInformation($"Creating database backup: {backupFilePath}");
+			string fileName = $"db_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.sql";
+			var backupFilePath = Path.Combine(plugin.ModuleDirectory, fileName);
+			plugin.Logger.LogInformation($"Creating database backup: {fileName}");
 
 			using var writer = new StreamWriter(backupFilePath);
 
@@ -129,14 +142,12 @@ namespace Zenith.Models
 			using var connection = CreateConnection();
 			await connection.OpenAsync();
 
-			// Write table creation script
 			var createTableCmd = new MySqlCommand($"SHOW CREATE TABLE `{tableName}`", connection);
 			var createTableResult = (await createTableCmd.ExecuteScalarAsync())?.ToString();
 			await writer.WriteLineAsync($"-- Table structure for {tableName}");
 			await writer.WriteLineAsync($"{createTableResult};");
 			await writer.WriteLineAsync();
 
-			// Write table data
 			var dataCmd = new MySqlCommand($"SELECT * FROM `{tableName}`", connection);
 			using var dataReader = await dataCmd.ExecuteReaderAsync();
 			await writer.WriteLineAsync($"-- Data for {tableName}");
@@ -162,20 +173,21 @@ namespace Zenith.Models
 				serverType = await GetServerTypeAsync(connection);
 			}
 
+			var orderedMigrations = _migrations.OrderBy(m => m.Key, new VersionComparer()).ToList();
 			var pendingMigrations = new List<KeyValuePair<string, List<MigrationStep>>>();
-			foreach (var migration in _migrations)
+			foreach (var migration in orderedMigrations)
 			{
 				if (IsNewerVersion(migration.Key, currentVersion))
 				{
 					pendingMigrations.Add(migration);
 				}
 			}
-			pendingMigrations.Sort((x, y) => string.Compare(x.Key, y.Key, StringComparison.Ordinal));
 
 			if (pendingMigrations.Count == 0)
 				return;
 
-			plugin.Logger.LogInformation($"Starting database migration from version {currentVersion} to {plugin.ModuleVersion}");
+			string targetVersion = orderedMigrations.Last().Key;
+			plugin.Logger.LogInformation($"Starting database migration from version {currentVersion} to {targetVersion} ({serverType})");
 
 			try
 			{
@@ -184,68 +196,189 @@ namespace Zenith.Models
 			catch (Exception ex)
 			{
 				plugin.Logger.LogError($"Failed to create database backup: {ex.Message}");
-				// Consider whether to proceed with migration or not
 			}
 
 			string latestAppliedVersion = currentVersion;
+			bool allMigrationsSucceeded = true;
 
 			foreach (var migration in pendingMigrations)
 			{
-				plugin.Logger.LogInformation($"Applying migration: {migration.Key}");
+				plugin.Logger.LogInformation($"Checking migration: {migration.Key}");
 				const int maxRetries = 3;
-				for (int retry = 0; retry < maxRetries; retry++)
+				bool migrationSucceeded = false;
+
+				for (int retry = 0; retry < maxRetries && !migrationSucceeded; retry++)
 				{
-					using (var connection = CreateConnection())
+					using var connection = CreateConnection();
+					await connection.OpenAsync();
+					using var transaction = await connection.BeginTransactionAsync();
+					try
 					{
-						await connection.OpenAsync();
-						using var transaction = await connection.BeginTransactionAsync();
-						try
+						bool changesMade = false;
+						foreach (var step in migration.Value)
 						{
-							bool changesMade = false;
-							foreach (var step in migration.Value)
+							if (await TableExistsAsync(connection, step.TableName, transaction))
 							{
-								if (await TableExistsAsync(connection, step.TableName, transaction))
+								bool stepApplied = await IsStepAlreadyAppliedAsync(connection, step, transaction);
+								if (!stepApplied)
 								{
 									var formattedSql = step.SqlQuery.Replace("{prefix}", TablePrefix);
-									plugin.Logger.LogDebug($"Executing SQL on table {step.TableName}: {formattedSql}");
-									var result = await connection.ExecuteAsync(formattedSql, transaction: transaction);
-									if (result > 0) changesMade = true;
+									await connection.ExecuteAsync(formattedSql, transaction: transaction);
+									changesMade = true;
 								}
 								else
 								{
-									plugin.Logger.LogWarning($"Table {step.TableName} does not exist. Skipping this migration step.");
+									plugin.Logger.LogInformation($"Step for table {step.TableName} already applied. Skipping.");
 								}
-							}
-
-							if (changesMade || migration.Value.Count == 0)
-							{
-								await SetDatabaseVersionAsync(connection, migration.Key, transaction);
-								latestAppliedVersion = migration.Key;
 							}
 							else
 							{
-								plugin.Logger.LogInformation($"No changes were made for migration {migration.Key}. Version not updated.");
+								plugin.Logger.LogWarning($"Table {step.TableName} does not exist. Skipping this migration step.");
 							}
+						}
 
-							await transaction.CommitAsync();
-							break; // Success, exit retry loop
-						}
-						catch (Exception ex)
+						if (changesMade || migration.Value.Count == 0)
 						{
-							await transaction.RollbackAsync();
-							if (retry == maxRetries - 1)
-							{
-								plugin.Logger.LogError($"Migration {migration.Key} failed after {maxRetries} attempts: {ex.Message}");
-								throw;
-							}
-							plugin.Logger.LogWarning($"Migration {migration.Key} failed (attempt {retry + 1}): {ex.Message}. Retrying...");
-							await Task.Delay(1000 * (retry + 1)); // Exponential backoff
+							plugin.Logger.LogInformation($"Migration {migration.Key} applied successfully.");
 						}
+						else
+						{
+							plugin.Logger.LogInformation($"No changes were needed for migration {migration.Key}.");
+						}
+
+						await transaction.CommitAsync();
+						migrationSucceeded = true;
+						latestAppliedVersion = migration.Key;
 					}
+					catch (Exception ex)
+					{
+						await transaction.RollbackAsync();
+						if (retry == maxRetries - 1)
+						{
+							plugin.Logger.LogError($"Migration {migration.Key} failed after {maxRetries} attempts: {ex.Message}");
+							allMigrationsSucceeded = false;
+							break;
+						}
+						plugin.Logger.LogWarning($"Migration {migration.Key} failed (attempt {retry + 1}): {ex.Message}. Retrying...");
+						await Task.Delay(1000 * (retry + 1)); // Exponential backoff
+					}
+				}
+
+				if (!migrationSucceeded)
+				{
+					plugin.Logger.LogError($"Migration {migration.Key} failed after {maxRetries} attempts. Stopping migration process.");
+					allMigrationsSucceeded = false;
+					break;
 				}
 			}
 
-			plugin.Logger.LogInformation($"Database migration completed. Current version: {latestAppliedVersion}");
+			if (allMigrationsSucceeded)
+			{
+				using var connection = CreateConnection();
+				await connection.OpenAsync();
+				await SetDatabaseVersionAsync(connection, latestAppliedVersion);
+				plugin.Logger.LogInformation($"Database migration completed successfully. Current version: {latestAppliedVersion}");
+			}
+			else
+			{
+				plugin.Logger.LogWarning($"Database migration completed with errors. Some migrations may not have been applied.");
+			}
+		}
+
+		private sealed class VersionComparer : IComparer<string>
+		{
+			public int Compare(string? x, string? y)
+			{
+				if (x == null && y == null) return 0;
+				if (x == null) return -1;
+				if (y == null) return 1;
+
+				var xParts = x.Split('.').Select(part => int.TryParse(part, out int num) ? num : 0).ToArray();
+				var yParts = y.Split('.').Select(part => int.TryParse(part, out int num) ? num : 0).ToArray();
+
+				for (int i = 0; i < Math.Max(xParts.Length, yParts.Length); i++)
+				{
+					var xPart = i < xParts.Length ? xParts[i] : 0;
+					var yPart = i < yParts.Length ? yParts[i] : 0;
+
+					if (xPart != yPart)
+					{
+						return xPart.CompareTo(yPart);
+					}
+				}
+
+				return 0;
+			}
+		}
+
+		private async Task<bool> IsStepAlreadyAppliedAsync(MySqlConnection connection, MigrationStep step, MySqlTransaction transaction)
+		{
+			if (step.SqlQuery.Contains("ADD COLUMN"))
+			{
+				var match = System.Text.RegularExpressions.Regex.Match(step.SqlQuery, @"ADD COLUMN\s+(?:IF NOT EXISTS\s+)?`?(\w+)`?");
+				if (match.Success)
+				{
+					string columnName = match.Groups[1].Value;
+					return await ColumnExistsAsync(connection, step.TableName, columnName, transaction);
+				}
+			}
+			else if (step.SqlQuery.Contains("MODIFY COLUMN"))
+			{
+				var match = System.Text.RegularExpressions.Regex.Match(step.SqlQuery, @"MODIFY COLUMN\s+`?(\w+)`?\s+(.+)");
+				if (match.Success)
+				{
+					string columnName = match.Groups[1].Value;
+					string columnDefinition = match.Groups[2].Value.Trim();
+					return await ColumnMatchesDefinitionAsync(connection, step.TableName, columnName, columnDefinition, transaction);
+				}
+			}
+
+			return false;
+		}
+
+		private async Task<bool> ColumnExistsAsync(MySqlConnection connection, string tableName, string columnName, MySqlTransaction transaction)
+		{
+			var sql = @"
+				SELECT COUNT(*)
+				FROM INFORMATION_SCHEMA.COLUMNS
+				WHERE TABLE_SCHEMA = DATABASE()
+				AND TABLE_NAME = @tableName
+				AND COLUMN_NAME = @columnName";
+
+			var count = await connection.ExecuteScalarAsync<int>(sql, new
+			{
+				tableName = $"{TablePrefix}{tableName}",
+				columnName
+			}, transaction);
+
+			return count > 0;
+		}
+
+		private async Task<bool> ColumnMatchesDefinitionAsync(MySqlConnection connection, string tableName, string columnName, string expectedDefinition, MySqlTransaction transaction)
+		{
+			var sql = @"
+				SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA
+				FROM INFORMATION_SCHEMA.COLUMNS
+				WHERE TABLE_SCHEMA = DATABASE()
+				AND TABLE_NAME = @tableName
+				AND COLUMN_NAME = @columnName";
+
+			var columnInfo = await connection.QuerySingleOrDefaultAsync(sql, new
+			{
+				tableName = $"{TablePrefix}{tableName}",
+				columnName
+			}, transaction);
+
+			if (columnInfo == null)
+				return false;
+
+			var actualDefinition = $"{columnInfo.COLUMN_TYPE} {(columnInfo.IS_NULLABLE == "YES" ? "NULL" : "NOT NULL")}";
+			if (columnInfo.COLUMN_DEFAULT != null)
+				actualDefinition += $" DEFAULT {columnInfo.COLUMN_DEFAULT}";
+			if (!string.IsNullOrEmpty(columnInfo.EXTRA))
+				actualDefinition += $" {columnInfo.EXTRA}";
+
+			return string.Equals(actualDefinition.Trim(), expectedDefinition.Trim(), StringComparison.OrdinalIgnoreCase);
 		}
 
 		private static bool IsNewerVersion(string version1, string version2)
@@ -294,7 +427,7 @@ namespace Zenith.Models
 			plugin.Logger.LogInformation($"Database version updated to: {version}");
 		}
 
-		private async Task<string> GetServerTypeAsync(MySqlConnection connection)
+		private static async Task<string> GetServerTypeAsync(MySqlConnection connection)
 		{
 			var version = await connection.ExecuteScalarAsync<string>("SELECT VERSION()");
 			return version!.Contains("mariadb", StringComparison.CurrentCultureIgnoreCase) ? "MariaDB" : "MySQL";

@@ -5,7 +5,6 @@ using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Utils;
 using ZenithAPI;
-using System.Reflection;
 using CounterStrikeSharp.API.Modules.Events;
 using Menu;
 using Menu.Enums;
@@ -13,6 +12,7 @@ using MySqlConnector;
 using Dapper;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace Zenith_Stats;
 
@@ -34,8 +34,8 @@ public class Plugin : BasePlugin
 	private IZenithEvents? _zenithEvents;
 	private EventManager? _eventManager;
 	private IModuleServices? _moduleServices;
-	private readonly Dictionary<ulong, PlayerStats> _playerStats = new();
-	private readonly HashSet<CCSPlayerController> playerSpawned = new();
+	private readonly Dictionary<ulong, PlayerStats> _playerStats = [];
+	private readonly HashSet<CCSPlayerController> playerSpawned = [];
 
 	private readonly Dictionary<string, List<string>> _eventTargets = new()
 	{
@@ -151,10 +151,10 @@ public class Plugin : BasePlugin
 
 	private void RegisterModulePlaceholders()
 	{
-		_moduleServices!.RegisterModulePlayerPlaceholder("kda", p => CalculateKDA(GetZenithPlayer(p)));
-		_moduleServices.RegisterModulePlayerPlaceholder("kpr", p => CalculateKPR(GetZenithPlayer(p)));
-		_moduleServices.RegisterModulePlayerPlaceholder("accuracy", p => CalculateAccuracy(GetZenithPlayer(p)));
-		_moduleServices.RegisterModulePlayerPlaceholder("kd", p => CalculateKD(GetZenithPlayer(p)));
+		_moduleServices!.RegisterModulePlayerPlaceholder("kda", p => { if (_playerStats.TryGetValue(p.SteamID, out var stats)) return CalculateKDA(stats.ZenithPlayer); return "N/A"; });
+		_moduleServices.RegisterModulePlayerPlaceholder("kpr", p => { if (_playerStats.TryGetValue(p.SteamID, out var stats)) return CalculateKPR(stats.ZenithPlayer); return "N/A"; });
+		_moduleServices.RegisterModulePlayerPlaceholder("accuracy", p => { if (_playerStats.TryGetValue(p.SteamID, out var stats)) return CalculateAccuracy(stats.ZenithPlayer); return "N/A"; });
+		_moduleServices.RegisterModulePlayerPlaceholder("kd", p => { if (_playerStats.TryGetValue(p.SteamID, out var stats)) return CalculateKD(stats.ZenithPlayer); return "N/A"; });
 	}
 
 	private void OnZenithCoreUnload(bool hotReload)
@@ -302,23 +302,30 @@ public class Plugin : BasePlugin
 		{
 			_playerStats[zenithPlayer.SteamID] = new PlayerStats(zenithPlayer, this);
 		}
+		else
+		{
+			Logger.LogError($"Failed to get player services for {player.PlayerName}");
+		}
 	}
 
-	private async void OnZenithPlayerUnloaded(CCSPlayerController player)
+	private void OnZenithPlayerUnloaded(CCSPlayerController player)
 	{
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer != null && _playerStats.TryGetValue(zenithPlayer.SteamID, out var stats))
+		ulong steamID = player.SteamID;
+		if (_playerStats.TryGetValue(steamID, out var stats))
 		{
-			try
+			Task.Run(async () =>
 			{
-				await stats.SaveWeaponStats();
-				await stats.SaveMapStats();
-				_playerStats.Remove(zenithPlayer.SteamID);
-			}
-			catch (Exception ex)
-			{
-				Logger.LogError($"Error saving stats for player {zenithPlayer.Name}: {ex.Message}");
-			}
+				try
+				{
+					await stats.SaveWeaponStats();
+					await stats.SaveMapStats();
+					_playerStats.Remove(steamID);
+				}
+				catch (Exception ex)
+				{
+					Logger.LogError($"Error saving stats for player {ex.Message}");
+				}
+			});
 		}
 	}
 
@@ -385,33 +392,17 @@ public class Plugin : BasePlugin
 	{
 		_moduleServices!.LoadAllOnlinePlayerData();
 		var players = Utilities.GetPlayers();
-		for (int i = 0; i < players.Count; i++)
+		foreach (var player in players)
 		{
-			var player = players[i];
-			if (player == null || !player.IsValid || player.IsBot || player.IsHLTV)
-				continue;
-
-			var zenithPlayer = GetZenithPlayer(player);
-			if (zenithPlayer != null)
-			{
-				_playerStats[player.SteamID] = new PlayerStats(zenithPlayer, this);
-			}
+			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+				OnZenithPlayerLoaded(player);
 		}
 	}
 
 	public IEnumerable<IPlayerServices> GetValidPlayers()
 	{
-		foreach (var player in Utilities.GetPlayers())
-		{
-			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
-			{
-				var zenithPlayer = GetZenithPlayer(player);
-				if (zenithPlayer != null)
-				{
-					yield return zenithPlayer;
-				}
-			}
-		}
+		foreach (var player in _playerStats.Values)
+			yield return player.ZenithPlayer;
 	}
 
 	private void Initialize_Events()
@@ -449,18 +440,15 @@ public class Plugin : BasePlugin
 	{
 		if (player == null) return;
 
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer == null) return;
-
 		if (_playerStats.TryGetValue(player.SteamID, out var stats))
 		{
-			List<MenuItem> items = new()
-			{
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {CalculateAccuracy(zenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kpr"]}:</font> {CalculateKPR(zenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kda"]}:</font> {CalculateKDA(zenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kd"]}:</font> {CalculateKD(zenithPlayer)}")),
-			};
+			List<MenuItem> items =
+			[
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {CalculateAccuracy(stats.ZenithPlayer)}")),
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kpr"]}:</font> {CalculateKPR(stats.ZenithPlayer)}")),
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kda"]}:</font> {CalculateKDA(stats.ZenithPlayer)}")),
+				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kd"]}:</font> {CalculateKD(stats.ZenithPlayer)}")),
+			];
 
 			var statNames = new[]
 			{
@@ -493,36 +481,22 @@ public class Plugin : BasePlugin
 				// No selection handle as all items are just for display
 			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 		}
-		else
-		{
-			zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
-		}
 	}
 
 	private void OnWeaponStatsCommand(CCSPlayerController? player, CommandInfo command)
 	{
 		if (player == null) return;
 
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer == null)
-		{
-			Logger.LogWarning($"Failed to get ZenithPlayer for {player.PlayerName}");
+		if (!_playerStats.TryGetValue(player.SteamID, out var stats) || stats.WeaponStats.Count == 0)
 			return;
-		}
 
 		if (!_coreAccessor.GetValue<bool>("Config", "EnableWeaponStats"))
 		{
-			zenithPlayer.Print(Localizer["k4.stats.weapon-disabled"]);
+			stats.ZenithPlayer.Print(Localizer["k4.stats.weapon-disabled"]);
 			return;
 		}
 
-		if (!_playerStats.TryGetValue(player.SteamID, out var stats) || stats.WeaponStats.Count == 0)
-		{
-			zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
-			return;
-		}
-
-		List<MenuItem> items = new();
+		List<MenuItem> items = [];
 		var defaultValues = new Dictionary<int, object>();
 		var weaponStatsMap = new Dictionary<int, string>();
 
@@ -532,7 +506,7 @@ public class Plugin : BasePlugin
 			if (string.IsNullOrEmpty(weaponStat.Key)) continue;
 
 			string weaponName = weaponStat.Key.ToUpper();
-			items.Add(new MenuItem(MenuItemType.Button, new List<MenuValue> { new MenuValue(weaponName) }));
+			items.Add(new MenuItem(MenuItemType.Button, [new MenuValue(weaponName)]));
 			defaultValues[index] = weaponName;
 			weaponStatsMap[index] = weaponStat.Key;
 			index++;
@@ -561,33 +535,22 @@ public class Plugin : BasePlugin
 	{
 		if (player == null) return;
 
-		var zenithPlayer = GetZenithPlayer(player);
-		if (zenithPlayer == null)
-		{
-			Logger.LogWarning($"Failed to get ZenithPlayer for {player.PlayerName}");
+		if (!_playerStats.TryGetValue(player.SteamID, out var stats))
 			return;
-		}
 
 		if (!_coreAccessor.GetValue<bool>("Config", "EnableMapStats"))
 		{
-			zenithPlayer.Print(Localizer["k4.stats.map-disabled"]);
+			stats.ZenithPlayer.Print(Localizer["k4.stats.map-disabled"]);
 			return;
 		}
 
-		if (_playerStats.TryGetValue(player.SteamID, out var stats))
-		{
-			ShowMapStats(player, stats);
-		}
-		else
-		{
-			zenithPlayer.Print(Localizer["k4.stats.no_stats"]);
-		}
+		ShowMapStats(player, stats);
 	}
 
 	private void ShowWeaponDetails(CCSPlayerController player, WeaponStats weaponStat)
 	{
-		List<MenuItem> items = new()
-		{
+		List<MenuItem> items =
+		[
 			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kills"]}:</font> {weaponStat.Kills:N0}")),
 			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.shoots"]}:</font> {weaponStat.Shots:N0}")),
 			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.hitsgiven"]}:</font> {weaponStat.Hits:N0}")),
@@ -600,14 +563,14 @@ public class Plugin : BasePlugin
 			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.leftleghits"]}:</font> {weaponStat.LeftLegHits:N0}")),
 			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.rightleghits"]}:</font> {weaponStat.RightLegHits:N0}")),
 			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.neckhits"]}:</font> {weaponStat.NeckHits:N0}"))
-		};
+		];
 
 		Menu?.ShowScrollableMenu(player, weaponStat.Weapon.ToUpper(), items, (buttons, menu, selected) => { }, true, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 	}
 
 	private void ShowMapStats(CCSPlayerController player, PlayerStats playerStats)
 	{
-		List<MenuItem> items = new();
+		List<MenuItem> items = [];
 
 		var statNames = new[]
 		{
@@ -701,7 +664,7 @@ public class Plugin : BasePlugin
 
 		private bool IsStatsAllowed()
 		{
-			int notBots = _plugin.GetValidPlayers().Count();
+			int notBots = _plugin._playerStats.Count;
 			bool warmupStats = _plugin._coreAccessor.GetValue<bool>("Config", "WarmupStats");
 			int minPlayers = _plugin._coreAccessor.GetValue<int>("Config", "MinPlayers");
 
@@ -712,109 +675,89 @@ public class Plugin : BasePlugin
 		{
 			bool statsForBots = _plugin._coreAccessor.GetValue<bool>("Config", "StatsForBots");
 
-			var victim = _plugin.GetZenithPlayer(@event.Userid);
-			var attacker = _plugin.GetZenithPlayer(@event.Attacker);
-			var assister = _plugin.GetZenithPlayer(@event.Assister);
+			var victim = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var victimPlayer) ? victimPlayer : null : null;
+			var attacker = @event.Attacker != null ? _plugin._playerStats.TryGetValue(@event.Attacker.SteamID, out var attackerPlayer) ? attackerPlayer : null : null;
+			var assister = @event.Assister != null ? _plugin._playerStats.TryGetValue(@event.Assister.SteamID, out var assisterPlayer) ? assisterPlayer : null : null;
 
-			if (victim != null && _plugin._playerStats.TryGetValue(victim.Controller.SteamID, out var victimStats))
+			if (victim != null)
 			{
 				if (statsForBots || attacker != null)
 				{
-					victimStats.IncrementStat("Deaths");
+					victim.IncrementStat("Deaths");
 				}
 			}
 
-			if (attacker != null && attacker != victim && _plugin._playerStats.TryGetValue(attacker.Controller.SteamID, out var attackerStats))
+			if (attacker != null && attacker != victim)
 			{
 				if (statsForBots || victim != null)
 				{
-					attackerStats.IncrementStat("Kills");
+					attacker.IncrementStat("Kills");
 					if (!FirstBlood)
 					{
 						FirstBlood = true;
-						attackerStats.IncrementStat("FirstBlood");
+						attacker.IncrementStat("FirstBlood");
 					}
-					if (@event.Noscope) attackerStats.IncrementStat("NoScopeKill");
-					if (@event.Penetrated > 0) attackerStats.IncrementStat("PenetratedKill");
-					if (@event.Thrusmoke) attackerStats.IncrementStat("ThruSmokeKill");
-					if (@event.Attackerblind) attackerStats.IncrementStat("FlashedKill");
-					if (@event.Dominated > 0) attackerStats.IncrementStat("DominatedKill");
-					if (@event.Revenge > 0) attackerStats.IncrementStat("RevengeKill");
-					if (@event.Headshot) attackerStats.IncrementStat("Headshots");
+					if (@event.Noscope) attacker.IncrementStat("NoScopeKill");
+					if (@event.Penetrated > 0) attacker.IncrementStat("PenetratedKill");
+					if (@event.Thrusmoke) attacker.IncrementStat("ThruSmokeKill");
+					if (@event.Attackerblind) attacker.IncrementStat("FlashedKill");
+					if (@event.Dominated > 0) attacker.IncrementStat("DominatedKill");
+					if (@event.Revenge > 0) attacker.IncrementStat("RevengeKill");
+					if (@event.Headshot) attacker.IncrementStat("Headshots");
 
-					attackerStats.AddWeaponKill(@event);
+					attacker.AddWeaponKill(@event);
 				}
 			}
 
-			if (assister != null && _plugin._playerStats.TryGetValue(assister.Controller.SteamID, out var assisterStats))
+			if (assister != null)
 			{
 				if (statsForBots || (victim != null && attacker != null))
 				{
-					assisterStats.IncrementStat("Assists");
-					if (@event.Assistedflash) assisterStats.IncrementStat("AssistFlash");
+					assister.IncrementStat("Assists");
+					if (@event.Assistedflash) assister.IncrementStat("AssistFlash");
 				}
 			}
 		}
 
 		private void HandleGrenadeThrown(EventGrenadeThrown @event)
 		{
-			var player = _plugin.GetZenithPlayer(@event.Userid);
-			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
-			{
+			if (@event.Userid != null && _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var stats))
 				stats.IncrementStat("Grenades");
-			}
 		}
 
 		private void HandlePlayerHurt(EventPlayerHurt @event)
 		{
-			var victim = _plugin.GetZenithPlayer(@event.Userid);
-			var attacker = _plugin.GetZenithPlayer(@event.Attacker);
+			var victim = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var victimPlayer) ? victimPlayer : null : null;
+			var attacker = @event.Attacker != null ? _plugin._playerStats.TryGetValue(@event.Attacker.SteamID, out var attackerPlayer) ? attackerPlayer : null : null;
 
-			if (victim != null && _plugin._playerStats.TryGetValue(victim.Controller.SteamID, out var victimStats))
-			{
-				victimStats.IncrementStat("HitsTaken");
-			}
+			victim?.IncrementStat("HitsTaken");
 
-			if (attacker != null && attacker != victim && _plugin._playerStats.TryGetValue(attacker.Controller.SteamID, out var attackerStats))
-			{
-				attackerStats.AddWeaponHit(@event.Weapon, @event.Hitgroup);
-			}
+			if (attacker != null && attacker != victim)
+				attacker.AddWeaponHit(@event.Weapon, @event.Hitgroup);
 		}
 
 		private void HandleBombPlanted(EventBombPlanted @event)
 		{
-			var player = _plugin.GetZenithPlayer(@event.Userid);
-			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
-			{
-				stats.IncrementStat("BombPlanted");
-			}
+			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
+			player?.IncrementStat("BombPlanted");
 		}
 
 		private void HandleHostageRescued(EventHostageRescued @event)
 		{
-			var player = _plugin.GetZenithPlayer(@event.Userid);
-			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
-			{
-				stats.IncrementStat("HostageRescued");
-			}
+			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
+			player?.IncrementStat("HostageRescued");
 		}
 
 		private void HandleHostageKilled(EventHostageKilled @event)
 		{
-			var player = _plugin.GetZenithPlayer(@event.Userid);
-			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
-			{
-				stats.IncrementStat("HostageKilled");
-			}
+			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
+			player?.IncrementStat("HostageKilled");
 		}
 
 		private void HandleBombDefused(EventBombDefused @event)
 		{
-			var player = _plugin.GetZenithPlayer(@event.Userid);
-			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
-			{
-				stats.IncrementStat("BombDefused");
-			}
+			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
+			player?.IncrementStat("BombDefused");
 		}
 
 		private void HandleRoundEnd(EventRoundEnd @event)
@@ -844,23 +787,15 @@ public class Plugin : BasePlugin
 
 		private void HandleWeaponFire(EventWeaponFire @event)
 		{
-			var player = _plugin.GetZenithPlayer(@event.Userid);
-			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
-			{
-				if (!@event.Weapon.Contains("knife") && !@event.Weapon.Contains("bayonet"))
-				{
-					stats.AddWeaponShot(@event.Weapon);
-				}
-			}
+			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
+			if (player != null && !@event.Weapon.Contains("knife") && !@event.Weapon.Contains("bayonet"))
+				player.AddWeaponShot(@event.Weapon);
 		}
 
 		private void HandleRoundMvp(EventRoundMvp @event)
 		{
-			var player = _plugin.GetZenithPlayer(@event.Userid);
-			if (player != null && _plugin._playerStats.TryGetValue(player.Controller.SteamID, out var stats))
-			{
-				stats.IncrementStat("MVP");
-			}
+			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
+			player?.IncrementStat("MVP");
 		}
 
 		private void HandleCsWinPanelMatch(EventCsWinPanelMatch @event)
@@ -956,7 +891,7 @@ public class Plugin : BasePlugin
 		public MapStats CurrentMapStats { get; private set; }
 		public CounterStrikeSharp.API.Modules.Timers.Timer? SpawnMessageTimer = null;
 
-		private readonly Dictionary<string, DateTime> _lastShotTime = new();
+		private readonly Dictionary<string, DateTime> _lastShotTime = [];
 		private const double HIT_COOLDOWN = 0.1;
 
 		private readonly string _steamId;
@@ -1097,7 +1032,7 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		public Dictionary<string, WeaponStats> WeaponStats { get; private set; } = new();
+		public Dictionary<string, WeaponStats> WeaponStats { get; private set; } = [];
 
 		private static readonly string[] sourceArray = ["m4a1", "hkp2000", "usp_silencer", "weapon_m4a1_silencer", "weapon_mp7", "weapon_mp5sd", "deagle", "revolver"];
 

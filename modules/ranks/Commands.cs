@@ -9,9 +9,7 @@ public sealed partial class Plugin : BasePlugin
 {
 	public void OnRankCommand(CCSPlayerController? player, CommandInfo info)
 	{
-		IPlayerServices? playerServices = GetZenithPlayer(player!);
-
-		if (playerServices == null)
+		if (!_playerCache.TryGetValue(player!, out var playerServices))
 		{
 			info.ReplyToCommand($" {Localizer["k4.general.prefix"]} {Localizer["k4.general.loading"]}");
 			return;

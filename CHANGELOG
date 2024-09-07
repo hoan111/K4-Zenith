@@ -1,3 +1,33 @@
+# 2024.09.05 - 1.0.13
+
+- feat: Added validations to commands that should be executed only while dead
+- feat: Added optional punishment removal reason
+- feat: Added punishment status "warn_ban" to show warn limit bans
+- feat: Added option to enforce punishment removal reason
+- feat: Added slap sounds using random damage sounds
+- feat: Added Settings change listener to API
+- feat: Added Storage change listener to API
+- optimise: Added debounced caching for Center Messages
+- optimise: Country tags now cached to prevent checks on every x seconds
+- optimise: Modules wont request new PlayerService every single time, but reuse them
+- upgrade: Database migration is now able to detect already applied migrations and skip them
+- upgrade: Blocked purge logs if removed rows are 0
+- upgrade: Give command now use the name of weapon in chat, not classname
+- upgrade: Added give command validation of ammo_grenade_limit_default, ammo_grenade_limit_flashbang, ammo_grenade_limit_total, ammo_item_limit_healthshot to prevent crashes
+- fix: Some extended commands was executible only while being alive wrongly
+- fix: Give command didnt find the item properly
+- fix: Give command grenade give crashed on duplicated item
+- fix: Give command removed all other greandes on giving a new
+- fix: Noclip command didnt work properly
+- fix: Menu index out of bounds error
+- fix: Revive didnt teleport back to death points as CSS pass reference on AbsOrigin, not the value
+- fix: ArgCount missmatches in ExtendedCommands
+- fix: Slap moved the player crosshair
+- fix: Flashing new rank center message on every point change
+- fix: Punishment reasons broken after first space
+- fix: Database migration shown no changes were made even if it was and didnt change version
+- fix: Rare cases when database migration didnt go in order
+
 # 2024.09.04 - 1.0.12
 
 - feat: Unban offline player by name, return multiple find

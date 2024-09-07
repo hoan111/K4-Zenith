@@ -14,11 +14,10 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.2";
+	public override string ModuleVersion => "1.0.3";
 
-	public IModuleConfigAccessor _coreAccessor = null!;
+	private IModuleConfigAccessor _coreAccessor = null!;
 
-	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
 
 	private IZenithEvents? _zenithEvents;
@@ -40,7 +39,6 @@ public sealed partial class Plugin : BasePlugin
 
 		try
 		{
-			_playerServicesCapability = new("zenith:player-services");
 			_moduleServicesCapability = new("zenith:module-services");
 		}
 		catch (Exception ex)
@@ -73,6 +71,7 @@ public sealed partial class Plugin : BasePlugin
 		}
 
 		Initialize_Commands();
+		Initialize_Events();
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
@@ -89,19 +88,8 @@ public sealed partial class Plugin : BasePlugin
 		}
 	}
 
-	public IPlayerServices? GetZenithPlayer(CCSPlayerController? player)
-	{
-		if (player == null) return null;
-		try { return _playerServicesCapability?.Get(player); }
-		catch { return null; }
-	}
-
 	public override void Unload(bool hotReload)
 	{
-		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
-		if (moduleServices == null)
-			return;
-
-		moduleServices.DisposeModule(this.GetType().Assembly);
+		_moduleServicesCapability?.Get()?.DisposeModule(this.GetType().Assembly);
 	}
 }

@@ -23,15 +23,19 @@
   "k4.chat.ban": "{lightred}{0} banned {1} for {2}. Reason: {3}",
   "k4.chat.ban.permanent": "{lightred}{0} permanently banned {1}. Reason: {2}",
   "k4.chat.unban": "{gold}{0} unbanned {1}.",
+  "k4.chat.unban.withreason": "{gold}{0} unbanned {1}. Reason: {2}",
   "k4.chat.mute": "{lightred}{0} muted {1} for {2}. Reason: {3}",
   "k4.chat.mute.permanent": "{lightred}{0} permanently muted {1}. Reason: {2}",
   "k4.chat.unmute": "{gold}{0} unmuted {1}.",
+  "k4.chat.unmute.withreason": "{gold}{0} unmuted {1}. Reason: {2}",
   "k4.chat.gag": "{lightred}{0} gagged {1} for {2}. Reason: {3}",
   "k4.chat.gag.permanent": "{lightred}{0} permanently gagged {1}. Reason: {2}",
   "k4.chat.ungag": "{gold}{0} ungagged {1}.",
+  "k4.chat.ungag.withreason": "{gold}{0} ungagged {1}. Reason: {2}",
   "k4.chat.silence": "{lightred}{0} silenced {1} for {2}. Reason: {3}",
   "k4.chat.silence.permanent": "{lightred}{0} permanently silenced {1}. Reason: {2}",
   "k4.chat.unsilence": "{gold}{0} unsilenced {1}.",
+  "k4.chat.unsilence.withreason": "{gold}{0} unsilenced {1}. Reason: {2}",
   "k4.chat.warn": "{lightred}{0} warned {1}. Reason: {2}",
   "k4.chat.clearwarns": "{gold}{0} cleared all warnings for {1}.",
 
@@ -72,7 +76,7 @@
   "k4.menu.selectlength": "Select Length",
 
   "k4.discord.punishment": "{\"embeds\":[{\"title\":\"🚫 Punishment Applied\",\"color\":16711680,\"fields\":[{\"name\":\"Player\",\"value\":\"{player}\",\"inline\":true},{\"name\":\"Type\",\"value\":\"{type}\",\"inline\":true},{\"name\":\"Duration\",\"value\":\"{duration}\",\"inline\":true},{\"name\":\"Reason\",\"value\":\"{reason}\",\"inline\":false},{\"name\":\"Admin\",\"value\":\"{admin}\",\"inline\":false}],\"timestamp\":\"{timestamp}\"}]}",
-  "k4.discord.unpunishment": "{\"embeds\":[{\"title\":\"✅ Punishment Removed\",\"color\":65280,\"fields\":[{\"name\":\"Player\",\"value\":\"{player}\",\"inline\":true},{\"name\":\"Type\",\"value\":\"{type}\",\"inline\":true},{\"name\":\"Admin\",\"value\":\"{admin}\",\"inline\":false}],\"timestamp\":\"{timestamp}\"}]}",
+  "k4.discord.unpunishment": "{\"embeds\":[{\"title\":\"✅ Punishment Removed\",\"color\":65280,\"fields\":[{\"name\":\"Player\",\"value\":\"{player}\",\"inline\":true},{\"name\":\"Type\",\"value\":\"{type}\",\"inline\":true},{\"name\":\"Reason\",\"value\":\"{reason}\",\"inline\":false},{\"name\":\"Admin\",\"value\":\"{admin}\",\"inline\":false}],\"timestamp\":\"{timestamp}\"}]}",
   "k4.discord.addadmin": "{\"embeds\":[{\"title\":\"👑 Admin Added\",\"color\":16776960,\"fields\":[{\"name\":\"Player\",\"value\":\"{player}\",\"inline\":true},{\"name\":\"Group\",\"value\":\"{group}\",\"inline\":true},{\"name\":\"Added by\",\"value\":\"{admin}\",\"inline\":false}],\"timestamp\":\"{timestamp}\"}]}",
   "k4.discord.removeadmin": "{\"embeds\":[{\"title\":\"👤 Admin Removed\",\"color\":16777215,\"fields\":[{\"name\":\"Player\",\"value\":\"{player}\",\"inline\":true},{\"name\":\"Removed by\",\"value\":\"{admin}\",\"inline\":false}],\"timestamp\":\"{timestamp}\"}]}"
 }

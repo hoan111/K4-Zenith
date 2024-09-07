@@ -6,11 +6,11 @@ namespace Zenith_ExtendedCommands
 	{
 		public ushort WeaponID { get; }
 		public string ClassName { get; }
-		public gear_slot_t Slot { get; }
-		public List<string> Aliases { get; } = [];
+		public gear_slot_t? Slot { get; }
+		public List<string> Aliases { get; }
 		public string Name { get; }
 
-		public Weapon(ushort weaponID, string className, string name, gear_slot_t slot, List<string> aliases)
+		public Weapon(ushort weaponID, string className, string name, gear_slot_t? slot, List<string> aliases)
 		{
 			WeaponID = weaponID;
 			ClassName = className;
@@ -62,9 +62,9 @@ namespace Zenith_ExtendedCommands
 			new Weapon(2, "weapon_elite", "Dual Berettas", gear_slot_t.GEAR_SLOT_PISTOL, ["elite"]),
 			new Weapon(1, "weapon_deagle", "Desert Eagle", gear_slot_t.GEAR_SLOT_PISTOL, ["deagle"]),
 
-			new Weapon(62, "weapon_taser", "Taser", gear_slot_t.GEAR_SLOT_UTILITY, ["taser"]),
-			new Weapon(58, "weapon_shield", "Shield", gear_slot_t.GEAR_SLOT_UTILITY, ["shield"]),
-			new Weapon(57, "weapon_healthshot", "Healthshot", gear_slot_t.GEAR_SLOT_UTILITY, ["healthshot"]),
+			new Weapon(62, "weapon_taser", "Taser", null, ["taser"]),
+			new Weapon(58, "weapon_shield", "Shield", null, ["shield"]),
+			new Weapon(57, "weapon_healthshot", "Healthshot", null, ["healthshot"]),
 
 			new Weapon(31, "weapon_flashbang", "Flashbang", gear_slot_t.GEAR_SLOT_GRENADES, ["flashbang", "flash"]),
 			new Weapon(20, "weapon_smokegrenade", "Smoke Grenade", gear_slot_t.GEAR_SLOT_GRENADES, ["smokegrenade", "smoke"]),

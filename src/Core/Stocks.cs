@@ -201,9 +201,17 @@ namespace Zenith
 
 		private (string ShortName, string LongName) GetCountryFromIP(CCSPlayerController? player)
 		{
-			return player == null
+			if (player is null || !Player.List.TryGetValue(player.SteamID, out var playerData))
+				return ("??", "Unknown");
+
+			if (playerData._country != ("??", "Unknown"))
+				return playerData._country;
+
+			playerData._country = player == null
 				? ("??", "Unknown")
 				: GetCountryFromIP(player.IpAddress?.Split(':')[0]);
+
+			return playerData._country;
 		}
 
 		private (string ShortName, string LongName) GetCountryFromIP(string? ipAddress)

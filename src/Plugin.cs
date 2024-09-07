@@ -63,7 +63,7 @@ namespace Zenith
 			{
 				foreach (var player in Player.List.Values)
 				{
-					if (player.IsValid && player.IsPlayer)
+					if (player.IsValid)
 						player.ShowCenterMessage();
 				}
 			});
@@ -100,7 +100,7 @@ namespace Zenith
 			{
 				foreach (var player in Player.List.Values)
 				{
-					if (player.IsValid && player.IsPlayer)
+					if (player.IsValid)
 						player.EnforcePluginValues();
 				}
 			}, TimerFlags.REPEAT);
@@ -115,6 +115,8 @@ namespace Zenith
 				{
 					_lastStorageSave = DateTime.UtcNow;
 					Player.SaveAllOnlinePlayerData(this, false);
+
+					Server.PrintToChatAll(Localizer["k4.events.autosave"]);
 				}
 			}, TimerFlags.REPEAT);
 		}

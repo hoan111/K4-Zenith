@@ -17,7 +17,7 @@ namespace Zenith
 
 			foreach (var command in commands)
 			{
-				RegisterZenithCommand($"css_{command}", "Change player Zenith settings", (CCSPlayerController? player, CommandInfo commandInfo) =>
+				RegisterZenithCommand($"css_{command}", "Change player Zenith settings and storage", (CCSPlayerController? player, CommandInfo commandInfo) =>
 				{
 					if (player == null) return;
 
@@ -26,64 +26,70 @@ namespace Zenith
 
 					var items = new List<MenuItem>();
 					var defaultValues = new Dictionary<int, object>();
-					var settingsMap = new Dictionary<int, (string ModuleID, string Key)>();
+					var dataMap = new Dictionary<int, (string ModuleID, string Key, bool IsStorage)>();
 
 					int index = 0;
-					foreach (var moduleSettings in Player.moduleDefaultSettings)
+					foreach (var isStorage in booleanArray)
 					{
-						string moduleID = moduleSettings.Key;
-						var moduleLocalizer = Player.GetModuleLocalizer(moduleID);
+						var moduleData = isStorage ? Player.moduleDefaultStorage : Player.moduleDefaultSettings;
 
-						foreach (var setting in moduleSettings.Value.Settings)
+						foreach (var moduleItem in moduleData)
 						{
-							string key = setting.Key;
-							var defaultValue = setting.Value;
-							var currentValue = zenithPlayer.GetData<object>(key, zenithPlayer.Settings, moduleID) ?? defaultValue;
+							string moduleID = moduleItem.Key;
+							var moduleLocalizer = Player.GetModuleLocalizer(moduleID);
 
-							var displayName = moduleLocalizer != null ? $"{moduleLocalizer[$"settings.{key}"]}: " : $"{moduleID}.{key}: ";
-
-							switch (currentValue)
+							foreach (var setting in moduleItem.Value.Settings)
 							{
-								case JsonElement jsonElement:
-									switch (jsonElement.ValueKind)
-									{
-										case JsonValueKind.True:
-										case JsonValueKind.False:
-											items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
-											defaultValues[index] = jsonElement.GetBoolean();
-											break;
-										case JsonValueKind.Number:
-											items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-											defaultValues[index] = jsonElement.GetInt32().ToString();
-											break;
-										case JsonValueKind.String:
-											items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-											defaultValues[index] = jsonElement.GetString() ?? string.Empty;
-											break;
-										default:
-											Logger.LogWarning($"Unsupported JsonElement type for {moduleID}.{key}: {jsonElement.ValueKind}");
-											continue;
-									}
-									break;
-								case bool boolValue:
-									items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
-									defaultValues[index] = boolValue;
-									break;
-								case int intValue:
-									items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-									defaultValues[index] = intValue.ToString();
-									break;
-								case string stringValue:
-									items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
-									defaultValues[index] = stringValue;
-									break;
-								default:
-									Logger.LogWarning($"Unknown setting type for {moduleID}.{key} ({currentValue?.GetType().Name ?? "null"})");
-									continue;
-							}
+								string key = setting.Key;
+								var defaultValue = setting.Value;
+								var currentValue = zenithPlayer.GetData<object>(key, isStorage ? zenithPlayer.Storage : zenithPlayer.Settings, moduleID);
+								currentValue ??= defaultValue;
 
-							settingsMap[index] = (moduleID, key);
-							index++;
+								var displayName = moduleLocalizer != null ? $"{moduleLocalizer[$"{(isStorage ? "storage" : "settings")}.{key}"]}: " : $"{moduleID}.{key}: ";
+
+								switch (currentValue)
+								{
+									case bool boolValue:
+										items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
+										defaultValues[index] = boolValue;
+										break;
+									case int intValue:
+										items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+										defaultValues[index] = intValue.ToString();
+										break;
+									case string stringValue:
+										items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+										defaultValues[index] = stringValue;
+										break;
+									case JsonElement jsonElement:
+										switch (jsonElement.ValueKind)
+										{
+											case JsonValueKind.True:
+											case JsonValueKind.False:
+												items.Add(new MenuItem(MenuItemType.Bool, new MenuValue(displayName)));
+												defaultValues[index] = jsonElement.GetBoolean();
+												break;
+											case JsonValueKind.Number:
+												items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+												defaultValues[index] = jsonElement.GetInt32().ToString();
+												break;
+											case JsonValueKind.String:
+												items.Add(new MenuItem(MenuItemType.Input, new MenuValue(displayName)));
+												defaultValues[index] = jsonElement.GetString() ?? string.Empty;
+												break;
+											default:
+												Logger.LogWarning($"Unsupported JsonElement type for {moduleID}.{key}: {jsonElement.ValueKind}");
+												continue;
+										}
+										break;
+									default:
+										Logger.LogWarning($"Unknown setting type for {moduleID}.{key} ({currentValue?.GetType().Name ?? "null"})");
+										continue;
+								}
+
+								dataMap[index] = (moduleID, key, isStorage);
+								index++;
+							}
 						}
 					}
 
@@ -91,10 +97,11 @@ namespace Zenith
 					{
 						if (selected == null) return;
 
-						if (settingsMap.TryGetValue(menu.Option, out var settingInfo))
+						if (dataMap.TryGetValue(menu.Option, out var dataInfo))
 						{
-							string moduleID = settingInfo.ModuleID;
-							string key = settingInfo.Key;
+							string moduleID = dataInfo.ModuleID;
+							string key = dataInfo.Key;
+							bool isStorage = dataInfo.IsStorage;
 							var moduleLocalizer = Player.GetModuleLocalizer(moduleID);
 
 							switch (buttons)
@@ -103,15 +110,15 @@ namespace Zenith
 									if (selected.Type == MenuItemType.Bool)
 									{
 										bool newBoolValue = selected.Data[0] == 1;
-										zenithPlayer.SetData(key, newBoolValue, zenithPlayer.Settings, true, moduleID);
+										zenithPlayer.SetData(key, newBoolValue, isStorage ? zenithPlayer.Storage : zenithPlayer.Settings, true, moduleID);
 										string localizedValue = Localizer[newBoolValue ? "k4.settings.enabled" : "k4.settings.disabled"];
 										localizedValue = newBoolValue ? $"{ChatColors.Lime}{localizedValue}" : $"{ChatColors.LightRed}{localizedValue}";
-										zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {localizedValue}");
+										zenithPlayer.Print($"{moduleLocalizer?[$"{(isStorage ? "storage" : "settings")}.{key}"] ?? key}: {localizedValue}");
 									}
 									break;
 								case MenuButtons.Input:
 									string newValue = selected.DataString ?? string.Empty;
-									var currentValue = zenithPlayer.GetSetting<object>(key);
+									var currentValue = zenithPlayer.GetData<object>(key, isStorage ? zenithPlayer.Storage : zenithPlayer.Settings, moduleID);
 
 									switch (currentValue)
 									{
@@ -121,8 +128,8 @@ namespace Zenith
 												case JsonValueKind.Number:
 													if (int.TryParse(newValue, out int parsedValue))
 													{
-														zenithPlayer.SetSetting(key, parsedValue, true);
-														zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {parsedValue}");
+														zenithPlayer.SetData(key, parsedValue, isStorage ? zenithPlayer.Storage : zenithPlayer.Settings, true, moduleID);
+														zenithPlayer.Print($"{moduleLocalizer?[$"{(isStorage ? "storage" : "settings")}.{key}"] ?? key}: {parsedValue}");
 													}
 													else
 													{
@@ -131,16 +138,16 @@ namespace Zenith
 													}
 													break;
 												case JsonValueKind.String:
-													zenithPlayer.SetSetting(key, newValue, true);
-													zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {newValue}");
+													zenithPlayer.SetData(key, newValue, isStorage ? zenithPlayer.Storage : zenithPlayer.Settings, true, moduleID);
+													zenithPlayer.Print($"{moduleLocalizer?[$"{(isStorage ? "storage" : "settings")}.{key}"] ?? key}: {newValue}");
 													break;
 											}
 											break;
 										case int:
 											if (int.TryParse(newValue, out int intValue))
 											{
-												zenithPlayer.SetSetting(key, intValue, true);
-												zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {intValue}");
+												zenithPlayer.SetData(key, intValue, isStorage ? zenithPlayer.Storage : zenithPlayer.Settings, true, moduleID);
+												zenithPlayer.Print($"{moduleLocalizer?[$"{(isStorage ? "storage" : "settings")}.{key}"] ?? key}: {intValue}");
 											}
 											else
 											{
@@ -149,8 +156,8 @@ namespace Zenith
 											}
 											break;
 										case string:
-											zenithPlayer.SetSetting(key, newValue, true);
-											zenithPlayer.Print($"{moduleLocalizer?[$"settings.{key}"] ?? key}: {newValue}");
+											zenithPlayer.SetData(key, newValue, isStorage ? zenithPlayer.Storage : zenithPlayer.Settings, true, moduleID);
+											zenithPlayer.Print($"{moduleLocalizer?[$"{(isStorage ? "storage" : "settings")}.{key}"] ?? key}: {newValue}");
 											break;
 									}
 									break;
@@ -160,5 +167,7 @@ namespace Zenith
 				});
 			}
 		}
+
+		private static readonly bool[] booleanArray = new[] { false, true };
 	}
 }

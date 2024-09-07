@@ -1,4 +1,3 @@
-using System.Reflection;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Events;
@@ -273,8 +272,9 @@ namespace Zenith_Ranks
 			{
 				if (deathEvent == null) return;
 
-				IPlayerServices? victim = _plugin.GetZenithPlayer(deathEvent.Userid);
-				IPlayerServices? attacker = _plugin.GetZenithPlayer(deathEvent.Attacker);
+				var victim = deathEvent.Userid != null ? _plugin._playerCache.TryGetValue(deathEvent.Userid, out var victimPlayer) ? victimPlayer : null : null;
+				var attacker = deathEvent.Attacker != null ? _plugin._playerCache.TryGetValue(deathEvent.Attacker, out var attackerPlayer) ? attackerPlayer : null : null;
+				var assister = deathEvent.Assister != null ? _plugin._playerCache.TryGetValue(deathEvent.Assister, out var assisterPlayer) ? assisterPlayer : null : null;
 
 				if (victim != null)
 				{
@@ -286,7 +286,6 @@ namespace Zenith_Ranks
 					HandleAttackerKill(attacker, victim, deathEvent);
 				}
 
-				IPlayerServices? assister = _plugin.GetZenithPlayer(deathEvent.Assister);
 				if (assister != null && assister.Controller.SteamID != deathEvent.Userid?.SteamID)
 				{
 					HandleAssisterEvent(assister, attacker, victim, deathEvent);
@@ -457,14 +456,10 @@ namespace Zenith_Ranks
 				if (targetProp != null)
 				{
 					var targetValue = targetProp.GetValue(gameEvent) as CCSPlayerController;
-					if (targetValue != null)
+					if (targetValue != null && _plugin._playerCache.TryGetValue(targetValue, out var player))
 					{
-						var player = _plugin.GetZenithPlayer(targetValue);
-						if (player != null)
-						{
-							string eventKey = $"k4.events.{eventName.ToLower().Replace("event", "")}";
-							_plugin.ModifyPlayerPoints(player, points, eventKey);
-						}
+						string eventKey = $"k4.events.{eventName.ToLower().Replace("event", "")}";
+						_plugin.ModifyPlayerPoints(player, points, eventKey);
 					}
 					else if (targetProperty == "Team")
 					{

@@ -58,7 +58,7 @@ namespace Zenith_Bans
 			connection.Execute($@"
 				CREATE TABLE IF NOT EXISTS `{prefix}zenith_bans_punishments` (
 					`id` INT AUTO_INCREMENT PRIMARY KEY,
-					`status` ENUM('active', 'expired', 'removed', 'removed_console') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+					`status` ENUM('active', 'warn_ban', 'expired', 'removed', 'removed_console') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
 					`steam_id` BIGINT UNSIGNED,
 					`type` ENUM('mute', 'gag', 'silence', 'ban', 'warn', 'kick') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
 					`duration` INT,
@@ -69,6 +69,7 @@ namespace Zenith_Bans
 					`remove_admin_steam_id` BIGINT UNSIGNED NULL,
 					`server_ip` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'all',
 					`reason` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+					`remove_reason` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
 					FOREIGN KEY (`steam_id`) REFERENCES `{prefix}zenith_bans_players`(`steam_id`),
 					FOREIGN KEY (`admin_steam_id`) REFERENCES `{prefix}zenith_bans_players`(`steam_id`),
 					FOREIGN KEY (`remove_admin_steam_id`) REFERENCES `{prefix}zenith_bans_players`(`steam_id`)
@@ -374,7 +375,7 @@ namespace Zenith_Bans
 			});
 		}
 
-		private async Task<bool> RemovePunishmentAsync(ulong targetSteamId, PunishmentType type, ulong? removerSteamId)
+		private async Task<bool> RemovePunishmentAsync(ulong targetSteamId, PunishmentType type, ulong? removerSteamId, string? removeReason)
 		{
 			string prefix = _coreAccessor.GetValue<string>("Database", "TablePrefix");
 			using var connection = new MySqlConnection(_moduleServices?.GetConnectionString());
@@ -384,7 +385,8 @@ namespace Zenith_Bans
 				UPDATE `{prefix}zenith_bans_punishments`
 				SET `status` = CASE WHEN @RemoverSteamId IS NULL THEN 'removed_console' ELSE 'removed' END,
 					`removed_at` = NOW(),
-					`remove_admin_steam_id` = @RemoverSteamId
+					`remove_admin_steam_id` = @RemoverSteamId,
+					`remove_reason` = @RemoveReason
 				WHERE `steam_id` = @TargetSteamId AND `type` = @Type
 				AND (`server_ip` = 'all' OR `server_ip` = @ServerIp)
 				AND `status` = 'active'";
@@ -394,6 +396,7 @@ namespace Zenith_Bans
 				TargetSteamId = targetSteamId,
 				Type = type.ToString().ToLower(),
 				RemoverSteamId = removerSteamId,
+				RemoveReason = removeReason,
 				ServerIp = _serverIp
 			});
 			return affectedRows > 0;

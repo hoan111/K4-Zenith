@@ -18,7 +18,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.2";
+	public override string ModuleVersion => "1.0.3";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -78,6 +78,7 @@ public sealed partial class Plugin : BasePlugin
 		_coreAccessor = _moduleServices.GetModuleConfigAccessor();
 
 		_moduleServices.RegisterModuleConfig("Config", "ForcePunishmentReasons", "Forcing admin to select a reason while punishing", true);
+		_moduleServices.RegisterModuleConfig("Config", "ForceRemovePunishmentReason", "Forcing admin to provide a reason when removing a punishment", true);
 
 		_moduleServices.RegisterModuleConfig("Config", "BanReasons", "Reasons to select from while banning", new List<string> { "Cheating", "Abusive behavior", "Spamming", "Griefing", "Other" });
 		_moduleServices.RegisterModuleConfig("Config", "BanDurations", "Durations to select from while banning (in minutes, 0 for permanent)", new List<int> { 10, 30, 60, 120, 1440, 10080, 43200, 525600, 0 });
@@ -187,10 +188,6 @@ public sealed partial class Plugin : BasePlugin
 
 	public override void Unload(bool hotReload)
 	{
-		IModuleServices? moduleServices = _moduleServicesCapability?.Get();
-		if (moduleServices == null)
-			return;
-
-		moduleServices.DisposeModule(this.GetType().Assembly);
+		_moduleServicesCapability?.Get()?.DisposeModule(this.GetType().Assembly);
 	}
 }

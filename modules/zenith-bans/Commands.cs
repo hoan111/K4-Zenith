@@ -66,11 +66,30 @@ namespace Zenith_Bans
 
 		private void OnUnbanCommand(CCSPlayerController? controller, CommandInfo info)
 		{
+			bool forceReason = _coreAccessor.GetValue<bool>("Config", "ForceRemovePunishmentReason");
+			int requiredArgs = forceReason ? 3 : 2;
+
+			if (info.ArgCount < requiredArgs)
+			{
+				string usage = forceReason ? $"{info.GetArg(0)} <SteamID64/name> <reason>" : $"{info.GetArg(0)} <SteamID64/name> [reason]";
+				_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-usage", usage]);
+				return;
+			}
+
 			string input = info.GetArg(1);
+			string? reason = info.ArgCount > 2
+				? info.GetCommandString.Replace(info.GetArg(0), string.Empty).Replace(info.GetArg(1), string.Empty).Trim()
+				: null;
+
+			if (forceReason && string.IsNullOrWhiteSpace(reason))
+			{
+				_moduleServices?.PrintForPlayer(controller, Localizer["k4.remove_punishment.reason_required"]);
+				return;
+			}
 
 			if (SteamID.TryParse(input, out SteamID? steamID) && steamID != null)
 			{
-				RemovePunishment(controller, steamID, PunishmentType.Ban);
+				RemovePunishment(controller, steamID, PunishmentType.Ban, reason);
 			}
 			else
 			{
@@ -86,7 +105,7 @@ namespace Zenith_Bans
 						}
 						else if (matchingPlayers.Count == 1)
 						{
-							RemovePunishment(controller, new SteamID(matchingPlayers.First().SteamID), PunishmentType.Ban);
+							RemovePunishment(controller, new SteamID(matchingPlayers.First().SteamID), PunishmentType.Ban, reason);
 						}
 						else
 						{
@@ -170,23 +189,46 @@ namespace Zenith_Bans
 
 		private void OnClearWarnsCommand(CCSPlayerController? controller, CommandInfo info)
 		{
-			if (info.ArgCount == 1)
+			bool forceReason = _coreAccessor.GetValue<bool>("Config", "ForceRemovePunishmentReason");
+			int requiredArgs = forceReason ? 3 : 2;
+
+			if (info.ArgCount < requiredArgs)
 			{
-				ShowPlayerSelectionMenu(controller, (target) => ProcessTargetAction(controller, target, (t) => ClearWarns(controller, t)));
+				string usage = forceReason ? $"{info.GetArg(0)} <player> <reason>" : $"{info.GetArg(0)} <player> [reason]";
+				_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-usage", usage]);
 				return;
 			}
 
-			TargetResult cacheResult = info.GetArgTargetResult(1);
-			string cacheString = info.GetArg(1);
+			string targetString = info.GetArg(1);
+			string? reason = info.ArgCount > 2
+				? info.GetCommandString.Replace(info.GetArg(0), string.Empty).Replace(info.GetArg(1), string.Empty).Trim()
+				: null;
 
-			ProcessTargetAction(controller, cacheResult, (target) => ClearWarns(controller, target), (reason) =>
+			if (forceReason && string.IsNullOrWhiteSpace(reason))
 			{
-				if (reason == TargetFailureReason.TargetNotFound)
-					ClearWarns(controller, new SteamID(cacheString));
+				_moduleServices?.PrintForPlayer(controller, Localizer["k4.remove_punishment.reason_required"]);
+				return;
+			}
+
+			TargetResult targetResult = info.GetArgTargetResult(1);
+
+			ProcessTargetAction(controller, targetResult, (target) => ClearWarns(controller, target, reason), (failureReason) =>
+			{
+				if (failureReason == TargetFailureReason.TargetNotFound)
+				{
+					if (SteamID.TryParse(targetString, out SteamID? steamId) && steamId != null)
+					{
+						ClearWarns(controller, steamId, reason);
+					}
+					else
+					{
+						_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.targetnotfound"]);
+					}
+				}
 			});
 		}
 
-		private void ClearWarns(CCSPlayerController? caller, CCSPlayerController target)
+		private void ClearWarns(CCSPlayerController? caller, CCSPlayerController target, string? reason)
 		{
 			string callerName = caller?.PlayerName ?? Localizer["k4.general.console"];
 			ulong callerSteamId = caller?.SteamID ?? 0;
@@ -196,7 +238,7 @@ namespace Zenith_Bans
 
 			_ = Task.Run(async () =>
 			{
-				bool removed = await RemovePunishmentAsync(targetSteamId, PunishmentType.Warn, callerSteamId);
+				bool removed = await RemovePunishmentAsync(targetSteamId, PunishmentType.Warn, callerSteamId, reason);
 
 				Server.NextWorldUpdate(() =>
 				{
@@ -217,7 +259,7 @@ namespace Zenith_Bans
 			});
 		}
 
-		private void ClearWarns(CCSPlayerController? caller, SteamID steamId)
+		private void ClearWarns(CCSPlayerController? caller, SteamID steamId, string? reason)
 		{
 			string callerName = caller?.PlayerName ?? Localizer["k4.general.console"];
 			ulong callerSteamId = caller?.SteamID ?? 0;
@@ -226,7 +268,7 @@ namespace Zenith_Bans
 
 			_ = Task.Run(async () =>
 			{
-				bool removed = await RemovePunishmentAsync(targetSteamId, PunishmentType.Warn, callerSteamId);
+				bool removed = await RemovePunishmentAsync(targetSteamId, PunishmentType.Warn, callerSteamId, reason);
 				string targetName = await GetPlayerNameAsync(targetSteamId);
 
 				Server.NextWorldUpdate(() =>

@@ -118,7 +118,7 @@ namespace Zenith_Bans
 			int? duration = null;
 			if (type == PunishmentType.Kick || type == PunishmentType.Warn)
 			{
-				reason = string.Join(" ", info.GetArg(2));
+				reason = info.GetCommandString.Replace(info.GetArg(0), string.Empty).Replace(info.GetArg(1), string.Empty).Trim();
 			}
 			else
 			{
@@ -128,7 +128,7 @@ namespace Zenith_Bans
 					return;
 				}
 				duration = parsedDuration;
-				reason = string.Join(" ", info.GetArg(3));
+				reason = info.GetCommandString.Replace(info.GetArg(0), string.Empty).Replace(info.GetArg(1), string.Empty).Replace(info.GetArg(2), string.Empty).Trim();
 			}
 
 			TargetResult targetResult = info.GetArgTargetResult(1);
@@ -200,7 +200,7 @@ namespace Zenith_Bans
 
 			if (type == PunishmentType.Kick || type == PunishmentType.Warn)
 			{
-				string reason = info.GetArg(2);
+				string reason = info.GetCommandString.Replace(info.GetArg(0), string.Empty).Replace(info.GetArg(1), string.Empty).Trim();
 				ProcessTargetAction(controller, targetResult, target => ApplyPunishment(controller, target, type, null, reason));
 			}
 			else if (int.TryParse(info.GetArg(2), out int duration))
@@ -214,7 +214,7 @@ namespace Zenith_Bans
 				}
 				else
 				{
-					string reason = info.ArgCount > 3 ? info.GetArg(3) : Localizer["k4.general.no-reason"];
+					string reason = info.ArgCount > 3 ? info.GetCommandString.Replace(info.GetArg(0), string.Empty).Replace(info.GetArg(1), string.Empty).Replace(info.GetArg(2), string.Empty).Trim() : Localizer["k4.general.no-reason"];
 					ProcessTargetAction(controller, targetResult, target => ApplyPunishment(controller, target, type, duration, reason), failureReason =>
 					{
 						if (failureReason == TargetFailureReason.TargetNotFound && SteamID.TryParse(targetString, out SteamID? steamId) && steamId?.IsValid() == true)
@@ -399,11 +399,11 @@ namespace Zenith_Bans
 
 			SendDiscordWebhookAsync("k4.discord.punishment", new Dictionary<string, string>
 			{
-				["player"] = $"{targetName} ({targetSteamId})",
+				["player"] = $"[{targetName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 				["type"] = type.ToString(),
 				["duration"] = type == PunishmentType.Warn || type == PunishmentType.Kick ? "-" : durationString,
 				["reason"] = reason,
-				["admin"] = $"{callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}"
+				["admin"] = $"{(callerSteamId.HasValue ? $"[{callerName}](https://steamcommunity.com/profiles/{callerSteamId})" : callerName)} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}"
 			});
 		}
 
@@ -442,7 +442,7 @@ namespace Zenith_Bans
 
 			_ = Task.Run(async () =>
 			{
-				await RemovePunishmentAsync(target.SteamID, PunishmentType.Warn, null);
+				await RemovePunishmentAsync(target.SteamID, PunishmentType.Warn, null, "Reached maximum number of warnings");
 				if (_playerCache.TryGetValue(target.SteamID, out var playerData))
 				{
 					playerData.Punishments.RemoveAll(p => p.Type == PunishmentType.Warn);
@@ -459,18 +459,15 @@ namespace Zenith_Bans
 				return;
 			}
 
-			if (type == PunishmentType.Silence)
+			if (type == PunishmentType.Silence && _playerCache.TryGetValue(target.SteamID, out var playerData))
 			{
-				if (_playerCache.TryGetValue(target.SteamID, out var playerData))
-				{
-					playerData.Punishments.RemoveAll(p => p.Type == PunishmentType.Mute || p.Type == PunishmentType.Gag);
+				playerData.Punishments.RemoveAll(p => p.Type == PunishmentType.Mute || p.Type == PunishmentType.Gag);
 
-					_ = Task.Run(async () =>
-					{
-						await RemovePunishmentAsync(target.SteamID, PunishmentType.Mute, null);
-						await RemovePunishmentAsync(target.SteamID, PunishmentType.Gag, null);
-					});
-				}
+				_ = Task.Run(async () =>
+				{
+					await RemovePunishmentAsync(target.SteamID, PunishmentType.Mute, null, "Removed by silence");
+					await RemovePunishmentAsync(target.SteamID, PunishmentType.Gag, null, "Removed by silence");
+				});
 			}
 
 			switch (type)
@@ -496,19 +493,21 @@ namespace Zenith_Bans
 
 		private void HandleRemovePunishmentCommand(CCSPlayerController? controller, CommandInfo info, PunishmentType type)
 		{
-			if (info.ArgCount == 1)
+			if (info.ArgCount < 3)
 			{
-				ShowPlayerSelectionMenu(controller, target => ProcessTargetAction(controller, target, t => RemovePunishment(controller, t, type)));
+				_moduleServices?.PrintForPlayer(controller, Localizer["k4.general.invalid-usage", $"un{type.ToString().ToLower()} <player> [reason]"]);
 				return;
 			}
 
-			ProcessTargetAction(controller, info.GetArgTargetResult(1), target => RemovePunishment(controller, target, type), failureReason =>
+			string? reason = info.ArgCount > 2 ? info.GetCommandString.Replace(info.GetArg(0), string.Empty).Replace(info.GetArg(1), string.Empty).Trim() : null;
+
+			ProcessTargetAction(controller, info.GetArgTargetResult(1), target => RemovePunishment(controller, target, type, reason), failureReason =>
 			{
 				if (failureReason == TargetFailureReason.TargetNotFound)
 				{
 					if (SteamID.TryParse(info.GetArg(1), out SteamID? steamId) && steamId?.IsValid() == true)
 					{
-						RemovePunishment(controller, steamId, type);
+						RemovePunishment(controller, steamId, type, reason);
 					}
 					else
 					{
@@ -518,35 +517,52 @@ namespace Zenith_Bans
 			});
 		}
 
-		private void RemovePunishment(CCSPlayerController? caller, CCSPlayerController target, PunishmentType type)
+		private void RemovePunishment(CCSPlayerController? caller, CCSPlayerController target, PunishmentType type, string? reason)
 		{
 			string callerName = caller?.PlayerName ?? Localizer["k4.general.console"];
 			ulong? callerSteamId = caller?.SteamID;
 			ulong targetSteamId = target.SteamID;
 			string targetName = target.PlayerName;
 
-			_ = Task.Run(async () =>
+			if (_coreAccessor.GetValue<bool>("Config", "ForceRemovePunishmentReason") && string.IsNullOrWhiteSpace(reason))
 			{
-				bool removed = await RemovePunishmentAsync(targetSteamId, type, callerSteamId);
-				ProcessRemovePunishment(removed, caller, callerName, callerSteamId, targetSteamId, targetName, type);
-			});
+				_moduleServices?.PrintForPlayer(caller, Localizer["k4.remove_punishment.reason_required"]);
+				return;
+			}
+
+			RemovePunishmentWithReason(caller, callerName, callerSteamId, targetSteamId, targetName, type, reason);
 		}
 
-		private void RemovePunishment(CCSPlayerController? caller, SteamID steamId, PunishmentType type)
+		private void RemovePunishment(CCSPlayerController? caller, SteamID steamId, PunishmentType type, string? reason)
 		{
 			string callerName = caller?.PlayerName ?? Localizer["k4.general.console"];
 			ulong? callerSteamId = caller?.SteamID;
 			ulong targetSteamId = steamId.SteamId64;
 
+			if (_coreAccessor.GetValue<bool>("Config", "ForceRemovePunishmentReason") && string.IsNullOrWhiteSpace(reason))
+			{
+				_moduleServices?.PrintForPlayer(caller, Localizer["k4.remove_punishment.reason_required"]);
+				return;
+			}
+
 			_ = Task.Run(async () =>
 			{
-				bool removed = await RemovePunishmentAsync(targetSteamId, type, callerSteamId);
+				bool removed = await RemovePunishmentAsync(targetSteamId, type, callerSteamId, reason);
 				string targetName = await GetPlayerNameAsync(targetSteamId);
-				ProcessRemovePunishment(removed, caller, callerName, callerSteamId, targetSteamId, targetName, type);
+				ProcessRemovePunishment(removed, caller, callerName, callerSteamId, targetSteamId, targetName, type, reason);
 			});
 		}
 
-		private void ProcessRemovePunishment(bool removed, CCSPlayerController? caller, string callerName, ulong? callerSteamId, ulong targetSteamId, string targetName, PunishmentType type)
+		private void RemovePunishmentWithReason(CCSPlayerController? caller, string callerName, ulong? callerSteamId, ulong targetSteamId, string targetName, PunishmentType type, string? reason)
+		{
+			_ = Task.Run(async () =>
+			{
+				bool removed = await RemovePunishmentAsync(targetSteamId, type, callerSteamId, reason);
+				ProcessRemovePunishment(removed, caller, callerName, callerSteamId, targetSteamId, targetName, type, reason);
+			});
+		}
+
+		private void ProcessRemovePunishment(bool removed, CCSPlayerController? caller, string callerName, ulong? callerSteamId, ulong targetSteamId, string targetName, PunishmentType type, string? removeReason)
 		{
 			Server.NextWorldUpdate(() =>
 			{
@@ -563,15 +579,21 @@ namespace Zenith_Bans
 						RemovePunishmentEffect(target, type);
 					}
 
-					Logger.LogWarning($"Player {targetName} ({targetSteamId}) was un{type.ToString().ToLower()}ed by {callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}");
+					string logMessage = $"Player {targetName} ({targetSteamId}) was un{type.ToString().ToLower()}ed by {callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}";
+					if (!string.IsNullOrEmpty(removeReason))
+					{
+						logMessage += $" Reason: {removeReason}";
+					}
+					Logger.LogWarning(logMessage);
 
-					BroadcastRemovePunishment(callerName, callerSteamId, targetName, type);
+					BroadcastRemovePunishment(callerName, callerSteamId, targetName, type, removeReason);
 
 					SendDiscordWebhookAsync("k4.discord.unpunishment", new Dictionary<string, string>
 					{
-						["player"] = $"{targetName} ({targetSteamId})",
+						["player"] = $"[{targetName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 						["type"] = type.ToString(),
-						["admin"] = $"{callerName} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}"
+						["admin"] = $"{(callerSteamId.HasValue ? $"[{callerName}](https://steamcommunity.com/profiles/{callerSteamId})" : callerName)} {(callerSteamId.HasValue ? $"({callerSteamId})" : "")}",
+						["reason"] = removeReason ?? "No reason provided"
 					});
 				}
 				else
@@ -581,10 +603,11 @@ namespace Zenith_Bans
 			});
 		}
 
-		private void BroadcastRemovePunishment(string callerName, ulong? callerSteamId, string targetName, PunishmentType type)
+		private void BroadcastRemovePunishment(string callerName, ulong? callerSteamId, string targetName, PunishmentType type, string? removeReason)
 		{
 			var players = Utilities.GetPlayers();
 			string punishmentKey = $"k4.chat.un{type.ToString().ToLower()}";
+			string punishmentKeyWithReason = $"{punishmentKey}.withreason";
 			string adminName = Localizer["k4.general.admin"];
 
 			foreach (var player in players)
@@ -593,11 +616,25 @@ namespace Zenith_Bans
 				{
 					if (ShouldShowActivity(callerSteamId, player, true))
 					{
-						_moduleServices?.PrintForPlayer(player, Localizer[punishmentKey, callerName, targetName]);
+						if (!string.IsNullOrEmpty(removeReason))
+						{
+							_moduleServices?.PrintForPlayer(player, Localizer[punishmentKeyWithReason, callerName, targetName, removeReason]);
+						}
+						else
+						{
+							_moduleServices?.PrintForPlayer(player, Localizer[punishmentKey, callerName, targetName]);
+						}
 					}
 					else if (ShouldShowActivity(callerSteamId, player, false))
 					{
-						_moduleServices?.PrintForPlayer(player, Localizer[punishmentKey, adminName, targetName]);
+						if (!string.IsNullOrEmpty(removeReason))
+						{
+							_moduleServices?.PrintForPlayer(player, Localizer[punishmentKeyWithReason, adminName, targetName, removeReason]);
+						}
+						else
+						{
+							_moduleServices?.PrintForPlayer(player, Localizer[punishmentKey, adminName, targetName]);
+						}
 					}
 				}
 			}
@@ -818,9 +855,9 @@ namespace Zenith_Bans
 
 					SendDiscordWebhookAsync("k4.discord.addadmin", new Dictionary<string, string>
 					{
-						["player"] = $"{target.PlayerName} ({target.SteamID})",
+						["player"] = $"[{target.PlayerName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 						["group"] = group,
-						["admin"] = callerName
+						["admin"] = $"{(controller != null ? $"[{callerName}](https://steamcommunity.com/profiles/{controller.SteamID})" : callerName)} {(controller != null ? $"({controller.SteamID})" : "")}"
 					});
 				});
 			});
@@ -869,7 +906,7 @@ namespace Zenith_Bans
 
 					SendDiscordWebhookAsync("k4.discord.removeadmin", new Dictionary<string, string>
 					{
-						["player"] = $"{target.PlayerName} ({target.SteamID})",
+						["player"] = $"[{target.PlayerName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 						["admin"] = callerName
 					});
 				});
