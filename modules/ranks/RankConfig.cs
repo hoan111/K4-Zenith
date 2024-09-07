@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Microsoft.Extensions.Logging;
 using CounterStrikeSharp.API.Core;
 using System.Text.Json.Serialization;
+using ZenithAPI;
 
 namespace Zenith_Ranks;
 
@@ -175,7 +176,7 @@ public sealed partial class Plugin : BasePlugin
 
             foreach (Rank rank in Ranks)
             {
-                rank.ChatColor = ApplyPrefixColors(rank.ChatColor);
+                rank.ChatColor = ChatColorUtility.ApplyPrefixColors(rank.ChatColor);
             }
         }
         catch (Exception ex)

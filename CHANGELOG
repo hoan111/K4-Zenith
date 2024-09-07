@@ -7,14 +7,20 @@
 - feat: Added slap sounds using random damage sounds
 - feat: Added Settings change listener to API
 - feat: Added Storage change listener to API
+- optimise: Settings menu caused long frames
+- optimise: Player storage and settings load / save
 - optimise: Added debounced caching for Center Messages
 - optimise: Country tags now cached to prevent checks on every x seconds
 - optimise: Modules wont request new PlayerService every single time, but reuse them
+- optimise: Created setting cache for OnTick setting usages
+- upgrade: Trimmed and remade config handler for better performance
+- upgrade: Settings loading use now library conversions, so removed type conversions and keys
 - upgrade: Database migration is now able to detect already applied migrations and skip them
 - upgrade: Blocked purge logs if removed rows are 0
 - upgrade: Give command now use the name of weapon in chat, not classname
 - upgrade: Added give command validation of ammo_grenade_limit_default, ammo_grenade_limit_flashbang, ammo_grenade_limit_total, ammo_item_limit_healthshot to prevent crashes
 - fix: Some extended commands was executible only while being alive wrongly
+- fix: CustomTags apply delay
 - fix: Give command didnt find the item properly
 - fix: Give command grenade give crashed on duplicated item
 - fix: Give command removed all other greandes on giving a new

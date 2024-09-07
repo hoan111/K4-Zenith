@@ -1,9 +1,6 @@
-using System.Text.RegularExpressions;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
-using CounterStrikeSharp.API.Modules.Utils;
-using Microsoft.Extensions.Logging;
 using ZenithAPI;
 
 namespace Zenith_Ranks;
@@ -11,22 +8,6 @@ namespace Zenith_Ranks;
 public sealed partial class Plugin : BasePlugin
 {
 	private readonly Dictionary<CCSPlayerController, int> _roundPoints = new();
-
-	private static readonly Dictionary<string, string> _chatColors = typeof(ChatColors).GetFields()
-		.GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-		.Select(g => g.First())
-		.ToDictionary(f => f.Name, f => f.GetValue(null)?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-
-	private static readonly Regex _colorRegex = new(@"\b(?<color>\w+)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-	public static string ApplyPrefixColors(string msg)
-	{
-		return _colorRegex.Replace(msg, match =>
-		{
-			string colorKey = match.Groups["color"].Value;
-			return _chatColors.TryGetValue(colorKey, out string? colorValue) ? colorValue : match.Value;
-		});
-	}
 
 	public IEnumerable<IPlayerServices> GetValidPlayers()
 	{

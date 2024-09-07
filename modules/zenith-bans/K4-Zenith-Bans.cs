@@ -142,33 +142,30 @@ public sealed partial class Plugin : BasePlugin
 
 		if (hotReload)
 		{
-			AddTimer(3.0f, () =>
+			_moduleServices.LoadAllOnlinePlayerData();
+			var players = Utilities.GetPlayers();
+
+			foreach (var player in players)
 			{
-				_moduleServices.LoadAllOnlinePlayerData();
-				var players = Utilities.GetPlayers();
-
-				foreach (var player in players)
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 				{
-					if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
-					{
-						string playerName = player.PlayerName;
-						ulong steamID = player.SteamID;
-						string ipAddress = player.IpAddress ?? string.Empty;
+					string playerName = player.PlayerName;
+					ulong steamID = player.SteamID;
+					string ipAddress = player.IpAddress ?? string.Empty;
 
-						_ = Task.Run(async () =>
+					_ = Task.Run(async () =>
+					{
+						try
 						{
-							try
-							{
-								await LoadOrUpdatePlayerDataAsync(steamID, playerName, ipAddress);
-							}
-							catch (Exception ex)
-							{
-								Logger.LogError($"Error updating player data: {ex.Message}");
-							}
-						});
-					}
+							await LoadOrUpdatePlayerDataAsync(steamID, playerName, ipAddress);
+						}
+						catch (Exception ex)
+						{
+							Logger.LogError($"Error updating player data: {ex.Message}");
+						}
+					});
 				}
-			});
+			}
 		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);

@@ -93,19 +93,20 @@ namespace Zenith
 					}
 				}
 
-				Player.LoadAllOnlinePlayerData(this);
+				Player.LoadAllOnlinePlayerDataWithSingleQuery(this);
 			}
 
 			AddTimer(3.0f, () =>
 			{
+				string coreFormat = GetCoreConfig<string>("Modular", "PlayerClantagFormat");
 				foreach (var player in Player.List.Values)
 				{
 					if (player.IsValid)
-						player.EnforcePluginValues();
+						player.EnforcePluginValues(coreFormat);
 				}
 			}, TimerFlags.REPEAT);
 
-			AddTimer(1, () =>
+			AddTimer(60.0f, () =>
 			{
 				int interval = GetCoreConfig<int>("Database", "AutoSaveInterval");
 				if (interval <= 0)
@@ -114,9 +115,7 @@ namespace Zenith
 				if ((DateTime.UtcNow - _lastStorageSave).TotalMinutes >= interval)
 				{
 					_lastStorageSave = DateTime.UtcNow;
-					Player.SaveAllOnlinePlayerData(this, false);
-
-					Server.PrintToChatAll(Localizer["k4.events.autosave"]);
+					_ = Task.Run(() => Player.SaveAllOnlinePlayerDataWithTransaction(this));
 				}
 			}, TimerFlags.REPEAT);
 		}
@@ -128,7 +127,6 @@ namespace Zenith
 			Player.Dispose(this);
 			RemoveAllCommands();
 			RemoveModulePlaceholders();
-			ConfigManager.Dispose();
 		}
 	}
 }

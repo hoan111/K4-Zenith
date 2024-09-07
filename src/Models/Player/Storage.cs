@@ -15,11 +15,11 @@ public sealed partial class Player
 	public static readonly string TABLE_PLAYER_SETTINGS = "zenith_player_settings";
 	public static readonly string TABLE_PLAYER_STORAGE = "zenith_player_storage";
 
-	public ConcurrentDictionary<string, object?> Settings = new();
-	public ConcurrentDictionary<string, object?> Storage = new();
+	public ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> Settings = new();
+	public ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> Storage = new();
 	public static readonly ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultSettings = new();
 	public static readonly ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> moduleDefaultStorage = new();
-	private static readonly bool[] function = new[] { false, true };
+	private static readonly bool[] function = [false, true];
 
 	public static async Task CreateTablesAsync(Plugin plugin)
 	{
@@ -117,94 +117,97 @@ public sealed partial class Player
 		}
 	}
 
-	public void SetSetting(string key, object? value, bool saveImmediately = false)
-		=> SetData(key, value, Settings, saveImmediately);
+	public void SetSetting(string key, object? value, bool saveImmediately = false, string? moduleID = null)
+		=> SetData(key, value, Settings, saveImmediately, moduleID);
 
-	public void SetStorage(string key, object? value, bool saveImmediately = false)
-		=> SetData(key, value, Storage, saveImmediately);
+	public void SetStorage(string key, object? value, bool saveImmediately = false, string? moduleID = null)
+		=> SetData(key, value, Storage, saveImmediately, moduleID);
 
-	public void SetData(string key, object? value, ConcurrentDictionary<string, object?> targetDict, bool saveImmediately, string? caller = null)
+	public void SetData(string key, object? value, ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> targetDict, bool saveImmediately = false, string? moduleID = null)
 	{
-		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
+		moduleID ??= CallerIdentifier.GetCallingPluginName();
 
-		var fullKey = $"{callerPlugin}.{key}";
-		if (targetDict.ContainsKey(fullKey))
+		if (!targetDict.TryGetValue(moduleID, out var moduleDict))
 		{
-			targetDict[fullKey] = value;
+			moduleDict = new ConcurrentDictionary<string, object?>();
+			targetDict[moduleID] = moduleDict;
 		}
-		else
-		{
-			// Search across all plugins
-			var existingKey = targetDict.Keys.FirstOrDefault(k => k.EndsWith($".{key}"));
-			if (existingKey != null)
-			{
-				targetDict[existingKey] = value;
-				fullKey = existingKey;
-			}
-			else
-			{
-				targetDict[fullKey] = value;
-			}
-		}
+
+		moduleDict[key] = value;
 
 		if (saveImmediately)
 		{
-			_ = Task.Run(async () =>
-			{
-				await SavePlayerDataAsync(fullKey.Split('.')[0], targetDict == Storage);
-			});
+			SavePlayerData(moduleID);
 		}
 	}
 
-	public T? GetModuleStorage<T>(string module, string key)
-		=> GetData<T>(key, Storage, module);
+	public T? GetSetting<T>(string key, string? moduleID = null)
+		=> GetData<T>(key, Settings, moduleID);
 
-	public void SetModuleStorage(string module, string key, object? value, bool saveImmediately = false)
-		=> SetData(key, value, Storage, saveImmediately, module);
+	public T? GetStorage<T>(string key, string? moduleID = null)
+		=> GetData<T>(key, Storage, moduleID);
 
-	public T? GetSetting<T>(string key)
-		=> GetData<T>(key, Settings);
-	public T? GetStorage<T>(string key)
-		=> GetData<T>(key, Storage);
-
-	public T? GetData<T>(string key, ConcurrentDictionary<string, object?> targetDict, string? caller = null)
+	public T? GetData<T>(string key, ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> targetDict, string? moduleID = null)
 	{
-		string callerPlugin = caller ?? CallerIdentifier.GetCallingPluginName();
+		moduleID ??= CallerIdentifier.GetCallingPluginName();
 
-		var fullKey = $"{callerPlugin}.{key}";
-		if (!targetDict.TryGetValue(fullKey, out var value))
+		if (targetDict.TryGetValue(moduleID, out var moduleDict) && moduleDict.TryGetValue(key, out var value))
 		{
-			// Search across all plugins
-			var existingKey = targetDict.Keys.FirstOrDefault(k => k.EndsWith($".{key}"));
-			if (existingKey != null)
+			try
 			{
-				fullKey = existingKey;
-				value = targetDict[existingKey];
+				if (value is JsonElement jsonElement)
+				{
+					return DeserializeJsonElement<T>(jsonElement);
+				}
+				else if (value is T typedValue)
+				{
+					return typedValue;
+				}
+				else
+				{
+					return (T?)Convert.ChangeType(value, typeof(T));
+				}
 			}
-			else
-				return default;
+			catch (Exception ex)
+			{
+				_plugin.Logger.LogError($"Failed to convert setting value for key '{key}' in module '{moduleID}' to type '{typeof(T).Name}'. Error: {ex.Message}");
+			}
 		}
 
-		try
+		// if not found, search in all
+		foreach (var module in targetDict)
 		{
-			if (value is JsonElement jsonElement)
+			if (module.Key.EndsWith(moduleID))
 			{
-				return DeserializeJsonElement<T>(jsonElement);
-			}
-			else if (value is T typedValue)
-			{
-				return typedValue;
-			}
-			else
-			{
-				return (T?)Convert.ChangeType(value, typeof(T));
+				foreach (var item in module.Value)
+				{
+					if (item.Key.EndsWith(key))
+					{
+						try
+						{
+							if (item.Value is JsonElement jsonElement)
+							{
+								return DeserializeJsonElement<T>(jsonElement);
+							}
+							else if (item.Value is T typedValue)
+							{
+								return typedValue;
+							}
+							else
+							{
+								return (T?)Convert.ChangeType(item.Value, typeof(T));
+							}
+						}
+						catch (Exception ex)
+						{
+							_plugin.Logger.LogError($"Failed to convert setting value for key '{key}' in module '{moduleID}' to type '{typeof(T).Name}'. Error: {ex.Message}");
+						}
+					}
+				}
 			}
 		}
-		catch (Exception ex)
-		{
-			_plugin.Logger.LogError($"Failed to convert setting value for key '{fullKey}' to type '{typeof(T).Name}'. Error: {ex.Message}");
-			return default;
-		}
+
+		return default;
 	}
 
 	private T? DeserializeJsonElement<T>(JsonElement element)
@@ -315,7 +318,7 @@ public sealed partial class Player
 		});
 	}
 
-	private async Task LoadDataAsync(ConcurrentDictionary<string, object?> targetDict, string tableName, ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults)
+	private async Task LoadDataAsync(ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> targetDict, string tableName, ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults)
 	{
 		try
 		{
@@ -323,8 +326,8 @@ public sealed partial class Player
 			using var connection = _plugin.Database.CreateConnection();
 			await connection.OpenAsync();
 			var query = $@"
-				SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{tableName}`
-				WHERE `steam_id` = @SteamID;";
+            SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{tableName}`
+            WHERE `steam_id` = @SteamID;";
 			var result = await connection.QueryFirstOrDefaultAsync(query, new { SteamID = SteamID.ToString() });
 
 			await UpdateLastOnline();
@@ -339,9 +342,13 @@ public sealed partial class Player
 						{
 							var moduleID = property.Key.Split('.')[0];
 							var data = JsonSerializer.Deserialize<Dictionary<string, object>>(property.Value.ToString());
+							if (!targetDict.ContainsKey(moduleID))
+							{
+								targetDict[moduleID] = new ConcurrentDictionary<string, object?>();
+							}
 							foreach (var item in data)
 							{
-								targetDict[$"{moduleID}.{item.Key}"] = item.Value;
+								targetDict[moduleID][item.Key] = item.Value;
 							}
 						}
 					}
@@ -379,95 +386,83 @@ public sealed partial class Player
 		}
 	}
 
-	private static void ApplyDefaultValues(ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, ConcurrentDictionary<string, object?> target)
+	private static void ApplyDefaultValues(ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> targetDict)
 	{
 		foreach (var module in defaults)
 		{
+			var moduleID = module.Key;
+			if (!targetDict.TryGetValue(moduleID, out var moduleDict))
+			{
+				moduleDict = new ConcurrentDictionary<string, object?>();
+				targetDict[moduleID] = moduleDict;
+			}
+
 			foreach (var item in module.Value.Settings)
 			{
-				var fullKey = $"{module.Key}.{item.Key}";
-				if (!target.ContainsKey(fullKey))
+				if (!moduleDict.ContainsKey(item.Key))
 				{
-					target[fullKey] = item.Value;
+					moduleDict[item.Key] = item.Value;
 				}
 			}
 		}
 	}
 
-	public void SaveSettings(string? moduleID = null)
-		=> SavePlayerData(moduleID, false);
-	public void SaveStorage(string? moduleID = null)
-		=> SavePlayerData(moduleID, true);
-	public void SaveAll(string? moduleID = null)
-		=> SavePlayerData(moduleID, null);
-
-	private void SavePlayerData(string? moduleID, bool? isStorage)
+	public void SavePlayerData(string? moduleID = null)
 	{
 		_ = Task.Run(async () =>
 		{
-			if (moduleID != null)
-			{
-				if (isStorage.HasValue)
-				{
-					await SavePlayerDataAsync(moduleID, isStorage.Value);
-				}
-				else
-				{
-					await SavePlayerDataAsync(moduleID, false);
-					await SavePlayerDataAsync(moduleID, true);
-				}
-			}
-			else
-			{
-				if (isStorage.HasValue)
-				{
-					await SaveAllPlayerDataAsync(isStorage.Value);
-				}
-				else
-				{
-					await SaveAllPlayerDataAsync(false);
-					await SaveAllPlayerDataAsync(true);
-				}
-			}
+			await SaveDataAsync(Settings, TABLE_PLAYER_SETTINGS, moduleID);
+			await SaveDataAsync(Storage, TABLE_PLAYER_STORAGE, moduleID);
 		});
 	}
 
-	private async Task SaveAllDataAsync()
-	{
-		await SaveAllPlayerDataAsync(false);
-		await SaveAllPlayerDataAsync(true);
-	}
-
-	private async Task SavePlayerDataAsync(string moduleID, bool isStorage)
+	private async Task SaveDataAsync(ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> targetDict, string tableName, string? moduleID = null)
 	{
 		try
 		{
 			string tablePrefix = _plugin.Database.TablePrefix;
-			string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
 			using var connection = _plugin.Database.CreateConnection();
 			await connection.OpenAsync();
 
-			var columnName = isStorage ? $"{moduleID}.storage" : $"{moduleID}.settings";
-			var targetDict = isStorage ? Storage : Settings;
-			var moduleData = new Dictionary<string, object?>();
+			var dataToSave = new Dictionary<string, string>();
 
-			foreach (var kvp in targetDict)
+			if (moduleID != null)
 			{
-				if (kvp.Key.StartsWith($"{moduleID}."))
+				if (targetDict.TryGetValue(moduleID, out var moduleData))
 				{
-					var key = kvp.Key.Split('.')[1];
-					moduleData[key] = kvp.Value;
+					dataToSave[$"{moduleID}.{(tableName == TABLE_PLAYER_STORAGE ? "storage" : "settings")}"] = JsonSerializer.Serialize(moduleData);
+				}
+			}
+			else
+			{
+				foreach (var module in targetDict)
+				{
+					dataToSave[$"{module.Key}.{(tableName == TABLE_PLAYER_STORAGE ? "storage" : "settings")}"] = JsonSerializer.Serialize(module.Value);
 				}
 			}
 
-			var jsonValue = JsonSerializer.Serialize(moduleData);
+			if (dataToSave.Count == 0)
+			{
+				return; // No data to save
+			}
+
+			var columns = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}`"));
+			var parameters = string.Join(", ", dataToSave.Keys.Select(k => $"@p_{k.Replace("-", "_")}"));
+			var updateStatements = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}` = @p_{k.Replace("-", "_")}"));
 
 			var query = $@"
-            INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `{MySqlHelper.EscapeString(columnName)}`)
-            VALUES (@SteamID, @JsonValue)
-            ON DUPLICATE KEY UPDATE `{MySqlHelper.EscapeString(columnName)}` = @JsonValue;";
+                INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, {columns})
+                VALUES (@p_SteamID, {parameters})
+                ON DUPLICATE KEY UPDATE {updateStatements};";
 
-			await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString(), JsonValue = jsonValue });
+			var queryParams = new DynamicParameters();
+			queryParams.Add("@p_SteamID", SteamID.ToString());
+			foreach (var item in dataToSave)
+			{
+				queryParams.Add($"@p_{item.Key.Replace("-", "_")}", item.Value);
+			}
+
+			await connection.ExecuteAsync(query, queryParams);
 		}
 		catch (Exception ex)
 		{
@@ -540,11 +535,17 @@ public sealed partial class Player
 
 		if (defaults.TryGetValue(callerPlugin, out var defaultData))
 		{
+			if (!targetDict.TryGetValue(callerPlugin, out var moduleDict))
+			{
+				moduleDict = new ConcurrentDictionary<string, object?>();
+				targetDict[callerPlugin] = moduleDict;
+			}
+
 			foreach (var item in defaultData.Settings)
 			{
-				targetDict[$"{callerPlugin}.{item.Key}"] = item.Value;
+				moduleDict[item.Key] = item.Value;
 			}
-			SavePlayerData(callerPlugin, isStorage);
+			SavePlayerData(callerPlugin);
 		}
 		else
 		{
@@ -552,7 +553,7 @@ public sealed partial class Player
 		}
 	}
 
-	public static void LoadAllOnlinePlayerData(Plugin plugin, bool blockEvent = false)
+	public static void LoadAllOnlinePlayerDataWithSingleQuery(Plugin plugin, bool blockEvent = false)
 	{
 		string tablePrefix = plugin.Database.TablePrefix;
 		var steamIds = new List<string>();
@@ -567,103 +568,149 @@ public sealed partial class Player
 			}
 		}
 
-		_ = Task.Run(async () =>
-		{
-			if (steamIds.Count == 0)
-				return;
+		if (steamIds.Count == 0)
+			return;
 
-			try
+		try
+		{
+			_ = Task.Run(async () =>
 			{
 				using var connection = plugin.Database.CreateConnection();
 				await connection.OpenAsync();
 
-				var settingsQuery = $@"
-                SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}`
-                WHERE `steam_id` IN @SteamIDs;";
-				var settingsResults = await connection.QueryAsync(settingsQuery, new { SteamIDs = steamIds });
+				var query = $@"
+				SELECT
+					s.steam_id,
+					s.last_online AS settings_last_online,
+					st.last_online AS storage_last_online,
+					{string.Join(",", moduleDefaultSettings.Keys.Select(k => $"s.`{MySqlHelper.EscapeString(k)}.settings` AS `{k}_settings`"))},
+					{string.Join(",", moduleDefaultStorage.Keys.Select(k => $"st.`{MySqlHelper.EscapeString(k)}.storage` AS `{k}_storage`"))}
+				FROM
+					`{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}` s
+				LEFT JOIN
+					`{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}` st ON s.steam_id = st.steam_id
+				WHERE
+					s.steam_id IN @SteamIDs;";
 
-				var storageQuery = $@"
-                SELECT * FROM `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}`
-                WHERE `steam_id` IN @SteamIDs;";
-				var storageResults = await connection.QueryAsync(storageQuery, new { SteamIDs = steamIds });
+				var results = await connection.QueryAsync<IDictionary<string, object>>(query, new { SteamIDs = steamIds });
 
 				Server.NextWorldUpdate(() =>
 				{
-					foreach (var controller in playerList)
+					foreach (var result in results)
 					{
-						var player = Find(controller) ?? new Player(plugin, controller, true);
+						var steamId = result["steam_id"].ToString();
+						var player = List.Values.FirstOrDefault(p => p.SteamID.ToString() == steamId);
 
-						try
-						{
-							var playerSettings = settingsResults.FirstOrDefault(r => r.steam_id == player.SteamID.ToString());
-							var playerStorage = storageResults.FirstOrDefault(r => r.steam_id == player.SteamID.ToString());
+						if (player == null)
+							continue;
 
-							if (playerSettings != null)
-								LoadPlayerData(player.Settings, playerSettings, moduleDefaultSettings, plugin);
-
-							if (playerStorage != null)
-								LoadPlayerData(player.Storage, playerStorage, moduleDefaultStorage, plugin);
-						}
-						catch (Exception ex)
-						{
-							plugin.Logger.LogError($"Error loading player data for player {player.SteamID}: {ex.Message}");
-						}
+						LoadPlayerDataFromResult(player, result, plugin);
 
 						if (!blockEvent)
 							plugin._moduleServices?.InvokeZenithPlayerLoaded(player.Controller!);
 					}
 				});
-			}
-			catch (Exception ex)
-			{
-				plugin.Logger.LogError($"An error occurred while querying the database: {ex.Message}");
-			}
-		});
+			});
+		}
+		catch (Exception ex)
+		{
+			plugin.Logger.LogError($"An error occurred while querying the database: {ex.Message}");
+		}
 	}
 
-	public static void SaveAllOnlinePlayerData(Plugin plugin, bool dipose)
+	private static void LoadPlayerDataFromResult(Player player, IDictionary<string, object> result, Plugin plugin)
+	{
+		foreach (var module in moduleDefaultSettings.Keys)
+		{
+			var settingsKey = $"{module}_settings";
+			if (result.ContainsKey(settingsKey) && result[settingsKey] != null)
+			{
+				try
+				{
+					var moduleData = JsonSerializer.Deserialize<Dictionary<string, object>>(result[settingsKey].ToString()!);
+					if (moduleData != null)
+					{
+						if (!player.Settings.TryGetValue(module, out var moduleDict))
+						{
+							moduleDict = new ConcurrentDictionary<string, object?>();
+							player.Settings[module] = moduleDict;
+						}
+
+						foreach (var item in moduleData)
+						{
+							moduleDict[item.Key] = item.Value;
+						}
+					}
+				}
+				catch (JsonException ex)
+				{
+					plugin.Logger.LogError($"Error deserializing settings data for module {module}: {ex.Message}");
+				}
+			}
+		}
+
+		foreach (var module in moduleDefaultStorage.Keys)
+		{
+			var storageKey = $"{module}_storage";
+			if (result.ContainsKey(storageKey) && result[storageKey] != null)
+			{
+				try
+				{
+					var moduleData = JsonSerializer.Deserialize<Dictionary<string, object>>(result[storageKey].ToString()!);
+					if (moduleData != null)
+					{
+						if (!player.Storage.TryGetValue(module, out var moduleDict))
+						{
+							moduleDict = new ConcurrentDictionary<string, object?>();
+							player.Storage[module] = moduleDict;
+						}
+
+						foreach (var item in moduleData)
+						{
+							moduleDict[item.Key] = item.Value;
+						}
+					}
+				}
+				catch (JsonException ex)
+				{
+					plugin.Logger.LogError($"Error deserializing storage data for module {module}: {ex.Message}");
+				}
+			}
+		}
+
+		ApplyDefaultValues(moduleDefaultSettings, player.Settings);
+		ApplyDefaultValues(moduleDefaultStorage, player.Storage);
+	}
+
+	public static async Task SaveAllOnlinePlayerDataWithTransaction(Plugin plugin)
 	{
 		string tablePrefix = plugin.Database.TablePrefix;
 		var playerDataToSave = new ConcurrentDictionary<string, (Dictionary<string, string> Settings, Dictionary<string, string> Storage)>();
 
-		if (!List.Values.Any(p => p.IsValid))
-			return;
-
 		foreach (var player in List.Values)
 		{
-			if (!player.IsValid)
-				continue;
-
 			var settingsData = new Dictionary<string, string>();
 			var storageData = new Dictionary<string, string>();
 
-			foreach (var isStorage in new[] { false, true })
-			{
-				var targetDict = isStorage ? player.Storage : player.Settings;
-				var dataDict = isStorage ? storageData : settingsData;
-
-				foreach (var moduleGroup in targetDict.GroupBy(kvp => kvp.Key.Split('.')[0]))
-				{
-					var moduleID = moduleGroup.Key;
-					var moduleData = moduleGroup.ToDictionary(kvp => kvp.Key.Split('.')[1], kvp => kvp.Value);
-					dataDict[$"{moduleID}.{(isStorage ? "storage" : "settings")}"] = JsonSerializer.Serialize(moduleData);
-				}
-			}
+			ProcessPlayerData(player.Settings, settingsData, "settings");
+			ProcessPlayerData(player.Storage, storageData, "storage");
 
 			playerDataToSave[player.SteamID.ToString()] = (settingsData, storageData);
 		}
 
-		_ = Task.Run(async () =>
+		if (playerDataToSave.IsEmpty)
+			return;
+
+		try
 		{
-			if (playerDataToSave.IsEmpty)
-				return;
+			using var connection = plugin.Database.CreateConnection();
+			await connection.OpenAsync();
+
+			using var transaction = await connection.BeginTransactionAsync();
 
 			try
 			{
-				using var connection = plugin.Database.CreateConnection();
-				await connection.OpenAsync();
-
-				foreach (var isStorage in function)
+				foreach (var isStorage in new[] { false, true })
 				{
 					string tableName = isStorage ? TABLE_PLAYER_STORAGE : TABLE_PLAYER_SETTINGS;
 
@@ -675,48 +722,68 @@ public sealed partial class Player
 						if (data.Count == 0)
 							continue;
 
-						var columns = string.Join(", ", data.Keys.Select(k => $"`{k}`"));
-						var parameters = string.Join(", ", data.Keys.Select((k, i) => $"@param{i}"));
-						var updateStatements = string.Join(", ", data.Keys.Select((k, i) => $"`{k}` = @param{i}"));
-
-						var query = $@"
-                        INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, {columns})
-                        VALUES (@steamId, {parameters})
-                        ON DUPLICATE KEY UPDATE {updateStatements};";
-
-						var queryParams = new DynamicParameters();
-						queryParams.Add("@steamId", steamId);
-						int i = 0;
-						foreach (var item in data)
-						{
-							queryParams.Add($"@param{i}", item.Value);
-							i++;
-						}
-
-						await connection.ExecuteAsync(query, queryParams);
+						await SavePlayerDataToDatabase(connection, tablePrefix, tableName, steamId, data, transaction);
 					}
 				}
 
-				if (dipose)
-				{
-					foreach (var player in List.Values)
-					{
-						player.Settings.Clear();
-						player.Storage.Clear();
-					}
-
-					moduleDefaultSettings.Clear();
-					moduleDefaultStorage.Clear();
-				}
+				await transaction.CommitAsync();
 			}
-			catch (Exception ex)
+			catch
 			{
-				plugin.Logger.LogError($"An error occurred while saving player data: {ex.Message}");
+				await transaction.RollbackAsync();
+				throw;
 			}
-		});
+		}
+		catch (Exception ex)
+		{
+			plugin.Logger.LogError($"An error occurred while saving player data: {ex.Message}");
+		}
 	}
 
-	private static void LoadPlayerData(ConcurrentDictionary<string, object?> targetDict, dynamic data, ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, Plugin plugin)
+	private static void ProcessPlayerData(ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> sourceDict, Dictionary<string, string> targetDict, string dataType)
+	{
+		foreach (var moduleGroup in sourceDict)
+		{
+			var moduleID = moduleGroup.Key;
+			var moduleData = moduleGroup.Value;
+			targetDict[$"{moduleID}.{dataType}"] = JsonSerializer.Serialize(moduleData);
+		}
+	}
+
+	private static async Task SavePlayerDataToDatabase(MySqlConnection connection, string tablePrefix, string tableName, string steamId, Dictionary<string, string> data, MySqlTransaction transaction)
+	{
+		var columns = string.Join(", ", data.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}`"));
+		var parameters = string.Join(", ", data.Keys.Select((_, i) => $"@param{i}"));
+		var updateStatements = string.Join(", ", data.Keys.Select((k, i) => $"`{MySqlHelper.EscapeString(k)}` = @param{i}"));
+
+		var query = $@"
+        INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, {columns})
+        VALUES (@steamId, {parameters})
+        ON DUPLICATE KEY UPDATE {updateStatements};";
+
+		var queryParams = new DynamicParameters();
+		queryParams.Add("@steamId", steamId);
+		for (int i = 0; i < data.Count; i++)
+		{
+			queryParams.Add($"@param{i}", data.ElementAt(i).Value);
+		}
+
+		await connection.ExecuteAsync(query, queryParams, transaction);
+	}
+
+	private static void DisposePlayerData()
+	{
+		foreach (var player in List.Values)
+		{
+			player.Settings.Clear();
+			player.Storage.Clear();
+		}
+
+		moduleDefaultSettings.Clear();
+		moduleDefaultStorage.Clear();
+	}
+
+	private static void LoadPlayerData(ConcurrentDictionary<string, ConcurrentDictionary<string, object?>> targetDict, dynamic data, ConcurrentDictionary<string, (ConcurrentDictionary<string, object?> Settings, IStringLocalizer? Localizer)> defaults, Plugin plugin)
 	{
 		foreach (var property in (IDictionary<string, object>)data)
 		{
@@ -735,9 +802,15 @@ public sealed partial class Player
 					var moduleData = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonString);
 					if (moduleData != null)
 					{
+						if (!targetDict.TryGetValue(moduleID, out var moduleDict))
+						{
+							moduleDict = new ConcurrentDictionary<string, object?>();
+							targetDict[moduleID] = moduleDict;
+						}
+
 						foreach (var item in moduleData)
 						{
-							targetDict[$"{moduleID}.{item.Key}"] = item.Value;
+							moduleDict[item.Key] = item.Value;
 						}
 					}
 					else
@@ -757,20 +830,26 @@ public sealed partial class Player
 
 	public static void DisposeModuleData(Plugin plugin, string callerPlugin)
 	{
-		SaveAllOnlinePlayerData(plugin, false);
-
-		foreach (var player in List.Values)
+		_ = Task.Run(async () =>
 		{
-			player.Settings.TryRemove(callerPlugin, out _);
-			player.Storage.TryRemove(callerPlugin, out _);
-		}
+			await SaveAllOnlinePlayerDataWithTransaction(plugin);
 
-		moduleDefaultSettings.TryRemove(callerPlugin, out _);
-		moduleDefaultStorage.TryRemove(callerPlugin, out _);
+			foreach (var player in List.Values)
+			{
+				player.Settings.TryRemove(callerPlugin, out _);
+				player.Storage.TryRemove(callerPlugin, out _);
+			}
+
+			moduleDefaultSettings.TryRemove(callerPlugin, out _);
+			moduleDefaultStorage.TryRemove(callerPlugin, out _);
+		});
 	}
 
 	public static void Dispose(Plugin plugin)
 	{
-		SaveAllOnlinePlayerData(plugin, true);
+		_ = Task.Run(async () =>
+		{
+			await SaveAllOnlinePlayerDataWithTransaction(plugin);
+		});
 	}
 }

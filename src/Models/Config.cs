@@ -42,7 +42,7 @@ namespace Zenith
 
 			// Apply global settings
 			ConfigManager.GlobalChangeTracking = GetModuleConfigValue<bool>("Core", "GlobalChangeTracking");
-			ConfigManager.SetGlobalAutoReload(GetModuleConfigValue<bool>("Core", "AutoReload"));
+			ConfigManager.GlobalAutoReloadEnabled = GetModuleConfigValue<bool>("Core", "AutoReload");
 		}
 
 		public T GetCoreConfig<T>(string groupName, string configName) where T : notnull
@@ -50,7 +50,6 @@ namespace Zenith
 			return _coreAccessor.GetValue<T>(groupName, configName);
 		}
 
-		// Setter metódus a core konfigurációkhoz
 		public void SetCoreConfig<T>(string groupName, string configName, T value) where T : notnull
 		{
 			_coreAccessor.SetValue(groupName, configName, value);

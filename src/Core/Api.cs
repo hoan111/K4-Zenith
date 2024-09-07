@@ -1,5 +1,6 @@
 namespace Zenith
 {
+	using System.Collections.Concurrent;
 	using System.Reflection;
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Core.Capabilities;
@@ -12,6 +13,8 @@ namespace Zenith
 	public sealed partial class Plugin : BasePlugin
 	{
 		public ModuleServices? _moduleServices;
+
+
 
 		public PlayerCapability<IPlayerServices> Capability_PlayerServices = null!;
 		public PluginCapability<IModuleServices> Capability_ModuleServices = null!;
@@ -32,15 +35,15 @@ namespace Zenith
 			private readonly Player _player;
 			private readonly Plugin _plugin;
 
+			private ConcurrentDictionary<string, object?> _settingsCache = new();
+			private ConcurrentDictionary<string, object?> _storageCache = new();
+
 			public event EventHandler<SettingChangedEventArgs>? SettingChanged;
 			public event EventHandler<SettingChangedEventArgs>? StorageChanged;
 
 			public PlayerServices(CCSPlayerController player, Plugin plugin)
 			{
-				Player? zenithPlayer = Player.Find(player);
-				if (zenithPlayer == null)
-					throw new Exception("Player is not yet loaded to the system. Handle this with a try-catch block.");
-
+				Player? zenithPlayer = Player.Find(player) ?? throw new Exception("Player is not yet loaded to the system. Handle this with a try-catch block.");
 				_plugin = plugin;
 				_player = zenithPlayer;
 			}
@@ -90,40 +93,28 @@ namespace Zenith
 			public void SetNameColor(char? color, ActionPriority priority = ActionPriority.Low)
 				=> _player.SetNameColor(color, priority);
 
-			public T? GetSetting<T>(string key)
-				=> _player.GetSetting<T>(key);
+			public T? GetSetting<T>(string key, string? module)
+				=> _player.GetSetting<T>(key, module);
 
-			public void SetSetting(string key, object? value, bool saveImmediately = false)
+			public void SetSetting(string key, object? value, bool saveImmediately = false, string? moduleID = null)
 			{
-				object? oldValue = _player.GetSetting<object>(key);
-				_player.SetSetting(key, value, saveImmediately);
+				object? oldValue = _player.GetSetting<object>(key, moduleID);
+				_player.SetSetting(key, value, saveImmediately, moduleID);
 				OnSettingChanged(key, oldValue, value);
 			}
 
-			public T? GetStorage<T>(string key)
-				=> _player.GetStorage<T>(key);
+			public T? GetStorage<T>(string key, string? module)
+				=> _player.GetStorage<T>(key, module);
 
-			public void SetStorage(string key, object? value, bool saveImmediately = false)
+			public void SetStorage(string key, object? value, bool saveImmediately = false, string? moduleID = null)
 			{
-				object? oldValue = _player.GetStorage<object>(key);
-				_player.SetStorage(key, value, saveImmediately);
+				object? oldValue = _player.GetStorage<object>(key, moduleID);
+				_player.SetStorage(key, value, saveImmediately, moduleID);
 				OnStorageChanged(key, oldValue, value);
 			}
 
-			public T? GetModuleStorage<T>(string module, string key)
-				=> _player.GetModuleStorage<T>(module, key);
-
-			public void SetModuleStorage(string module, string key, object? value, bool saveImmediately = false)
-				=> _player.SetModuleStorage(module, key, value, saveImmediately);
-
-			public void SaveSettings()
-				=> _player.SaveSettings();
-
-			public void SaveStorage()
-				=> _player.SaveStorage();
-
-			public void SaveAll()
-				=> _player.SaveAll();
+			public void Save()
+				=> _player.SavePlayerData();
 
 			public void LoadPlayerData()
 				=> _ = Task.Run(_player.LoadPlayerData);
@@ -237,16 +228,15 @@ namespace Zenith
 				=> _plugin.GetModuleConfigAccessor();
 
 			public void LoadAllOnlinePlayerData()
-				=> Player.LoadAllOnlinePlayerData(_plugin, true);
+				=> Player.LoadAllOnlinePlayerDataWithSingleQuery(_plugin);
 
 			public void SaveAllOnlinePlayerData()
-				=> Player.SaveAllOnlinePlayerData(_plugin, false);
-
-			public void DisposeModule()
-				=> _plugin.DisposeModule();
+				=> Task.Run(() => Player.SaveAllOnlinePlayerDataWithTransaction(_plugin));
 
 			public void DisposeModule(Assembly assembly)
-				=> _plugin.DisposeModule(assembly);
+			{
+				_plugin.DisposeModule(assembly.GetName().Name!);
+			}
 		}
 	}
 }

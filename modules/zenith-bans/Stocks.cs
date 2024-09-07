@@ -866,7 +866,7 @@ namespace Zenith_Bans
 		private List<ulong> GetOnlinePlayersSteamIds()
 		{
 			var players = Utilities.GetPlayers();
-			List<ulong> steamIds = new List<ulong>();
+			List<ulong> steamIds = [];
 
 			foreach (var player in players)
 			{

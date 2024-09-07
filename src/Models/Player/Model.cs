@@ -256,7 +256,7 @@ public sealed partial class Player
 	public char GetChatColor()
 		=> _chatColor?.Item1 ?? ChatColors.Default;
 
-	public void EnforcePluginValues()
+	public void EnforcePluginValues(string coreFormat)
 	{
 		if (IsMuted)
 		{
@@ -271,7 +271,7 @@ public sealed partial class Player
 
 		if (GetSetting<bool>("ShowClanTags"))
 		{
-			string clanTag = (_clanTag?.Item1) ?? _plugin.GetCoreConfig<string>("Modular", "PlayerClantagFormat");
+			string clanTag = (_clanTag?.Item1) ?? coreFormat;
 
 			if (!string.IsNullOrEmpty(clanTag))
 			{
@@ -293,7 +293,8 @@ public sealed partial class Player
 		{
 			try
 			{
-				await this.SaveAllDataAsync();
+				await SaveDataAsync(Settings, TABLE_PLAYER_SETTINGS);
+				await SaveDataAsync(Storage, TABLE_PLAYER_STORAGE);
 			}
 			catch (Exception ex)
 			{

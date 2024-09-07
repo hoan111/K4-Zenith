@@ -99,15 +99,25 @@ namespace Zenith_Ranks
 			}
 		}
 
+		private readonly Dictionary<string, object> settingTickCache = new Dictionary<string, object>();
+		private DateTime lastCacheUpdate = DateTime.MinValue;
+		private readonly TimeSpan cacheDuration = TimeSpan.FromSeconds(10);
+
 		private void UpdateScoreboards()
 		{
-			if (!_configAccessor.GetValue<bool>("Settings", "UseScoreboardRanks"))
+			if ((DateTime.Now - lastCacheUpdate) >= cacheDuration)
+			{
+				UpdateSettingCache();
+				lastCacheUpdate = DateTime.Now;
+			}
+
+			if (!settingTickCache.TryGetValue("UseScoreboardRanks", out var useScoreboardRanks) || !(bool)useScoreboardRanks)
 				return;
 
-			int mode = _configAccessor.GetValue<int>("Settings", "ScoreboardMode");
-			int rankMax = _configAccessor.GetValue<int>("Settings", "RankMax");
-			int rankBase = _configAccessor.GetValue<int>("Settings", "RankBase");
-			int rankMargin = _configAccessor.GetValue<int>("Settings", "RankMargin");
+			int mode = (int)settingTickCache["ScoreboardMode"];
+			int rankMax = (int)settingTickCache["RankMax"];
+			int rankBase = (int)settingTickCache["RankBase"];
+			int rankMargin = (int)settingTickCache["RankMargin"];
 
 			foreach (var player in GetValidPlayers())
 			{
@@ -126,7 +136,16 @@ namespace Zenith_Ranks
 			}
 		}
 
-		private void SetCompetitiveRank(IPlayerServices player, int mode, int rankId, long currentPoints, int rankMax, int rankBase, int rankMargin)
+		private void UpdateSettingCache()
+		{
+			settingTickCache["UseScoreboardRanks"] = _configAccessor.GetValue<bool>("Settings", "UseScoreboardRanks");
+			settingTickCache["ScoreboardMode"] = _configAccessor.GetValue<int>("Settings", "ScoreboardMode");
+			settingTickCache["RankMax"] = _configAccessor.GetValue<int>("Settings", "RankMax");
+			settingTickCache["RankBase"] = _configAccessor.GetValue<int>("Settings", "RankBase");
+			settingTickCache["RankMargin"] = _configAccessor.GetValue<int>("Settings", "RankMargin");
+		}
+
+		private static void SetCompetitiveRank(IPlayerServices player, int mode, int rankId, long currentPoints, int rankMax, int rankBase, int rankMargin)
 		{
 			switch (mode)
 			{
@@ -219,7 +238,7 @@ namespace Zenith_Ranks
 
 			public HookResult OnEventHappens<T>(T gameEvent, GameEventInfo info) where T : GameEvent
 			{
-				if (_plugin._configAccessor.GetValue<int>("Settings", "MinPlayers") > _plugin.GetValidPlayers().Count())
+				if (_plugin._configAccessor.GetValue<int>("Settings", "MinPlayers") > _plugin._playerCache.Count)
 					return HookResult.Continue;
 
 				if (!_plugin._configAccessor.GetValue<bool>("Settings", "WarmupPoints") && _plugin.GameRules?.WarmupPeriod == true)

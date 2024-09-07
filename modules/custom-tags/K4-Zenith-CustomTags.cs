@@ -9,10 +9,10 @@ using Microsoft.Extensions.Logging;
 using ZenithAPI;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Entities;
-using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Commands;
 using Menu;
 using Menu.Enums;
+using System.Text;
 
 namespace Zenith_CustomTags;
 
@@ -22,7 +22,7 @@ public class Plugin : BasePlugin
 	private const string MODULE_ID = "CustomTags";
 
 	private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
-	private readonly Dictionary<ulong, string> _playerSelectedConfigs = new();
+	private readonly Dictionary<ulong, string> _playerSelectedConfigs = [];
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
@@ -41,12 +41,6 @@ public class Plugin : BasePlugin
 
 	private Dictionary<string, TagConfig>? _tagConfigs;
 	private Dictionary<string, PredefinedTagConfig>? _predefinedConfigs;
-
-	private static readonly Dictionary<string, char> _chatColors = typeof(ChatColors).GetFields()
-		.Where(f => f.FieldType == typeof(char))
-		.GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-		.Select(g => g.First()) // This will take the first occurrence if there are duplicates (DarkRed and Darkred)
-		.ToDictionary(f => f.Name, f => (char)f.GetValue(null)!, StringComparer.OrdinalIgnoreCase);
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
@@ -100,7 +94,7 @@ public class Plugin : BasePlugin
 			ShowTagSelectionMenu(player);
 		}, CommandUsage.CLIENT_ONLY);
 
-		AddTimer(5.0f, () =>
+		if (hotReload)
 		{
 			_moduleServices?.LoadAllOnlinePlayerData();
 
@@ -110,7 +104,7 @@ public class Plugin : BasePlugin
 				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
 					OnZenithPlayerLoaded(player);
 			}
-		});
+		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
@@ -497,25 +491,25 @@ public class Plugin : BasePlugin
 	private void ApplyConfig(IPlayerServices zenithPlayer, TagConfig config)
 	{
 		if (!string.IsNullOrEmpty(config.ChatColor))
-			zenithPlayer.SetChatColor(GetChatColorValue(config.ChatColor));
+			zenithPlayer.SetChatColor(ChatColorUtility.GetChatColorValue(config.ChatColor));
 		if (!string.IsNullOrEmpty(config.ClanTag))
 			zenithPlayer.SetClanTag(config.ClanTag);
 		if (!string.IsNullOrEmpty(config.NameColor))
-			zenithPlayer.SetNameColor(GetChatColorValue(config.NameColor));
+			zenithPlayer.SetNameColor(ChatColorUtility.GetChatColorValue(config.NameColor));
 		if (!string.IsNullOrEmpty(config.NameTag))
-			zenithPlayer.SetNameTag(ApplyPrefixColors(config.NameTag));
+			zenithPlayer.SetNameTag(ChatColorUtility.ApplyPrefixColors(config.NameTag));
 	}
 
 	private void ApplyConfig(IPlayerServices zenithPlayer, PredefinedTagConfig config)
 	{
 		if (!string.IsNullOrEmpty(config.ChatColor))
-			zenithPlayer.SetChatColor(GetChatColorValue(config.ChatColor));
+			zenithPlayer.SetChatColor(ChatColorUtility.GetChatColorValue(config.ChatColor));
 		if (!string.IsNullOrEmpty(config.ClanTag))
 			zenithPlayer.SetClanTag(config.ClanTag);
 		if (!string.IsNullOrEmpty(config.NameColor))
-			zenithPlayer.SetNameColor(GetChatColorValue(config.NameColor));
+			zenithPlayer.SetNameColor(ChatColorUtility.GetChatColorValue(config.NameColor));
 		if (!string.IsNullOrEmpty(config.NameTag))
-			zenithPlayer.SetNameTag(ApplyPrefixColors(config.NameTag));
+			zenithPlayer.SetNameTag(ChatColorUtility.ApplyPrefixColors(config.NameTag));
 	}
 
 	private static void ApplyNullConfig(IPlayerServices player)
@@ -524,33 +518,6 @@ public class Plugin : BasePlugin
 		player.SetClanTag(null);
 		player.SetNameColor(null);
 		player.SetNameTag(null);
-	}
-
-	public static string ApplyPrefixColors(string msg)
-	{
-		if (string.IsNullOrEmpty(msg))
-			return msg;
-
-		var sortedColors = _chatColors
-			.OrderByDescending(color => color.Key.Length)
-			.ThenBy(color => color.Key)
-			.ToList();
-
-		foreach (var color in sortedColors)
-		{
-			string pattern = $@"(\{{{color.Key}\}}|{color.Key})";
-			msg = Regex.Replace(msg, pattern, color.Value.ToString(), RegexOptions.IgnoreCase);
-		}
-
-		return msg;
-	}
-
-	private static char GetChatColorValue(string colorName)
-	{
-		if (_chatColors.TryGetValue(colorName, out char color))
-			return color;
-
-		return ChatColors.Default;
 	}
 
 	private void OnZenithPlayerLoaded(CCSPlayerController player)

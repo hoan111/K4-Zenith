@@ -100,6 +100,14 @@ public class Plugin : BasePlugin
 
 			var zenithPlayer = playerData.Zenith;
 
+			// Profiling
+			PerformanceProfiler.ProfileNonGenericFunction<IPlayerServices>(
+				zenithPlayer,
+				nameof(IPlayerServices.Print),
+				["Test message"],
+				100 // iterations
+			);
+
 			// Profiling GetStorage<double>
 			PerformanceProfiler.ProfileGenericFunction<IPlayerServices, double>(
 				zenithPlayer,
@@ -115,9 +123,25 @@ public class Plugin : BasePlugin
 				["TotalPlaytime", 123.45, false],
 				100000 // iterations
 			);
+
+			// Profiling ConfigAccessor GET
+			PerformanceProfiler.ProfileGenericFunction<IModuleConfigAccessor, int>(
+				_coreAccessor,
+				nameof(IModuleConfigAccessor.GetValue),
+				["Config", "NotificationInterval"],
+				100000 // iterations
+			);
+
+			// Profiling ConfigAccessor SET
+			PerformanceProfiler.ProfileNonGenericFunction<IModuleConfigAccessor>(
+				_coreAccessor,
+				nameof(IModuleConfigAccessor.SetValue),
+				["Config", "NotificationInterval", 123],
+				100000 // iterations
+			);
 		}, CommandUsage.CLIENT_ONLY, permission: "@zenith/root");
 
-		AddTimer(3.0f, () =>
+		if (hotReload)
 		{
 			_moduleServices.LoadAllOnlinePlayerData();
 			var players = Utilities.GetPlayers();
@@ -139,7 +163,7 @@ public class Plugin : BasePlugin
 					};
 				}
 			}
-		});
+		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}

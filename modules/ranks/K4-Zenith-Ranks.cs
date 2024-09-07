@@ -46,7 +46,18 @@ public sealed partial class Plugin : BasePlugin
 
 		SetupZenithEvents();
 		SetupGameRules(hotReload);
-		SetupTimers();
+
+		if (hotReload)
+		{
+			_moduleServices!.LoadAllOnlinePlayerData(); var players = Utilities.GetPlayers();
+			foreach (var player in players)
+			{
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+					OnZenithPlayerLoaded(player);
+			}
+		}
+
+		AddTimer(60.0f, CheckPlaytime, TimerFlags.REPEAT);
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
@@ -121,20 +132,6 @@ public sealed partial class Plugin : BasePlugin
 	{
 		if (hotReload)
 			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
-	}
-
-	private void SetupTimers()
-	{
-		AddTimer(3.0f, () =>
-		{
-			_moduleServices!.LoadAllOnlinePlayerData(); var players = Utilities.GetPlayers();
-			foreach (var player in players)
-			{
-				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
-					OnZenithPlayerLoaded(player);
-			}
-		});
-		AddTimer(30.0f, CheckPlaytime, TimerFlags.REPEAT);
 	}
 
 	private void CheckPlaytime()

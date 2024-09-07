@@ -105,9 +105,17 @@ public class Plugin : BasePlugin
 		RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn, HookMode.Post);
 
 		if (hotReload)
+		{
 			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
 
-		AddTimer(3.0f, InitializePlayerStats);
+			_moduleServices!.LoadAllOnlinePlayerData();
+			var players = Utilities.GetPlayers();
+			foreach (var player in players)
+			{
+				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+					OnZenithPlayerLoaded(player);
+			}
+		}
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
 	}
@@ -386,17 +394,6 @@ public class Plugin : BasePlugin
 
 		playerSpawned.Add(player);
 		return HookResult.Continue;
-	}
-
-	private void InitializePlayerStats()
-	{
-		_moduleServices!.LoadAllOnlinePlayerData();
-		var players = Utilities.GetPlayers();
-		foreach (var player in players)
-		{
-			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
-				OnZenithPlayerLoaded(player);
-		}
 	}
 
 	public IEnumerable<IPlayerServices> GetValidPlayers()

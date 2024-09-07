@@ -127,21 +127,8 @@ namespace Zenith
 			}
 		}
 
-		public void DisposeModule()
+		public void DisposeModule(string callingPlugin)
 		{
-			string callingPlugin = CallerIdentifier.GetCallingPluginName();
-
-			Logger.LogInformation($"Disposing module '{callingPlugin}' and freeing resources.");
-
-			RemoveModuleCommands(callingPlugin);
-			RemoveModulePlaceholders(callingPlugin);
-			Player.DisposeModuleData(this, callingPlugin);
-		}
-
-		public void DisposeModule(Assembly assembly)
-		{
-			string callingPlugin = assembly.GetName().Name!;
-
 			Logger.LogInformation($"Disposing module '{callingPlugin}' and freeing resources.");
 
 			RemoveModuleCommands(callingPlugin);

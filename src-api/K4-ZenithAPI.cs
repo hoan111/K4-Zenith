@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -105,7 +108,7 @@ namespace ZenithAPI
 		/// </summary>
 		/// <param name="key">The key of the setting.</param>
 		/// <returns>The value of the setting, or null if not found.</returns>
-		T? GetSetting<T>(string key);
+		T? GetSetting<T>(string key, string? moduleID = null);
 
 		/// <summary>
 		/// Sets a setting value for a specific module and key.
@@ -113,14 +116,14 @@ namespace ZenithAPI
 		/// <param name="key">The key of the setting.</param>
 		/// <param name="value">The value to set.</param>
 		/// <param name="saveImmediately">If true, saves the setting to the database immediately.</param>
-		void SetSetting(string key, object? value, bool saveImmediately = false);
+		void SetSetting(string key, object? value, bool saveImmediately = false, string? moduleID = null);
 
 		/// <summary>
 		/// Retrieves a storage value for a specific module and key.
 		/// </summary>
 		/// <param name="key">The key of the storage item.</param>
 		/// <returns>The value of the storage item, or null if not found.</returns>
-		T? GetStorage<T>(string key);
+		T? GetStorage<T>(string key, string? moduleID = null);
 
 		/// <summary>
 		/// Sets a storage value for a specific module and key.
@@ -128,38 +131,12 @@ namespace ZenithAPI
 		/// <param name="key">The key of the storage item.</param>
 		/// <param name="value">The value to set.</param>
 		/// <param name="saveImmediately">If true, saves the storage item to the database immediately.</param>
-		void SetStorage(string key, object? value, bool saveImmediately = false);
-
-		/// <summary>
-		/// Retrieves a setting value for a specific module and key.
-		/// </summary>
-		/// <param name="module">The module to retrieve the setting from.</param>
-		/// <param name="key">The key of the setting.</param>
-		T? GetModuleStorage<T>(string module, string key);
-
-		/// <summary>
-		/// Sets a setting value for a specific module and key.
-		/// </summary>
-		/// <param name="module">The module to set the setting for.</param>
-		/// <param name="key">The key of the setting.</param>
-		/// <param name="value">The value to set.</param>
-		/// <param name="saveImmediately">If true, saves the setting to the database immediately.</param>
-		void SetModuleStorage(string module, string key, object? value, bool saveImmediately = false);
-
-		/// <summary>
-		/// Saves all settings or settings for a specific module.
-		/// </summary>
-		void SaveSettings();
-
-		/// <summary>
-		/// Saves all storage items or storage items for a specific module.
-		/// </summary>
-		void SaveStorage();
+		void SetStorage(string key, object? value, bool saveImmediately = false, string? moduleID = null);
 
 		/// <summary>
 		/// Saves all settings and storage items, or those for a specific module.
 		/// </summary>
-		void SaveAll();
+		void Save();
 
 		/// <summary>
 		/// Loads all player data from the database.
@@ -310,13 +287,7 @@ namespace ZenithAPI
 		/// <summary>
 		/// Dispose the module's Zenith based resources such as commands, configs, and player datas.
 		/// </summary>
-		void DisposeModule();
-
-		/// <summary>
-		/// Dispose the module's Zenith based resources such as commands, configs, and player datas.
-		/// </summary>
-		/// <param name="assembly">The assembly to dispose.</param>
-		void DisposeModule(Assembly assembly); // ! Recommended to use, if you see the regular not working
+		void DisposeModule(Assembly assembly);
 	}
 
 	public interface IModuleConfigAccessor
@@ -459,18 +430,32 @@ namespace ZenithAPI
 			var executionTimes = new List<long>();
 			object? result = null;
 
+			// Garbage Collection monitoring
 			GC.Collect();
 			GC.WaitForPendingFinalizers();
 			GC.Collect();
 
+			var gcBefore = GC.CollectionCount(0);
+
 			for (int i = 0; i < iterations; i++)
 			{
+				// Stopwatch for method execution
 				stopwatch.Restart();
 				result = method.Invoke(instance, args);
 				stopwatch.Stop();
 				executionTimes.Add(stopwatch.ElapsedTicks);
 			}
 
+			var gcAfter = GC.CollectionCount(0);
+
+			// Memory usage profiling
+			var memoryBefore = GC.GetTotalMemory(false);
+			result = method.Invoke(instance, args); // Another call to measure memory impact
+			var memoryAfter = GC.GetTotalMemory(false);
+			var memoryUsedBytes = memoryAfter - memoryBefore;
+			var memoryUsedMB = (double)memoryUsedBytes / (1024 * 1024);
+
+			// Profiling results
 			long totalTicks = executionTimes.Sum();
 			double avgMs = totalTicks / (double)iterations / Stopwatch.Frequency * 1000;
 			double minMs = executionTimes.Min() / (double)Stopwatch.Frequency * 1000;
@@ -486,13 +471,7 @@ namespace ZenithAPI
 			WriteDetailValue("Maximum time", $"{maxMs:F6} ms");
 			WriteDetailValue("Median time", $"{medianMs:F6} ms");
 			WriteDetailValue("Standard deviation", $"{stdDev:F6} ms");
-
-			var memoryBefore = GC.GetTotalMemory(false);
-			result = method.Invoke(instance, args);
-			var memoryAfter = GC.GetTotalMemory(false);
-			var memoryUsedBytes = memoryAfter - memoryBefore;
-			var memoryUsedMB = (double)memoryUsedBytes / (1024 * 1024);
-
+			WriteDetailValue("GC collections", $"{gcAfter - gcBefore}");
 			WriteDetailValue("Memory usage", $"{memoryUsedMB:F6} MB ({memoryUsedBytes:N0} bytes)");
 			WriteDetailValue("Return value", $"{result}");
 
@@ -523,6 +502,60 @@ namespace ZenithAPI
 			Console.ForegroundColor = ValueColor;
 			Console.WriteLine(value);
 			Console.ResetColor();
+		}
+	}
+
+	public static class ChatColorUtility
+	{
+		private static readonly Dictionary<string, char> _chatColors;
+		private static readonly Regex _colorPattern;
+
+		static ChatColorUtility()
+		{
+			_chatColors = new Dictionary<string, char>(StringComparer.OrdinalIgnoreCase);
+			var chatColorType = typeof(ChatColors);
+			var fields = chatColorType.GetFields(BindingFlags.Public | BindingFlags.Static);
+
+			foreach (var field in fields)
+			{
+				if (field.FieldType == typeof(char) && !field.IsObsolete())
+				{
+					string colorName = field.Name.ToLowerInvariant();
+					char colorValue = (char)field.GetValue(null)!;
+					_chatColors[colorName] = colorValue;
+				}
+			}
+
+			string pattern = string.Join("|", _chatColors.Keys.Select(k => $@"\{{{k}\}}|{k}"));
+			_colorPattern = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+		}
+
+		public static string ApplyPrefixColors(string msg)
+		{
+			if (string.IsNullOrEmpty(msg))
+				return msg;
+
+			return _colorPattern.Replace(msg, match =>
+			{
+				string key = match.Value.Trim('{', '}');
+				return _chatColors.TryGetValue(key, out char color) ? color.ToString() : match.Value;
+			});
+		}
+
+		public static char GetChatColorValue(string colorName)
+		{
+			if (_chatColors.TryGetValue(colorName, out char color))
+				return color;
+
+			return ChatColors.Default;
+		}
+	}
+
+	public static class ReflectionExtensions
+	{
+		public static bool IsObsolete(this FieldInfo field)
+		{
+			return field.GetCustomAttribute<ObsoleteAttribute>() != null;
 		}
 	}
 }

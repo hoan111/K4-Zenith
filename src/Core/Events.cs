@@ -80,7 +80,7 @@ namespace Zenith
 		public HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
 		{
 			if (GetCoreConfig<bool>("Database", "SaveOnRoundEnd"))
-				Player.SaveAllOnlinePlayerData(this, false);
+				_ = Task.Run(async () => await Player.SaveAllOnlinePlayerDataWithTransaction(this));
 			return HookResult.Continue;
 		}
 	}
