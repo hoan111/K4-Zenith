@@ -1,10 +1,8 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Capabilities;
-using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZenithAPI;
 using CounterStrikeSharp.API.Modules.Admin;
@@ -12,7 +10,8 @@ using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Commands;
 using Menu;
 using Menu.Enums;
-using System.Text;
+using CounterStrikeSharp.API.Modules.Menu;
+using CounterStrikeSharp.API.Modules.Utils;
 
 namespace Zenith_CustomTags;
 
@@ -111,18 +110,12 @@ public class Plugin : BasePlugin
 
 	private void ShowTagSelectionMenu(CCSPlayerController player)
 	{
-		if (Menu == null)
-		{
-			Logger.LogError("Menu object is null. Cannot show tag selection menu.");
-			return;
-		}
-
 		_tagConfigs ??= GetTagConfigs();
 		_predefinedConfigs ??= GetPredefinedTagConfigs();
 
 		List<MenuItem> items = [];
 		List<string> configKeys = [];
-		HashSet<string> availableConfigs = [];
+		HashSet<string> availableConfigs = new HashSet<string>();
 
 		if (_tagConfigs.TryGetValue("all", out var allConfig) && allConfig.AvailableConfigs != null)
 		{
@@ -138,6 +131,14 @@ public class Plugin : BasePlugin
 			if (playerConfig.AvailableConfigs != null)
 			{
 				availableConfigs.UnionWith(playerConfig.AvailableConfigs);
+			}
+		}
+
+		foreach (var kvp in _tagConfigs)
+		{
+			if (CheckPermissionOrSteamID(player, kvp.Key) && kvp.Value.AvailableConfigs != null)
+			{
+				availableConfigs.UnionWith(kvp.Value.AvailableConfigs);
 			}
 		}
 
@@ -162,51 +163,101 @@ public class Plugin : BasePlugin
 		if (items.Count == 1)
 			items.Clear();
 
-		string currentConfig = _playerSelectedConfigs.TryGetValue(player.SteamID, out var selectedConfig) ? selectedConfig : "Default";
-
 		try
 		{
-			Menu.ShowScrollableMenu(player, Localizer["customtags.menu.title"], items, (buttons, menu, selected) =>
+			if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
 			{
-				if (selected == null) return;
-
-				if (menu.Option >= 0 && menu.Option < configKeys.Count)
-				{
-					string selectedConfigKey = configKeys[menu.Option];
-
-					if (buttons == MenuButtons.Select)
-					{
-						var zenithPlayer = _playerCache[player];
-
-						if (selectedConfigKey == "default")
-						{
-							_playerSelectedConfigs.Remove(player.SteamID);
-							ApplyTagConfig(player);
-							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.default"]);
-						}
-						else if (selectedConfigKey == "none")
-						{
-							_playerSelectedConfigs[player.SteamID] = "none";
-							ApplyNullConfig(zenithPlayer);
-							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.none"]);
-						}
-						else if (_predefinedConfigs.TryGetValue(selectedConfigKey, out var selectedPredefinedConfig))
-						{
-							_playerSelectedConfigs[player.SteamID] = selectedConfigKey;
-							ApplyConfig(zenithPlayer, selectedPredefinedConfig);
-							_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.config", selectedPredefinedConfig.Name]);
-						}
-						else
-						{
-							_moduleServices?.PrintForPlayer(player, $"Invalid tag configuration: {selectedConfigKey}");
-						}
-					}
-				}
-			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), 5, disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+				ShowCenterTagSelectionMenu(player, items, configKeys);
+			}
+			else
+			{
+				ShowChatTagSelectionMenu(player, configKeys);
+			}
 		}
 		catch (Exception ex)
 		{
 			Logger.LogError($"Error showing tag selection menu: {ex.Message}");
+		}
+	}
+
+	private void ShowCenterTagSelectionMenu(CCSPlayerController player, List<MenuItem> items, List<string> configKeys)
+	{
+		if (Menu == null)
+		{
+			Logger.LogError("Menu object is null. Cannot show center tag selection menu.");
+			return;
+		}
+
+		Menu.ShowScrollableMenu(player, Localizer["customtags.menu.title"], items, (buttons, menu, selected) =>
+		{
+			if (selected == null) return;
+
+			if (menu.Option >= 0 && menu.Option < configKeys.Count)
+			{
+				string selectedConfigKey = configKeys[menu.Option];
+
+				if (buttons == MenuButtons.Select)
+				{
+					ApplySelectedConfig(player, selectedConfigKey);
+				}
+			}
+		}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), 5, disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+	}
+
+	private void ShowChatTagSelectionMenu(CCSPlayerController player, List<string> configKeys)
+	{
+		ChatMenu tagMenu = new ChatMenu(Localizer["customtags.menu.title"]);
+
+		foreach (var configKey in configKeys)
+		{
+			string displayName = configKey;
+			if (_predefinedConfigs?.TryGetValue(configKey, out var config) == true)
+			{
+				displayName = config.Name;
+			}
+			else if (configKey == "none")
+			{
+				displayName = Localizer["customtags.menu.none"];
+			}
+			else if (configKey == "default")
+			{
+				displayName = Localizer["customtags.menu.default"];
+			}
+
+			tagMenu.AddMenuOption($"{ChatColors.Gold}{displayName}", (p, o) =>
+			{
+				ApplySelectedConfig(p, configKey);
+			});
+		}
+
+		MenuManager.OpenChatMenu(player, tagMenu);
+	}
+
+	private void ApplySelectedConfig(CCSPlayerController player, string selectedConfigKey)
+	{
+		var zenithPlayer = _playerCache[player];
+
+		if (selectedConfigKey == "default")
+		{
+			_playerSelectedConfigs.Remove(player.SteamID);
+			ApplyTagConfig(player);
+			_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.default"]);
+		}
+		else if (selectedConfigKey == "none")
+		{
+			_playerSelectedConfigs[player.SteamID] = "none";
+			ApplyNullConfig(zenithPlayer);
+			_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.none"]);
+		}
+		else if (_predefinedConfigs?.TryGetValue(selectedConfigKey, out var selectedPredefinedConfig) == true)
+		{
+			_playerSelectedConfigs[player.SteamID] = selectedConfigKey;
+			ApplyConfig(zenithPlayer, selectedPredefinedConfig);
+			_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.config", selectedPredefinedConfig.Name]);
+		}
+		else
+		{
+			_moduleServices?.PrintForPlayer(player, $"Invalid tag configuration: {selectedConfigKey}");
 		}
 	}
 

@@ -255,7 +255,7 @@ public sealed partial class Plugin : BasePlugin
 
 			string value = info.GetArg(2);
 			SetConvarValue(cvar, value);
-			ShowActivityToPlayers(player?.SteamID, "commands.cvar.success", player?.PlayerName ?? Localizer["k4.general.console"], cvar, value);
+			ShowActivityToPlayers(player?.SteamID, "commands.cvar.success", player?.PlayerName ?? Localizer["k4.general.console"], cvar.Name, value);
 		}, CommandUsage.CLIENT_AND_SERVER, 2, "<convar> <value>", "@zenith-commands/cvar");
 
 		_moduleServices?.RegisterModuleCommands(["speed"], "Sets player speed", (player, info) =>

@@ -124,6 +124,7 @@ namespace Zenith
 		{
 			_moduleServices?.InvokeZenithCoreUnload(hotReload);
 
+			ConfigManager.Dispose();
 			Player.Dispose(this);
 			RemoveAllCommands();
 			RemoveModulePlaceholders();

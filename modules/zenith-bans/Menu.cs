@@ -1,6 +1,8 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
+using CounterStrikeSharp.API.Modules.Menu;
+using CounterStrikeSharp.API.Modules.Utils;
 using Menu;
 using Menu.Enums;
 
@@ -12,20 +14,28 @@ namespace Zenith_Bans
 		{
 			if (caller == null) return;
 
+			var players = Utilities.GetPlayers().Where(p => p != null && p.IsValid && (includeBots || (!p.IsBot && !p.IsHLTV)) && p != caller && AdminManager.CanPlayerTarget(caller, p)).ToList();
+
+			if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
+			{
+				ShowCenterPlayerSelectionMenu(caller, players, callback);
+			}
+			else
+			{
+				ShowChatPlayerSelectionMenu(caller, players, callback);
+			}
+		}
+
+		private void ShowCenterPlayerSelectionMenu(CCSPlayerController caller, List<CCSPlayerController> players, Action<CCSPlayerController> callback)
+		{
 			List<MenuItem> items = [];
 			var playerMap = new Dictionary<int, CCSPlayerController>();
 
-			int index = 0;
-			var players = Utilities.GetPlayers();
-
-			foreach (var player in players)
+			for (int i = 0; i < players.Count; i++)
 			{
-				if (player != null && player.IsValid && (includeBots || (!player.IsBot && !player.IsHLTV)) && player != caller && AdminManager.CanPlayerTarget(caller, player))
-				{
-					items.Add(new MenuItem(MenuItemType.Button, new MenuValue($"#{player.UserId} | {player.PlayerName}")));
-					playerMap[index] = player;
-					index++;
-				}
+				var player = players[i];
+				items.Add(new MenuItem(MenuItemType.Button, new MenuValue($"#{player.UserId} | {player.PlayerName}")));
+				playerMap[i] = player;
 			}
 
 			if (items.Count == 0)
@@ -37,25 +47,48 @@ namespace Zenith_Bans
 			{
 				if (selected == null) return;
 
-				switch (buttons)
+				if (buttons == MenuButtons.Select && playerMap.TryGetValue(menu.Option, out var targetPlayer))
 				{
-					case MenuButtons.Select:
-						if (playerMap.TryGetValue(menu.Option, out var targetPlayer))
-						{
-							callback(targetPlayer);
-						}
-						break;
+					callback(targetPlayer);
 				}
 			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+		}
+
+		private void ShowChatPlayerSelectionMenu(CCSPlayerController caller, List<CCSPlayerController> players, Action<CCSPlayerController> callback)
+		{
+			ChatMenu playerMenu = new ChatMenu(Localizer["k4.menu.selectplayer"]);
+
+			foreach (var player in players)
+			{
+				playerMenu.AddMenuOption($"{ChatColors.Gold}#{player.UserId} | {player.PlayerName}", (c, o) => callback(player));
+			}
+
+			if (playerMenu.MenuOptions.Count == 0)
+			{
+				playerMenu.AddMenuOption($"{ChatColors.LightRed}{Localizer["k4.general.noplayersfound"]}", (p, o) => { }, true);
+			}
+
+			MenuManager.OpenChatMenu(caller, playerMenu);
 		}
 
 		private void ShowLengthSelectionMenu(CCSPlayerController? caller, List<int> lengthList, Action<int> callback)
 		{
 			if (caller == null) return;
 
+			if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
+			{
+				ShowCenterLengthSelectionMenu(caller, lengthList, callback);
+			}
+			else
+			{
+				ShowChatLengthSelectionMenu(caller, lengthList, callback);
+			}
+		}
+
+		private void ShowCenterLengthSelectionMenu(CCSPlayerController caller, List<int> lengthList, Action<int> callback)
+		{
 			List<MenuItem> items = [];
 
-			int index = 0;
 			foreach (var length in lengthList)
 			{
 				if (length == 0)
@@ -67,49 +100,87 @@ namespace Zenith_Bans
 				{
 					items.Add(new MenuItem(MenuItemType.Button, new List<MenuValue> { new MenuValue(length.ToString()) }));
 				}
-				index++;
 			}
 
 			Menu.ShowScrollableMenu(caller, Localizer["k4.menu.selectlength"], items, (buttons, menu, selected) =>
 			{
 				if (selected == null) return;
 
-				switch (buttons)
+				if (buttons == MenuButtons.Select)
 				{
-					case MenuButtons.Select:
-						callback(lengthList[menu.Option]);
-						break;
+					callback(lengthList[menu.Option]);
 				}
 			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+		}
+
+		private void ShowChatLengthSelectionMenu(CCSPlayerController caller, List<int> lengthList, Action<int> callback)
+		{
+			ChatMenu lengthMenu = new ChatMenu(Localizer["k4.menu.selectlength"]);
+
+			for (int i = 0; i < lengthList.Count; i++)
+			{
+				int length = lengthList[i];
+				string displayText = length == 0 ? Localizer["k4.general.permanent"] : length.ToString();
+				lengthMenu.AddMenuOption($"{ChatColors.Gold}{displayText.ToUpper()}", (c, o) => callback(length));
+			}
+
+			MenuManager.OpenChatMenu(caller, lengthMenu);
 		}
 
 		public void ShowReasonSelectionMenu(CCSPlayerController? caller, List<string> reasonList, Action<string> callback)
 		{
 			if (caller == null) return;
 
-			List<MenuItem> items = new List<MenuItem>();
-
-			int index = 0;
-			foreach (var reason in reasonList)
+			if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
 			{
-				items.Add(new MenuItem(MenuItemType.Button, new List<MenuValue> { new MenuValue(reason) }));
-				index++;
+				ShowCenterReasonSelectionMenu(caller, reasonList, callback);
 			}
+			else
+			{
+				ShowChatReasonSelectionMenu(caller, reasonList, callback);
+			}
+		}
+
+		private void ShowCenterReasonSelectionMenu(CCSPlayerController caller, List<string> reasonList, Action<string> callback)
+		{
+			List<MenuItem> items = reasonList.Select(reason => new MenuItem(MenuItemType.Button, new List<MenuValue> { new MenuValue(reason) })).ToList();
 
 			Menu.ShowScrollableMenu(caller, "Select Reason", items, (buttons, menu, selected) =>
 			{
 				if (selected == null) return;
 
-				switch (buttons)
+				if (buttons == MenuButtons.Select)
 				{
-					case MenuButtons.Select:
-						callback(reasonList[menu.Option]);
-						break;
+					callback(reasonList[menu.Option]);
 				}
 			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 		}
 
+		private void ShowChatReasonSelectionMenu(CCSPlayerController caller, List<string> reasonList, Action<string> callback)
+		{
+			ChatMenu reasonMenu = new ChatMenu("Select Reason");
+
+			foreach (var reason in reasonList)
+			{
+				reasonMenu.AddMenuOption($"{ChatColors.Gold}{reason}", (c, o) => callback(reason));
+			}
+
+			MenuManager.OpenChatMenu(caller, reasonMenu);
+		}
+
 		private void ShowGroupSelectionMenu(CCSPlayerController controller, List<string> groups, Action<string> callback)
+		{
+			if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
+			{
+				ShowCenterGroupSelectionMenu(controller, groups, callback);
+			}
+			else
+			{
+				ShowChatGroupSelectionMenu(controller, groups, callback);
+			}
+		}
+
+		private void ShowCenterGroupSelectionMenu(CCSPlayerController controller, List<string> groups, Action<string> callback)
 		{
 			List<MenuItem> items = groups.Select(group => new MenuItem(MenuItemType.Button, [new MenuValue(group)])).ToList();
 
@@ -117,13 +188,23 @@ namespace Zenith_Bans
 			{
 				if (selected == null) return;
 
-				switch (buttons)
+				if (buttons == MenuButtons.Select)
 				{
-					case MenuButtons.Select:
-						callback(groups[menu.Option]);
-						break;
+					callback(groups[menu.Option]);
 				}
 			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+		}
+
+		private void ShowChatGroupSelectionMenu(CCSPlayerController controller, List<string> groups, Action<string> callback)
+		{
+			ChatMenu groupMenu = new ChatMenu(Localizer["k4.addadmin.select-group"]);
+
+			foreach (var group in groups)
+			{
+				groupMenu.AddMenuOption($"{ChatColors.Gold}{group}", (c, o) => callback(group));
+			}
+
+			MenuManager.OpenChatMenu(controller, groupMenu);
 		}
 	}
 }

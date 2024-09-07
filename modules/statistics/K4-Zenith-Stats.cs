@@ -13,6 +13,7 @@ using Dapper;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using CounterStrikeSharp.API.Modules.Menu;
 
 namespace Zenith_Stats;
 
@@ -405,32 +406,123 @@ public class Plugin : BasePlugin
 	private void Initialize_Events()
 	{
 		_eventManager = new EventManager(this);
-		foreach (var eventEntry in _eventTargets)
-		{
-			RegisterMassEventHandler(eventEntry.Key);
-		}
+
+		RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath, HookMode.Post);
+		RegisterEventHandler<EventGrenadeThrown>(OnGrenadeThrown, HookMode.Post);
+		RegisterEventHandler<EventPlayerHurt>(OnPlayerHurt, HookMode.Post);
+		RegisterEventHandler<EventRoundStart>(OnRoundStart, HookMode.Post);
+		RegisterEventHandler<EventBombPlanted>(OnBombPlanted, HookMode.Post);
+		RegisterEventHandler<EventHostageRescued>(OnHostageRescued, HookMode.Post);
+		RegisterEventHandler<EventHostageKilled>(OnHostageKilled, HookMode.Post);
+		RegisterEventHandler<EventBombDefused>(OnBombDefused, HookMode.Post);
+		RegisterEventHandler<EventRoundEnd>(OnRoundEnd, HookMode.Post);
+		RegisterEventHandler<EventWeaponFire>(OnWeaponFire, HookMode.Post);
+		RegisterEventHandler<EventRoundMvp>(OnRoundMvp, HookMode.Post);
+		RegisterEventHandler<EventCsWinPanelMatch>(OnCsWinPanelMatch, HookMode.Post);
 	}
 
-	private void RegisterMassEventHandler(string eventName)
+	private HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
 	{
-		try
+		if (_eventManager != null)
+			_eventManager.FirstBlood = false;
+		return HookResult.Continue;
+	}
+
+	private HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandlePlayerDeath(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnGrenadeThrown(EventGrenadeThrown @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleGrenadeThrown(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnPlayerHurt(EventPlayerHurt @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandlePlayerHurt(@event);
+		return HookResult.Continue;
+	}
+
+	private (bool isAllowed, DateTime lastCheck) _statsAllowedCache = (false, DateTime.MinValue);
+	private const int CACHE_UPDATE_INTERVAL_SECONDS = 10;
+
+	private bool IsStatsAllowed()
+	{
+		if ((DateTime.Now - _statsAllowedCache.lastCheck).TotalSeconds < CACHE_UPDATE_INTERVAL_SECONDS)
 		{
-			Type? eventType = Type.GetType($"CounterStrikeSharp.API.Core.{eventName}, CounterStrikeSharp.API");
-			if (eventType != null && typeof(GameEvent).IsAssignableFrom(eventType))
-			{
-				var methodInfo = typeof(EventManager).GetMethod(nameof(EventManager.OnEventHappens))?.MakeGenericMethod(eventType);
-				var handlerDelegate = methodInfo != null ? Delegate.CreateDelegate(typeof(GameEventHandler<>).MakeGenericType(eventType), _eventManager, methodInfo) : null;
-				if (handlerDelegate != null)
-				{
-					var registerMethod = typeof(BasePlugin).GetMethod(nameof(RegisterEventHandler))?.MakeGenericMethod(eventType);
-					registerMethod?.Invoke(this, [handlerDelegate, HookMode.Post]);
-				}
-			}
+			return _statsAllowedCache.isAllowed;
 		}
-		catch (Exception ex)
-		{
-			Logger.LogError(ex, "Failed to register event handler for {0}.", eventName);
-		}
+
+		int notBots = _playerStats.Count;
+		bool warmupStats = _coreAccessor.GetValue<bool>("Config", "WarmupStats");
+		int minPlayers = _coreAccessor.GetValue<int>("Config", "MinPlayers");
+
+		bool isAllowed = GameRules != null && (!GameRules.WarmupPeriod || warmupStats) && (minPlayers <= notBots);
+
+		_statsAllowedCache = (isAllowed, DateTime.Now);
+		return isAllowed;
+	}
+
+	private HookResult OnBombPlanted(EventBombPlanted @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleBombPlanted(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnHostageRescued(EventHostageRescued @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleHostageRescued(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnHostageKilled(EventHostageKilled @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleHostageKilled(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnBombDefused(EventBombDefused @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleBombDefused(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleRoundEnd(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleWeaponFire(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnRoundMvp(EventRoundMvp @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleRoundMvp(@event);
+		return HookResult.Continue;
+	}
+
+	private HookResult OnCsWinPanelMatch(EventCsWinPanelMatch @event, GameEventInfo info)
+	{
+		if (!IsStatsAllowed()) return HookResult.Continue;
+		_eventManager?.HandleCsWinPanelMatch(@event);
+		return HookResult.Continue;
 	}
 
 	private void OnStatsCommand(CCSPlayerController? player, CommandInfo command)
@@ -439,44 +531,14 @@ public class Plugin : BasePlugin
 
 		if (_playerStats.TryGetValue(player.SteamID, out var stats))
 		{
-			List<MenuItem> items =
-			[
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {CalculateAccuracy(stats.ZenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kpr"]}:</font> {CalculateKPR(stats.ZenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kda"]}:</font> {CalculateKDA(stats.ZenithPlayer)}")),
-				new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kd"]}:</font> {CalculateKD(stats.ZenithPlayer)}")),
-			];
-
-			var statNames = new[]
+			if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
 			{
-				"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
-				"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
-				"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
-				"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
-				"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
-				"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
-				"RevengeKill", "AssistFlash"
-			};
-
-			foreach (var statName in statNames)
-			{
-				int value = stats.GetGlobalStat(statName);
-				if (value != 0)
-				{
-					string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
-					items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{localizedName}:</font> {value:N0}")));
-				}
+				ShowCenterStatsMenu(player, stats);
 			}
-
-			if (items.Count == 4) // Only the initial 4 items
+			else
 			{
-				items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
+				ShowChatStatsMenu(player, stats);
 			}
-
-			Menu?.ShowScrollableMenu(player, Localizer["k4.stats.title"], items, (buttons, menu, selected) =>
-			{
-				// No selection handle as all items are just for display
-			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 		}
 	}
 
@@ -493,6 +555,121 @@ public class Plugin : BasePlugin
 			return;
 		}
 
+		if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
+		{
+			ShowCenterWeaponStatsMenu(player, stats);
+		}
+		else
+		{
+			ShowChatWeaponStatsMenu(player, stats);
+		}
+	}
+
+	private void OnMapStatsCommand(CCSPlayerController? player, CommandInfo command)
+	{
+		if (player == null) return;
+
+		if (!_playerStats.TryGetValue(player.SteamID, out var stats))
+			return;
+
+		if (!_coreAccessor.GetValue<bool>("Config", "EnableMapStats"))
+		{
+			stats.ZenithPlayer.Print(Localizer["k4.stats.map-disabled"]);
+			return;
+		}
+
+		if (_coreAccessor.GetValue<bool>("Core", "CenterMenuMode"))
+		{
+			ShowCenterMapStats(player, stats);
+		}
+		else
+		{
+			ShowChatMapStats(player, stats);
+		}
+	}
+
+	private void ShowCenterStatsMenu(CCSPlayerController player, PlayerStats stats)
+	{
+		List<MenuItem> items =
+		[
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.accuracy"]}:</font> {CalculateAccuracy(stats.ZenithPlayer)}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kpr"]}:</font> {CalculateKPR(stats.ZenithPlayer)}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kda"]}:</font> {CalculateKDA(stats.ZenithPlayer)}")),
+			new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.kd"]}:</font> {CalculateKD(stats.ZenithPlayer)}")),
+		];
+
+		var statNames = new[]
+		{
+			"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
+			"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
+			"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
+			"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
+			"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
+			"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
+			"RevengeKill", "AssistFlash"
+		};
+
+		foreach (var statName in statNames)
+		{
+			int value = stats.GetGlobalStat(statName);
+			if (value != 0)
+			{
+				string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
+				items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{localizedName}:</font> {value:N0}")));
+			}
+		}
+
+		if (items.Count == 4) // Only the initial 4 items
+		{
+			items.Add(new MenuItem(MenuItemType.Text, new MenuValue($"<font color='#FF6666'>{Localizer["k4.stats.no_stats"]}</font>")));
+		}
+
+		Menu?.ShowScrollableMenu(player, Localizer["k4.stats.title"], items, (buttons, menu, selected) =>
+		{
+			// No selection handle as all items are just for display
+		}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
+	}
+
+	private void ShowChatStatsMenu(CCSPlayerController player, PlayerStats stats)
+	{
+		ChatMenu statsMenu = new ChatMenu(Localizer["k4.stats.title"]);
+
+		statsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.accuracy"]}{ChatColors.Default}: {CalculateAccuracy(stats.ZenithPlayer)}", (p, o) => { }, true);
+		statsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.kpr"]}{ChatColors.Default}: {CalculateKPR(stats.ZenithPlayer)}", (p, o) => { }, true);
+		statsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.kda"]}{ChatColors.Default}: {CalculateKDA(stats.ZenithPlayer)}", (p, o) => { }, true);
+		statsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.kd"]}{ChatColors.Default}: {CalculateKD(stats.ZenithPlayer)}", (p, o) => { }, true);
+
+		var statNames = new[]
+		{
+			"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
+			"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
+			"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
+			"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
+			"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
+			"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
+			"RevengeKill", "AssistFlash"
+		};
+
+		foreach (var statName in statNames)
+		{
+			int value = stats.GetGlobalStat(statName);
+			if (value != 0)
+			{
+				string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
+				statsMenu.AddMenuOption($"{ChatColors.Gold}{localizedName}{ChatColors.Default}: {value:N0}", (p, o) => { }, true);
+			}
+		}
+
+		if (statsMenu.MenuOptions.Count == 4) // Only the initial 4 items
+		{
+			statsMenu.AddMenuOption($"{ChatColors.LightRed}{Localizer["k4.stats.no_stats"]}", (p, o) => { }, true);
+		}
+
+		MenuManager.OpenChatMenu(player, statsMenu);
+	}
+
+	private void ShowCenterWeaponStatsMenu(CCSPlayerController player, PlayerStats stats)
+	{
 		List<MenuItem> items = [];
 		var defaultValues = new Dictionary<int, object>();
 		var weaponStatsMap = new Dictionary<int, string>();
@@ -522,29 +699,36 @@ public class Plugin : BasePlugin
 			{
 				if (stats.WeaponStats.TryGetValue(weaponKey, out var weaponStat))
 				{
-					ShowWeaponDetails(player, weaponStat);
+					ShowCenterWeaponDetails(player, weaponStat);
 				}
 			}
 		}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), 5, defaultValues, !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 	}
 
-	private void OnMapStatsCommand(CCSPlayerController? player, CommandInfo command)
+	private void ShowChatWeaponStatsMenu(CCSPlayerController player, PlayerStats stats)
 	{
-		if (player == null) return;
+		ChatMenu weaponStatsMenu = new ChatMenu(Localizer["k4.weaponstats.title"]);
 
-		if (!_playerStats.TryGetValue(player.SteamID, out var stats))
-			return;
-
-		if (!_coreAccessor.GetValue<bool>("Config", "EnableMapStats"))
+		foreach (var weaponStat in stats.WeaponStats)
 		{
-			stats.ZenithPlayer.Print(Localizer["k4.stats.map-disabled"]);
-			return;
+			if (string.IsNullOrEmpty(weaponStat.Key)) continue;
+
+			string weaponName = weaponStat.Key.ToUpper();
+			weaponStatsMenu.AddMenuOption($"{ChatColors.Gold}{weaponName}", (p, o) =>
+			{
+				ShowChatWeaponDetails(p, weaponStat.Value);
+			});
 		}
 
-		ShowMapStats(player, stats);
+		if (weaponStatsMenu.MenuOptions.Count == 0)
+		{
+			weaponStatsMenu.AddMenuOption($"{ChatColors.LightRed}{Localizer["k4.stats.no_stats"]}", (p, o) => { }, true);
+		}
+
+		MenuManager.OpenChatMenu(player, weaponStatsMenu);
 	}
 
-	private void ShowWeaponDetails(CCSPlayerController player, WeaponStats weaponStat)
+	private void ShowCenterWeaponDetails(CCSPlayerController player, WeaponStats weaponStat)
 	{
 		List<MenuItem> items =
 		[
@@ -565,7 +749,27 @@ public class Plugin : BasePlugin
 		Menu?.ShowScrollableMenu(player, weaponStat.Weapon.ToUpper(), items, (buttons, menu, selected) => { }, true, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 	}
 
-	private void ShowMapStats(CCSPlayerController player, PlayerStats playerStats)
+	private void ShowChatWeaponDetails(CCSPlayerController player, WeaponStats weaponStat)
+	{
+		ChatMenu detailsMenu = new ChatMenu(weaponStat.Weapon.ToUpper());
+
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.kills"]}{ChatColors.Default}: {weaponStat.Kills:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.shoots"]}{ChatColors.Default}: {weaponStat.Shots:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.hitsgiven"]}{ChatColors.Default}: {weaponStat.Hits:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.accuracy"]}{ChatColors.Default}: {(weaponStat.Shots > 0 ? Math.Min((float)weaponStat.Hits / weaponStat.Shots * 100, 100) : 0):F2}%", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.headshots"]}{ChatColors.Default}: {weaponStat.Headshots:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.chesthits"]}{ChatColors.Default}: {weaponStat.ChestHits:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.stomachhits"]}{ChatColors.Default}: {weaponStat.StomachHits:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.leftarmhits"]}{ChatColors.Default}: {weaponStat.LeftArmHits:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.rightarmhits"]}{ChatColors.Default}: {weaponStat.RightArmHits:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.leftleghits"]}{ChatColors.Default}: {weaponStat.LeftLegHits:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.rightleghits"]}{ChatColors.Default}: {weaponStat.RightLegHits:N0}", (p, o) => { }, true);
+		detailsMenu.AddMenuOption($"{ChatColors.Gold}{Localizer["k4.stats.neckhits"]}{ChatColors.Default}: {weaponStat.NeckHits:N0}", (p, o) => { }, true);
+
+		MenuManager.OpenChatMenu(player, detailsMenu);
+	}
+
+	private void ShowCenterMapStats(CCSPlayerController player, PlayerStats playerStats)
 	{
 		List<MenuItem> items = [];
 
@@ -601,74 +805,50 @@ public class Plugin : BasePlugin
 		}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 	}
 
+	private void ShowChatMapStats(CCSPlayerController player, PlayerStats playerStats)
+	{
+		ChatMenu mapStatsMenu = new ChatMenu(playerStats.CurrentMapStats.MapName.ToUpper());
+
+		var statNames = new[]
+		{
+			"Kills", "FirstBlood", "Deaths", "Assists", "Shoots", "HitsTaken", "HitsGiven",
+			"Headshots", "HeadHits", "ChestHits", "StomachHits", "LeftArmHits", "RightArmHits",
+			"LeftLegHits", "RightLegHits", "NeckHits", "GearHits", "Grenades", "MVP",
+			"RoundWin", "RoundLose", "GameWin", "GameLose", "RoundsOverall", "RoundsCT",
+			"RoundsT", "BombPlanted", "BombDefused", "HostageRescued", "HostageKilled",
+			"NoScopeKill", "PenetratedKill", "ThruSmokeKill", "FlashedKill", "DominatedKill",
+			"RevengeKill", "AssistFlash"
+		};
+
+		foreach (var statName in statNames)
+		{
+			int value = playerStats.GetMapStat(statName);
+			if (value != 0)
+			{
+				string localizedName = Localizer[$"k4.stats.{statName.ToLower()}"];
+				mapStatsMenu.AddMenuOption($"{ChatColors.Gold}{localizedName}{ChatColors.Default}: {value:N0}", (p, o) => { }, true);
+			}
+		}
+
+		if (mapStatsMenu.MenuOptions.Count == 0)
+		{
+			mapStatsMenu.AddMenuOption($"{ChatColors.LightRed}{Localizer["k4.stats.no_stats"]}", (p, o) => { }, true);
+		}
+
+		MenuManager.OpenChatMenu(player, mapStatsMenu);
+	}
+
 	public class EventManager
 	{
 		private readonly Plugin _plugin;
-		private bool FirstBlood = false;
+		public bool FirstBlood = false;
 
 		public EventManager(Plugin plugin)
 		{
 			_plugin = plugin;
 		}
 
-		public HookResult OnEventHappens<T>(T eventObj, GameEventInfo info) where T : GameEvent
-		{
-			if (!IsStatsAllowed())
-				return HookResult.Continue;
-
-			switch (eventObj)
-			{
-				case EventPlayerDeath e:
-					HandlePlayerDeath(e);
-					break;
-				case EventGrenadeThrown e:
-					HandleGrenadeThrown(e);
-					break;
-				case EventPlayerHurt e:
-					HandlePlayerHurt(e);
-					break;
-				case EventRoundStart:
-					FirstBlood = false;
-					break;
-				case EventBombPlanted e:
-					HandleBombPlanted(e);
-					break;
-				case EventHostageRescued e:
-					HandleHostageRescued(e);
-					break;
-				case EventHostageKilled e:
-					HandleHostageKilled(e);
-					break;
-				case EventBombDefused e:
-					HandleBombDefused(e);
-					break;
-				case EventRoundEnd e:
-					HandleRoundEnd(e);
-					break;
-				case EventWeaponFire e:
-					HandleWeaponFire(e);
-					break;
-				case EventRoundMvp e:
-					HandleRoundMvp(e);
-					break;
-				case EventCsWinPanelMatch e:
-					HandleCsWinPanelMatch(e);
-					break;
-			}
-
-			return HookResult.Continue;
-		}
-
-		private bool IsStatsAllowed()
-		{
-			int notBots = _plugin._playerStats.Count;
-			bool warmupStats = _plugin._coreAccessor.GetValue<bool>("Config", "WarmupStats");
-			int minPlayers = _plugin._coreAccessor.GetValue<int>("Config", "MinPlayers");
-
-			return _plugin.GameRules != null && (!_plugin.GameRules.WarmupPeriod || warmupStats) && (minPlayers <= notBots);
-		}
-
-		private void HandlePlayerDeath(EventPlayerDeath @event)
+		public void HandlePlayerDeath(EventPlayerDeath @event)
 		{
 			bool statsForBots = _plugin._coreAccessor.GetValue<bool>("Config", "StatsForBots");
 
@@ -716,13 +896,13 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleGrenadeThrown(EventGrenadeThrown @event)
+		public void HandleGrenadeThrown(EventGrenadeThrown @event)
 		{
 			if (@event.Userid != null && _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var stats))
 				stats.IncrementStat("Grenades");
 		}
 
-		private void HandlePlayerHurt(EventPlayerHurt @event)
+		public void HandlePlayerHurt(EventPlayerHurt @event)
 		{
 			var victim = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var victimPlayer) ? victimPlayer : null : null;
 			var attacker = @event.Attacker != null ? _plugin._playerStats.TryGetValue(@event.Attacker.SteamID, out var attackerPlayer) ? attackerPlayer : null : null;
@@ -733,31 +913,31 @@ public class Plugin : BasePlugin
 				attacker.AddWeaponHit(@event.Weapon, @event.Hitgroup);
 		}
 
-		private void HandleBombPlanted(EventBombPlanted @event)
+		public void HandleBombPlanted(EventBombPlanted @event)
 		{
 			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
 			player?.IncrementStat("BombPlanted");
 		}
 
-		private void HandleHostageRescued(EventHostageRescued @event)
+		public void HandleHostageRescued(EventHostageRescued @event)
 		{
 			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
 			player?.IncrementStat("HostageRescued");
 		}
 
-		private void HandleHostageKilled(EventHostageKilled @event)
+		public void HandleHostageKilled(EventHostageKilled @event)
 		{
 			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
 			player?.IncrementStat("HostageKilled");
 		}
 
-		private void HandleBombDefused(EventBombDefused @event)
+		public void HandleBombDefused(EventBombDefused @event)
 		{
 			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
 			player?.IncrementStat("BombDefused");
 		}
 
-		private void HandleRoundEnd(EventRoundEnd @event)
+		public void HandleRoundEnd(EventRoundEnd @event)
 		{
 			foreach (var playerStats in _plugin._playerStats.Values)
 			{
@@ -782,24 +962,21 @@ public class Plugin : BasePlugin
 			}
 		}
 
-		private void HandleWeaponFire(EventWeaponFire @event)
+		public void HandleWeaponFire(EventWeaponFire @event)
 		{
 			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
 			if (player != null && !@event.Weapon.Contains("knife") && !@event.Weapon.Contains("bayonet"))
 				player.AddWeaponShot(@event.Weapon);
 		}
 
-		private void HandleRoundMvp(EventRoundMvp @event)
+		public void HandleRoundMvp(EventRoundMvp @event)
 		{
 			var player = @event.Userid != null ? _plugin._playerStats.TryGetValue(@event.Userid.SteamID, out var playerStats) ? playerStats : null : null;
 			player?.IncrementStat("MVP");
 		}
 
-		private void HandleCsWinPanelMatch(EventCsWinPanelMatch @event)
+		public void HandleCsWinPanelMatch(EventCsWinPanelMatch @event)
 		{
-			if (!IsStatsAllowed())
-				return;
-
 			bool ffaMode = _plugin._coreAccessor.GetValue<bool>("Config", "FFAMode");
 			var players = new List<PlayerStats>();
 

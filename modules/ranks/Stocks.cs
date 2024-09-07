@@ -1,6 +1,7 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
+using CounterStrikeSharp.API.Modules.UserMessages;
 using ZenithAPI;
 
 namespace Zenith_Ranks;
@@ -13,7 +14,7 @@ public sealed partial class Plugin : BasePlugin
 	{
 		foreach (var player in Utilities.GetPlayers())
 		{
-			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+			if (player != null)
 			{
 				if (_playerCache.TryGetValue(player, out var zenithPlayer))
 				{
@@ -127,5 +128,60 @@ public sealed partial class Plugin : BasePlugin
 
 		double pointsRatio = Math.Clamp(victimPoints / (double)attackerPoints, minMultiplier, maxMultiplier);
 		return (int)Math.Round(pointsRatio * basePoints);
+	}
+
+	private readonly Dictionary<string, object> settingTickCache = new Dictionary<string, object>();
+	private readonly Dictionary<ulong, (int rankId, long points, DateTime lastUpdate)> playerRankCache = [];
+	private DateTime lastCacheUpdate = DateTime.MinValue;
+	private readonly TimeSpan cacheDuration = TimeSpan.FromSeconds(3);
+
+	public UserMessage? message;
+	private void UpdateScoreboards()
+	{
+		message ??= UserMessage.FromId(350);
+		message.Recipients.AddAllPlayers();
+		message.Send();
+
+		if ((DateTime.Now - lastCacheUpdate) >= cacheDuration)
+		{
+			UpdateSettingCache();
+			lastCacheUpdate = DateTime.Now;
+		}
+
+		if (!settingTickCache.TryGetValue("UseScoreboardRanks", out var useScoreboardRanks) || !(bool)useScoreboardRanks)
+			return;
+
+		int mode = (int)settingTickCache["ScoreboardMode"];
+		int rankMax = (int)settingTickCache["RankMax"];
+		int rankBase = (int)settingTickCache["RankBase"];
+		int rankMargin = (int)settingTickCache["RankMargin"];
+
+		foreach (var player in GetValidPlayers())
+		{
+			ulong steamID = player.SteamID;
+			if (playerRankCache.TryGetValue(steamID, out var cachedData) && (DateTime.Now - cachedData.lastUpdate) < cacheDuration)
+			{
+				SetCompetitiveRank(player, mode, cachedData.rankId, cachedData.points, rankMax, rankBase, rankMargin);
+			}
+			else
+			{
+				long currentPoints = player.GetStorage<long>("Points");
+				var (determinedRank, _) = DetermineRanks(currentPoints);
+				int rankId = determinedRank?.Id ?? 0;
+
+				playerRankCache[steamID] = (rankId, currentPoints, DateTime.Now);
+
+				SetCompetitiveRank(player, mode, rankId, currentPoints, rankMax, rankBase, rankMargin);
+			}
+		}
+	}
+
+	private void UpdateSettingCache()
+	{
+		settingTickCache["UseScoreboardRanks"] = _configAccessor.GetValue<bool>("Settings", "UseScoreboardRanks");
+		settingTickCache["ScoreboardMode"] = _configAccessor.GetValue<int>("Settings", "ScoreboardMode");
+		settingTickCache["RankMax"] = _configAccessor.GetValue<int>("Settings", "RankMax");
+		settingTickCache["RankBase"] = _configAccessor.GetValue<int>("Settings", "RankBase");
+		settingTickCache["RankMargin"] = _configAccessor.GetValue<int>("Settings", "RankMargin");
 	}
 }

@@ -1,4 +1,5 @@
 using CounterStrikeSharp.API.Core;
+using Microsoft.Extensions.Logging;
 using ZenithAPI;
 
 namespace Zenith
@@ -38,6 +39,7 @@ namespace Zenith
 			RegisterModuleConfig("Core", "CenterMessageTime", "The time in seconds for how long the center message is displayed by default.", 10, ConfigFlag.Global);
 			RegisterModuleConfig("Core", "CenterAlertTime", "The time in seconds for how long the center alert is displayed by default.", 5, ConfigFlag.Global);
 			RegisterModuleConfig("Core", "HookChatMessages", "Whether to hook chat messages to modify them.", true, ConfigFlag.Global);
+			RegisterModuleConfig("Core", "CenterMenuMode", "Enable to use CenterMenu, disable to use ChatMenu.", true, ConfigFlag.Global);
 			RegisterModuleConfig("Core", "ShowActivity", "Specifies how admin activity should be relayed to users (1: Show to non-admins, 2: Show admin names to non-admins, 4: Show to admins, 8: Show admin names to admins, 16: Always show admin names to root users (admins are @zenith/admin)). Default is 13 due to 1+4+8", 13, ConfigFlag.Global);
 
 			// Apply global settings

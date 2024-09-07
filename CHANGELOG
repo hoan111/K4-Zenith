@@ -1,5 +1,6 @@
 # 2024.09.05 - 1.0.13
 
+- feat: Added ChatMenu option to core config. Supported in stats, custom tags, core and bans
 - feat: Added validations to commands that should be executed only while dead
 - feat: Added optional punishment removal reason
 - feat: Added punishment status "warn_ban" to show warn limit bans
@@ -13,6 +14,10 @@
 - optimise: Country tags now cached to prevent checks on every x seconds
 - optimise: Modules wont request new PlayerService every single time, but reuse them
 - optimise: Created setting cache for OnTick setting usages
+- optimise: Stats and Ranks use now direct events instead of Reflections
+- optimise: Point and Stat check if allowed to gather is cached for 10 seconds, to lower the load
+- optimise: RevealAll UserMessage optimised a lot
+- upgrade: Remove type and other junks from config files
 - upgrade: Trimmed and remade config handler for better performance
 - upgrade: Settings loading use now library conversions, so removed type conversions and keys
 - upgrade: Database migration is now able to detect already applied migrations and skip them
@@ -21,6 +26,7 @@
 - upgrade: Added give command validation of ammo_grenade_limit_default, ammo_grenade_limit_flashbang, ammo_grenade_limit_total, ammo_item_limit_healthshot to prevent crashes
 - fix: Some extended commands was executible only while being alive wrongly
 - fix: CustomTags apply delay
+- fix: ConVar change printed the object instead of the name
 - fix: Give command didnt find the item properly
 - fix: Give command grenade give crashed on duplicated item
 - fix: Give command removed all other greandes on giving a new
@@ -33,6 +39,7 @@
 - fix: Punishment reasons broken after first space
 - fix: Database migration shown no changes were made even if it was and didnt change version
 - fix: Rare cases when database migration didnt go in order
+- fix: Dying and Assisting to bot with PointsForBots false modified points
 
 # 2024.09.04 - 1.0.12
 

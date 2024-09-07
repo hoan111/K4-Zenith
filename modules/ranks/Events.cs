@@ -76,77 +76,146 @@ namespace Zenith_Ranks
 		private void InitializeExperienceEvents()
 		{
 			_experienceEvents.Clear();
-			var events = new Dictionary<string, (string, int)>
-			{
-				{ "EventRoundMvp", ("Userid", _configAccessor.GetValue<int>("Points", "MVP")) },
-				{ "EventHostageRescued", ("Userid", _configAccessor.GetValue<int>("Points", "HostageRescue")) },
-				{ "EventBombDefused", ("Userid", _configAccessor.GetValue<int>("Points", "BombDefused")) },
-				{ "EventBombPlanted", ("Userid", _configAccessor.GetValue<int>("Points", "BombPlant")) },
-				{ "EventPlayerDeath", ("Userid", _configAccessor.GetValue<int>("Points", "Death")) },
-				{ "EventHostageKilled", ("Userid", _configAccessor.GetValue<int>("Points", "HostageKill")) },
-				{ "EventHostageHurt", ("Userid", _configAccessor.GetValue<int>("Points", "HostageHurt")) },
-				{ "EventBombPickup", ("Userid", _configAccessor.GetValue<int>("Points", "BombPickup")) },
-				{ "EventBombDropped", ("Userid", _configAccessor.GetValue<int>("Points", "BombDrop")) },
-				{ "EventBombExploded", ("Team", _configAccessor.GetValue<int>("Points", "BombExploded")) },
-				{ "EventHostageRescuedAll", ("Team", _configAccessor.GetValue<int>("Points", "HostageRescueAll")) },
-				{ "EventRoundEnd", ("winner", 0) }
-			};
 
-			foreach (var eventEntry in events)
-			{
-				_experienceEvents[eventEntry.Key] = eventEntry.Value;
-				RegisterMassEventHandler(eventEntry.Key);
-			}
+			RegisterEventHandler<EventRoundMvp>(OnRoundMvp, HookMode.Post);
+			RegisterEventHandler<EventHostageRescued>(OnHostageRescued, HookMode.Post);
+			RegisterEventHandler<EventBombDefused>(OnBombDefused, HookMode.Post);
+			RegisterEventHandler<EventBombPlanted>(OnBombPlanted, HookMode.Post);
+			RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath, HookMode.Post);
+			RegisterEventHandler<EventHostageKilled>(OnHostageKilled, HookMode.Post);
+			RegisterEventHandler<EventHostageHurt>(OnHostageHurt, HookMode.Post);
+			RegisterEventHandler<EventBombPickup>(OnBombPickup, HookMode.Post);
+			RegisterEventHandler<EventBombDropped>(OnBombDropped, HookMode.Post);
+			RegisterEventHandler<EventBombExploded>(OnBombExploded, HookMode.Post);
+			RegisterEventHandler<EventHostageRescuedAll>(OnHostageRescuedAll, HookMode.Post);
+			RegisterEventHandler<EventRoundEnd>(OnRoundEnd, HookMode.Post);
 		}
 
-		private readonly Dictionary<string, object> settingTickCache = new Dictionary<string, object>();
-		private DateTime lastCacheUpdate = DateTime.MinValue;
-		private readonly TimeSpan cacheDuration = TimeSpan.FromSeconds(10);
-
-		private void UpdateScoreboards()
+		private HookResult OnRoundMvp(EventRoundMvp @event, GameEventInfo info)
 		{
-			if ((DateTime.Now - lastCacheUpdate) >= cacheDuration)
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "MVP", "k4.events.roundmvp");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnHostageRescued(EventHostageRescued @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "HostageRescue", "k4.events.hostagerescued");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnBombDefused(EventBombDefused @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "BombDefused", "k4.events.bombdefused");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnBombPlanted(EventBombPlanted @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "BombPlant", "k4.events.bombplanted");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnHostageKilled(EventHostageKilled @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "HostageKill", "k4.events.hostagekilled");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnHostageHurt(EventHostageHurt @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "HostageHurt", "k4.events.hostagehurt");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnBombPickup(EventBombPickup @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "BombPickup", "k4.events.bombpickup");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnBombDropped(EventBombDropped @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyPlayerPointsForEvent(@event.Userid, "BombDrop", "k4.events.bombdropped");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnBombExploded(EventBombExploded @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyTeamPointsForEvent(CsTeam.Terrorist, "BombExploded", "k4.events.bombexploded");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnHostageRescuedAll(EventHostageRescuedAll @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			ModifyTeamPointsForEvent(CsTeam.CounterTerrorist, "HostageRescueAll", "k4.events.hostagerescuedall");
+			return HookResult.Continue;
+		}
+
+		private HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
+		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+			_eventManager?.HandlePlayerDeathEvent(@event);
+			return HookResult.Continue;
+		}
+
+		private (bool shouldProcess, DateTime lastCheck) _shouldProcessEventCache = (false, DateTime.MinValue);
+		private const int CACHE_UPDATE_INTERVAL_SECONDS = 10;
+
+		private bool ShouldProcessEvent()
+		{
+			if ((DateTime.Now - _shouldProcessEventCache.lastCheck).TotalSeconds < CACHE_UPDATE_INTERVAL_SECONDS)
 			{
-				UpdateSettingCache();
-				lastCacheUpdate = DateTime.Now;
+				return _shouldProcessEventCache.shouldProcess;
 			}
 
-			if (!settingTickCache.TryGetValue("UseScoreboardRanks", out var useScoreboardRanks) || !(bool)useScoreboardRanks)
+			int minPlayers = _configAccessor.GetValue<int>("Settings", "MinPlayers");
+			bool warmupPoints = _configAccessor.GetValue<bool>("Settings", "WarmupPoints");
+
+			bool shouldProcess = minPlayers <= _playerCache.Count &&
+								 (warmupPoints || GameRules?.WarmupPeriod != true);
+
+			_shouldProcessEventCache = (shouldProcess, DateTime.Now);
+			return shouldProcess;
+		}
+
+		private void ModifyPlayerPointsForEvent(CCSPlayerController? player, string pointsKey, string eventKey)
+		{
+			if (player == null)
 				return;
 
-			int mode = (int)settingTickCache["ScoreboardMode"];
-			int rankMax = (int)settingTickCache["RankMax"];
-			int rankBase = (int)settingTickCache["RankBase"];
-			int rankMargin = (int)settingTickCache["RankMargin"];
-
-			foreach (var player in GetValidPlayers())
+			if (_playerCache.TryGetValue(player, out var playerServices))
 			{
-				long currentPoints = player.GetStorage<long>("Points");
-				var (determinedRank, _) = DetermineRanks(currentPoints);
-				int rankId = determinedRank?.Id ?? 0;
-
-				player.Controller.CompetitiveWins = 10;
-				SetCompetitiveRank(player, mode, rankId, currentPoints, rankMax, rankBase, rankMargin);
-
-				Utilities.SetStateChanged(player.Controller, "CCSPlayerController", "m_iCompetitiveRankType");
-
-				var message = UserMessage.FromPartialName("ServerRankRevealAll");
-				message.Recipients.Add(player.Controller);
-				message.Send();
+				int points = _configAccessor.GetValue<int>("Points", pointsKey);
+				ModifyPlayerPoints(playerServices, points, eventKey);
 			}
 		}
 
-		private void UpdateSettingCache()
+		private void ModifyTeamPointsForEvent(CsTeam team, string pointsKey, string eventKey)
 		{
-			settingTickCache["UseScoreboardRanks"] = _configAccessor.GetValue<bool>("Settings", "UseScoreboardRanks");
-			settingTickCache["ScoreboardMode"] = _configAccessor.GetValue<int>("Settings", "ScoreboardMode");
-			settingTickCache["RankMax"] = _configAccessor.GetValue<int>("Settings", "RankMax");
-			settingTickCache["RankBase"] = _configAccessor.GetValue<int>("Settings", "RankBase");
-			settingTickCache["RankMargin"] = _configAccessor.GetValue<int>("Settings", "RankMargin");
+			int points = _configAccessor.GetValue<int>("Points", pointsKey);
+			foreach (var player in GetValidPlayers())
+			{
+				if (player.Controller.Team == team)
+				{
+					ModifyPlayerPoints(player, points, eventKey);
+				}
+			}
 		}
 
 		private static void SetCompetitiveRank(IPlayerServices player, int mode, int rankId, long currentPoints, int rankMax, int rankBase, int rankMargin)
 		{
+			player.Controller.CompetitiveWins = 10;
+
 			switch (mode)
 			{
 				case 1:
@@ -168,28 +237,8 @@ namespace Zenith_Ranks
 					player.Controller.CompetitiveRanking = rank;
 					break;
 			}
-		}
 
-		private void RegisterMassEventHandler(string eventName)
-		{
-			try
-			{
-				Type? eventType = Type.GetType($"CounterStrikeSharp.API.Core.{eventName}, CounterStrikeSharp.API");
-				if (eventType != null && typeof(GameEvent).IsAssignableFrom(eventType))
-				{
-					var methodInfo = typeof(EventManager).GetMethod(nameof(EventManager.OnEventHappens))?.MakeGenericMethod(eventType);
-					var handlerDelegate = methodInfo != null ? Delegate.CreateDelegate(typeof(GameEventHandler<>).MakeGenericType(eventType), _eventManager, methodInfo) : null;
-					if (handlerDelegate != null)
-					{
-						var registerMethod = typeof(BasePlugin).GetMethod(nameof(RegisterEventHandler))?.MakeGenericMethod(eventType);
-						registerMethod?.Invoke(this, [handlerDelegate, HookMode.Post]);
-					}
-				}
-			}
-			catch (Exception ex)
-			{
-				Logger.LogError(ex, "Failed to register event handler for {0}.", eventName);
-			}
+			Utilities.SetStateChanged(player.Controller, "CCSPlayerController", "m_iCompetitiveRankType");
 		}
 
 		private void HandlePlayerSpawn(CCSPlayerController? player)
@@ -236,58 +285,7 @@ namespace Zenith_Ranks
 				};
 			}
 
-			public HookResult OnEventHappens<T>(T gameEvent, GameEventInfo info) where T : GameEvent
-			{
-				if (_plugin._configAccessor.GetValue<int>("Settings", "MinPlayers") > _plugin._playerCache.Count)
-					return HookResult.Continue;
-
-				if (!_plugin._configAccessor.GetValue<bool>("Settings", "WarmupPoints") && _plugin.GameRules?.WarmupPeriod == true)
-					return HookResult.Continue;
-
-				if (_plugin._experienceEvents.TryGetValue(typeof(T).Name, out var eventInfo))
-				{
-					HandleEvent(typeof(T).Name, gameEvent, eventInfo.points);
-				}
-
-				return HookResult.Continue;
-			}
-
-			private void HandleEvent<T>(string eventName, T gameEvent, int points) where T : GameEvent
-			{
-				switch (eventName)
-				{
-					case "EventRoundEnd":
-						HandleRoundEndEvent(gameEvent as EventRoundEnd);
-						break;
-					case "EventPlayerDeath":
-						HandlePlayerDeathEvent(gameEvent as EventPlayerDeath);
-						break;
-					default:
-						HandleRegularEvent(eventName, _plugin._experienceEvents[eventName].targetProperty, gameEvent, points);
-						break;
-				}
-			}
-
-			private void HandleRoundEndEvent(EventRoundEnd? roundEndEvent)
-			{
-				if (roundEndEvent == null) return;
-
-				foreach (var player in _plugin.GetValidPlayers())
-				{
-					if (_plugin._playerSpawned.Contains(player.Controller))
-						continue;
-
-					int teamNum = player.Controller.TeamNum;
-					if (teamNum <= (int)CsTeam.Spectator)
-						continue;
-
-					bool isWinner = teamNum == roundEndEvent.Winner;
-					int points = isWinner ? _plugin._configAccessor.GetValue<int>("Points", "RoundWin") : _plugin._configAccessor.GetValue<int>("Points", "RoundLose");
-					_plugin.ModifyPlayerPoints(player, points, isWinner ? "k4.events.roundwin" : "k4.events.roundlose");
-				}
-			}
-
-			private void HandlePlayerDeathEvent(EventPlayerDeath? deathEvent)
+			public void HandlePlayerDeathEvent(EventPlayerDeath? deathEvent)
 			{
 				if (deathEvent == null) return;
 
@@ -320,7 +318,7 @@ namespace Zenith_Ranks
 				}
 				else
 				{
-					if (!_plugin._configAccessor.GetValue<bool>("Settings", "PointsForBots") && deathEvent.Userid?.IsBot == true)
+					if (!_plugin._configAccessor.GetValue<bool>("Settings", "PointsForBots") && deathEvent.Attacker?.IsBot == true)
 						return;
 
 					string? eventInfo = attacker != null && _plugin._configAccessor.GetValue<bool>("Settings", "ExtendedDeathMessages")
@@ -447,6 +445,9 @@ namespace Zenith_Ranks
 
 			private void HandleAssisterEvent(IPlayerServices assister, IPlayerServices? attacker, IPlayerServices? victim, EventPlayerDeath deathEvent)
 			{
+				if (!_plugin._configAccessor.GetValue<bool>("Settings", "PointsForBots") && deathEvent.Userid?.IsBot == true)
+					return;
+
 				if (!_plugin._configAccessor.GetValue<bool>("Settings", "FFAMode") && attacker?.Controller.Team == deathEvent.Userid?.Team && assister.Controller.Team == deathEvent.Userid?.Team)
 				{
 					_plugin.ModifyPlayerPoints(assister, _plugin._configAccessor.GetValue<int>("Points", "TeamKillAssist"), "k4.events.teamkillassist");
@@ -465,45 +466,6 @@ namespace Zenith_Ranks
 					if (deathEvent.Assistedflash)
 					{
 						_plugin.ModifyPlayerPoints(assister, _plugin._configAccessor.GetValue<int>("Points", "AssistFlash"), "k4.events.assistflash");
-					}
-				}
-			}
-
-			private void HandleRegularEvent<T>(string eventName, string targetProperty, T gameEvent, int points) where T : GameEvent
-			{
-				var targetProp = typeof(T).GetProperty(targetProperty);
-				if (targetProp != null)
-				{
-					var targetValue = targetProp.GetValue(gameEvent) as CCSPlayerController;
-					if (targetValue != null && _plugin._playerCache.TryGetValue(targetValue, out var player))
-					{
-						string eventKey = $"k4.events.{eventName.ToLower().Replace("event", "")}";
-						_plugin.ModifyPlayerPoints(player, points, eventKey);
-					}
-					else if (targetProperty == "Team")
-					{
-						RewardTeamPoints(eventName, points);
-					}
-				}
-			}
-
-			private void RewardTeamPoints(string eventName, int points)
-			{
-				var eventTeams = new Dictionary<string, CsTeam>
-				{
-					{ "EventBombExploded", CsTeam.Terrorist },
-					{ "EventHostageRescuedAll", CsTeam.CounterTerrorist }
-				};
-
-				if (eventTeams.TryGetValue(eventName, out CsTeam team))
-				{
-					foreach (var player in _plugin.GetValidPlayers())
-					{
-						if (player.Controller.Team == team)
-						{
-							string eventKey = $"k4.events.{eventName.ToLower().Replace("event", "")}";
-							_plugin.ModifyPlayerPoints(player, points, eventKey);
-						}
 					}
 				}
 			}

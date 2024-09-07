@@ -141,7 +141,7 @@ namespace Zenith
 				NotifyFilter = NotifyFilters.LastWrite,
 				Filter = "*.yaml",
 				IncludeSubdirectories = true,
-				EnableRaisingEvents = GlobalAutoReloadEnabled
+				EnableRaisingEvents = true
 			};
 
 			_watcher.Changed += OnConfigFileChanged;
@@ -195,7 +195,30 @@ namespace Zenith
 				return;
 
 			var newConfig = LoadModuleConfig(moduleName);
-			_moduleConfigs[moduleName] = newConfig;
+
+			if (_moduleConfigs.TryGetValue(moduleName, out var existingConfig))
+			{
+				foreach (var group in newConfig.Groups)
+				{
+					var existingGroup = existingConfig.Groups.GetOrAdd(group.Key, new ConfigGroup { Name = group.Value.Name });
+
+					foreach (var item in group.Value.Items)
+					{
+						if (existingGroup.Items.TryGetValue(item.Key, out var existingItem))
+						{
+							existingItem.CurrentValue = item.Value.CurrentValue ?? existingItem.CurrentValue;
+						}
+						else
+						{
+							existingGroup.Items[item.Key] = item.Value;
+						}
+					}
+				}
+			}
+			else
+			{
+				_moduleConfigs[moduleName] = newConfig;
+			}
 
 			if (!force)
 				Logger.LogInformation($"Config reloaded for module {moduleName}");
@@ -299,6 +322,12 @@ namespace Zenith
 					{
 						var stringList = objectList.Select(o => o.ToString() ?? string.Empty).ToList();
 						return (true, (T)(object)stringList);
+					}
+
+					if (typeof(T) == typeof(List<int>) && configItem.CurrentValue is List<object> intObjectList)
+					{
+						var intList = intObjectList.Select(o => Convert.ToInt32(o)).ToList();
+						return (true, (T)(object)intList);
 					}
 
 					return (true, (T)Convert.ChangeType(configItem.CurrentValue, typeof(T)));
@@ -478,32 +507,6 @@ namespace Zenith
 					}
 				}
 			}
-		}
-
-		private static bool IsPrimitiveType(Type type)
-		{
-			if (type.IsPrimitive || type == typeof(string) || type == typeof(decimal))
-			{
-				return true;
-			}
-
-			var nullableType = Nullable.GetUnderlyingType(type);
-			if (nullableType != null)
-			{
-				return IsPrimitiveType(nullableType);
-			}
-
-			if (type.IsEnum)
-			{
-				return true;
-			}
-
-			if (type == typeof(DateTime) || type == typeof(TimeSpan) || type == typeof(Guid))
-			{
-				return true;
-			}
-
-			return false;
 		}
 	}
 }

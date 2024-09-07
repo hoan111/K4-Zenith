@@ -64,7 +64,7 @@ You can enhance your server with additional features and elevate its standards b
 -**Zenith Custom Tags**: Enhance your server's chat experience with Zenith Custom Tags. This module gives players custom chat colors, ranks, clantags, and chat colors based on permissions or SteamID formats. Customize the chat environment for your community.
 
 > [!WARNING]
-> Do not install ⚠️ marked modules, if you are using SimpleAdmin or any similar plugin system.
+> Do not install ⚠️ marked modules, if you are using SimpleAdmin or any similar system. This is because the the modules does the same as SimpleAdmin and can cause conflicts.
 
 <!-- INSTALLATION -->
 
