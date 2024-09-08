@@ -553,7 +553,7 @@ public sealed partial class Player
 		}
 	}
 
-	public static void LoadAllOnlinePlayerDataWithSingleQuery(Plugin plugin, bool blockEvent = false)
+	public static void LoadAllOnlinePlayerDataWithSingleQuery(Plugin plugin)
 	{
 		string tablePrefix = plugin.Database.TablePrefix;
 		var steamIds = new List<string>();
@@ -561,7 +561,7 @@ public sealed partial class Player
 
 		foreach (var player in Utilities.GetPlayers())
 		{
-			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
+			if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV && !List.Values.Any(p => p.SteamID.ToString() == player.SteamID.ToString()))
 			{
 				steamIds.Add(player.SteamID.ToString());
 				playerList.Add(player);
@@ -606,8 +606,7 @@ public sealed partial class Player
 
 						LoadPlayerDataFromResult(player, result, plugin);
 
-						if (!blockEvent)
-							plugin._moduleServices?.InvokeZenithPlayerLoaded(player.Controller!);
+						plugin._moduleServices?.InvokeZenithPlayerLoaded(player.Controller!);
 					}
 				});
 			});
@@ -826,23 +825,6 @@ public sealed partial class Player
 		}
 
 		ApplyDefaultValues(defaults, targetDict);
-	}
-
-	public static void DisposeModuleData(Plugin plugin, string callerPlugin)
-	{
-		_ = Task.Run(async () =>
-		{
-			await SaveAllOnlinePlayerDataWithTransaction(plugin);
-
-			foreach (var player in List.Values)
-			{
-				player.Settings.TryRemove(callerPlugin, out _);
-				player.Storage.TryRemove(callerPlugin, out _);
-			}
-
-			moduleDefaultSettings.TryRemove(callerPlugin, out _);
-			moduleDefaultStorage.TryRemove(callerPlugin, out _);
-		});
 	}
 
 	public static void Dispose(Plugin plugin)

@@ -94,53 +94,6 @@ public class Plugin : BasePlugin
 
 		_moduleServices.RegisterModuleCommands(_coreAccessor.GetValue<List<string>>("Config", "PlaytimeCommands"), "Show the playtime informations.", OnPlaytimeCommand, CommandUsage.CLIENT_ONLY);
 
-		_moduleServices.RegisterModuleCommand("profiling", "Test cmd", (p, c) =>
-		{
-			if (p == null || !_playerTimes.TryGetValue(p, out var playerData)) return;
-
-			var zenithPlayer = playerData.Zenith;
-
-			// Profiling
-			PerformanceProfiler.ProfileNonGenericFunction<IPlayerServices>(
-				zenithPlayer,
-				nameof(IPlayerServices.Print),
-				["Test message"],
-				100 // iterations
-			);
-
-			// Profiling GetStorage<double>
-			PerformanceProfiler.ProfileGenericFunction<IPlayerServices, double>(
-				zenithPlayer,
-				nameof(IPlayerServices.GetStorage),
-				["TotalPlaytime"],
-				100000 // iterations
-			);
-
-			// Profiling SetStorage
-			PerformanceProfiler.ProfileNonGenericFunction<IPlayerServices>(
-				zenithPlayer,
-				nameof(IPlayerServices.SetStorage),
-				["TotalPlaytime", 123.45, false],
-				100000 // iterations
-			);
-
-			// Profiling ConfigAccessor GET
-			PerformanceProfiler.ProfileGenericFunction<IModuleConfigAccessor, int>(
-				_coreAccessor,
-				nameof(IModuleConfigAccessor.GetValue),
-				["Config", "NotificationInterval"],
-				100000 // iterations
-			);
-
-			// Profiling ConfigAccessor SET
-			PerformanceProfiler.ProfileNonGenericFunction<IModuleConfigAccessor>(
-				_coreAccessor,
-				nameof(IModuleConfigAccessor.SetValue),
-				["Config", "NotificationInterval", 123],
-				100000 // iterations
-			);
-		}, CommandUsage.CLIENT_ONLY, permission: "@zenith/root");
-
 		if (hotReload)
 		{
 			_moduleServices.LoadAllOnlinePlayerData();

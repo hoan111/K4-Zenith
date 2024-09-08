@@ -5,14 +5,12 @@ using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Utils;
 using ZenithAPI;
-using CounterStrikeSharp.API.Modules.Events;
 using Menu;
 using Menu.Enums;
 using MySqlConnector;
 using Dapper;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 using CounterStrikeSharp.API.Modules.Menu;
 
 namespace Zenith_Stats;

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Commands;
 using CounterStrikeSharp.API.Modules.Admin;
@@ -36,7 +35,7 @@ namespace Zenith
 			RegisterNewCommand(command, description, handler, usage, argCount, helpText, permission, callingPlugin);
 		}
 
-		private string EnsureCommandPrefix(string command) => command.StartsWith("css_") ? command : "css_" + command;
+		private static string EnsureCommandPrefix(string command) => command.StartsWith("css_") ? command : "css_" + command;
 
 		private (string Plugin, CommandDefinition Command)? FindExistingCommand(string command)
 		{

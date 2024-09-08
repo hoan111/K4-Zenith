@@ -258,7 +258,6 @@ namespace Zenith_Ranks
 		public class EventManager
 		{
 			private readonly Plugin _plugin;
-			private readonly Dictionary<ulong, (int killStreak, long lastKillTime)> _playerKillStreaks = new();
 			private readonly Dictionary<int, int> _killStreakPoints;
 
 			public EventManager(Plugin plugin)
@@ -405,42 +404,38 @@ namespace Zenith_Ranks
 					_plugin.ModifyPlayerPoints(attacker, _plugin._configAccessor.GetValue<int>("Points", "TaserKill"), "k4.events.taserkill");
 			}
 
-			private void HandleKillStreak(IPlayerServices attacker)
+			public void HandleKillStreak(IPlayerServices attacker)
 			{
-				ulong steamId = attacker.Controller.SteamID;
+				var playerData = _plugin.GetOrUpdatePlayerRankInfo(attacker);
 				long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-				if (!_playerKillStreaks.TryGetValue(steamId, out var streakInfo))
-				{
-					_playerKillStreaks[steamId] = (1, currentTime);
-					return;
-				}
-
-				int killStreak = streakInfo.killStreak;
-				long lastKillTime = streakInfo.lastKillTime;
-
-				int timeBetweenKills = _plugin._configAccessor.GetValue<int>("Points", "SecondsBetweenKills");
-				bool isValidStreak = timeBetweenKills <= 0 || (currentTime - lastKillTime <= timeBetweenKills);
+				int timeBetweenKills = _plugin.GetCachedConfigValue<int>("Points", "SecondsBetweenKills");
+				bool isValidStreak = timeBetweenKills <= 0 || (currentTime - playerData.KillStreak.LastKillTime <= timeBetweenKills);
 
 				if (isValidStreak)
 				{
-					killStreak++;
-					_playerKillStreaks[steamId] = (killStreak, currentTime);
+					playerData.KillStreak.KillCount++;
+					playerData.KillStreak.LastKillTime = currentTime;
 
-					if (_killStreakPoints.TryGetValue(killStreak, out int streakPoints) && streakPoints != 0)
+					string streakKey = $"Points:KillStreak{playerData.KillStreak.KillCount}";
+					if (_plugin._configCache.TryGetValue(streakKey, out var streakPoints) && (int)streakPoints != 0)
 					{
-						_plugin.ModifyPlayerPoints(attacker, streakPoints, $"k4.events.killstreak{killStreak}");
+						_plugin.ModifyPlayerPoints(attacker, (int)streakPoints, $"k4.events.killstreak{playerData.KillStreak.KillCount}");
 					}
 				}
 				else
 				{
-					_playerKillStreaks[steamId] = (1, currentTime);
+					playerData.KillStreak.KillCount = 1;
+					playerData.KillStreak.LastKillTime = currentTime;
 				}
 			}
 
-			private void ResetKillStreak(IPlayerServices player)
+			public void ResetKillStreak(IPlayerServices player)
 			{
-				_playerKillStreaks.Remove(player.Controller.SteamID);
+				if (_plugin._playerRankCache.TryGetValue(player.SteamID, out var playerData))
+				{
+					playerData.KillStreak = new KillStreakInfo();
+				}
 			}
 
 			private void HandleAssisterEvent(IPlayerServices assister, IPlayerServices? attacker, IPlayerServices? victim, EventPlayerDeath deathEvent)

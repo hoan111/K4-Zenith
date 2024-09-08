@@ -8,7 +8,9 @@ namespace Zenith_Ranks;
 
 public sealed partial class Plugin : BasePlugin
 {
-	private readonly Dictionary<CCSPlayerController, int> _roundPoints = new();
+	private readonly Dictionary<ulong, PlayerRankInfo> _playerRankCache = [];
+	private readonly TimeSpan _cacheCleanupInterval = TimeSpan.FromSeconds(3);
+	private readonly Dictionary<CCSPlayerController, int> _roundPoints = [];
 
 	public IEnumerable<IPlayerServices> GetValidPlayers()
 	{
@@ -28,24 +30,26 @@ public sealed partial class Plugin : BasePlugin
 	{
 		if (points == 0) return;
 
-		long currentPoints = player.GetStorage<long>("Points");
-		long newPoints = Math.Max(0, currentPoints + points);
+		var playerData = GetOrUpdatePlayerRankInfo(player);
+		long newPoints = Math.Max(0, playerData.Points + points);
 
-		if (points > 0 && _configAccessor.GetValue<List<string>>("Settings", "VIPFlags").Any(f => AdminManager.PlayerHasPermissions(player.Controller, f)))
+		if (points > 0 && GetCachedConfigValue<List<string>>("Settings", "VIPFlags").Any(f => AdminManager.PlayerHasPermissions(player.Controller, f)))
 		{
-			points = (int)(points * (decimal)_configAccessor.GetValue<double>("Settings", "VipMultiplier"));
+			points = (int)(points * (decimal)GetCachedConfigValue<double>("Settings", "VipMultiplier"));
 		}
 
 		player.SetStorage("Points", newPoints);
+		playerData.Points = newPoints;
+		playerData.LastUpdate = DateTime.Now;
 
-		if (_configAccessor.GetValue<bool>("Settings", "ScoreboardScoreSync"))
+		if (GetCachedConfigValue<bool>("Settings", "ScoreboardScoreSync"))
 		{
 			player.Controller.Score = (int)newPoints;
 		}
 
-		UpdatePlayerRank(player, newPoints);
+		UpdatePlayerRank(player, playerData, newPoints);
 
-		if (_configAccessor.GetValue<bool>("Settings", "PointSummaries") || !player.GetSetting<bool>("ShowRankChanges"))
+		if (GetCachedConfigValue<bool>("Settings", "PointSummaries") || !player.GetSetting<bool>("ShowRankChanges"))
 		{
 			_roundPoints[player.Controller] = _roundPoints.TryGetValue(player.Controller, out int existingPoints) ? existingPoints + points : points;
 		}
@@ -56,19 +60,16 @@ public sealed partial class Plugin : BasePlugin
 		}
 	}
 
-	private void UpdatePlayerRank(IPlayerServices player, long points)
+	private void UpdatePlayerRank(IPlayerServices player, PlayerRankInfo playerData, long points)
 	{
-		long currentPoints = player.GetStorage<long>("Points");
-
-		var (currentRank, _) = DetermineRanks(currentPoints);
 		var (determinedRank, _) = DetermineRanks(points);
 
-		if (determinedRank?.Id != currentRank?.Id)
+		if (determinedRank?.Id != playerData.Rank?.Id)
 		{
 			string newRankName = determinedRank?.Name ?? Localizer["k4.phrases.rank.none"];
 			player.SetStorage("Rank", newRankName);
 
-			bool isRankUp = currentRank is null || CompareRanks(determinedRank, currentRank) > 0;
+			bool isRankUp = playerData.Rank is null || CompareRanks(determinedRank, playerData.Rank) > 0;
 			string messageKey = isRankUp ? "k4.phrases.rankup" : "k4.phrases.rankdown";
 			string colorCode = isRankUp ? "#00FF00" : "#FF0000";
 			string rankName = newRankName;
@@ -89,6 +90,25 @@ public sealed partial class Plugin : BasePlugin
 		if (rank2 == null) return 1;
 
 		return rank1.Point.CompareTo(rank2.Point);
+	}
+
+	private PlayerRankInfo GetOrUpdatePlayerRankInfo(IPlayerServices player)
+	{
+		if (!_playerRankCache.TryGetValue(player.SteamID, out var rankInfo) ||
+			(DateTime.Now - rankInfo.LastUpdate) >= _cacheCleanupInterval)
+		{
+			long currentPoints = player.GetStorage<long>("Points");
+			var (determinedRank, nextRank) = DetermineRanks(currentPoints);
+			rankInfo = new PlayerRankInfo
+			{
+				Rank = determinedRank,
+				NextRank = nextRank,
+				Points = currentPoints,
+				LastUpdate = DateTime.Now
+			};
+			_playerRankCache[player.SteamID] = rankInfo;
+		}
+		return rankInfo;
 	}
 
 	private (Rank? CurrentRank, Rank? NextRank) DetermineRanks(long points)
@@ -130,58 +150,30 @@ public sealed partial class Plugin : BasePlugin
 		return (int)Math.Round(pointsRatio * basePoints);
 	}
 
-	private readonly Dictionary<string, object> settingTickCache = new Dictionary<string, object>();
-	private readonly Dictionary<ulong, (int rankId, long points, DateTime lastUpdate)> playerRankCache = [];
-	private DateTime lastCacheUpdate = DateTime.MinValue;
-	private readonly TimeSpan cacheDuration = TimeSpan.FromSeconds(3);
-
-	public UserMessage? message;
+	private static readonly int _tickShouldSkip = 3;
+	private int _tickCounter = _tickShouldSkip;
 	private void UpdateScoreboards()
 	{
-		message ??= UserMessage.FromId(350);
-		message.Recipients.AddAllPlayers();
-		message.Send();
+		_tickCounter++;
 
-		if ((DateTime.Now - lastCacheUpdate) >= cacheDuration)
-		{
-			UpdateSettingCache();
-			lastCacheUpdate = DateTime.Now;
-		}
-
-		if (!settingTickCache.TryGetValue("UseScoreboardRanks", out var useScoreboardRanks) || !(bool)useScoreboardRanks)
+		if (_tickCounter < _tickShouldSkip)
 			return;
 
-		int mode = (int)settingTickCache["ScoreboardMode"];
-		int rankMax = (int)settingTickCache["RankMax"];
-		int rankBase = (int)settingTickCache["RankBase"];
-		int rankMargin = (int)settingTickCache["RankMargin"];
+		_tickCounter = 0;
+
+		if (!GetCachedConfigValue<bool>("Settings", "UseScoreboardRanks"))
+			return;
+
+		int mode = GetCachedConfigValue<int>("Settings", "ScoreboardMode");
+		int rankMax = GetCachedConfigValue<int>("Settings", "RankMax");
+		int rankBase = GetCachedConfigValue<int>("Settings", "RankBase");
+		int rankMargin = GetCachedConfigValue<int>("Settings", "RankMargin");
 
 		foreach (var player in GetValidPlayers())
 		{
-			ulong steamID = player.SteamID;
-			if (playerRankCache.TryGetValue(steamID, out var cachedData) && (DateTime.Now - cachedData.lastUpdate) < cacheDuration)
-			{
-				SetCompetitiveRank(player, mode, cachedData.rankId, cachedData.points, rankMax, rankBase, rankMargin);
-			}
-			else
-			{
-				long currentPoints = player.GetStorage<long>("Points");
-				var (determinedRank, _) = DetermineRanks(currentPoints);
-				int rankId = determinedRank?.Id ?? 0;
-
-				playerRankCache[steamID] = (rankId, currentPoints, DateTime.Now);
-
-				SetCompetitiveRank(player, mode, rankId, currentPoints, rankMax, rankBase, rankMargin);
-			}
+			var playerData = GetOrUpdatePlayerRankInfo(player);
+			SetCompetitiveRank(player, mode, playerData.Rank?.Id ?? 0, playerData.Points, rankMax, rankBase, rankMargin);
 		}
-	}
 
-	private void UpdateSettingCache()
-	{
-		settingTickCache["UseScoreboardRanks"] = _configAccessor.GetValue<bool>("Settings", "UseScoreboardRanks");
-		settingTickCache["ScoreboardMode"] = _configAccessor.GetValue<int>("Settings", "ScoreboardMode");
-		settingTickCache["RankMax"] = _configAccessor.GetValue<int>("Settings", "RankMax");
-		settingTickCache["RankBase"] = _configAccessor.GetValue<int>("Settings", "RankBase");
-		settingTickCache["RankMargin"] = _configAccessor.GetValue<int>("Settings", "RankMargin");
 	}
 }

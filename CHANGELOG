@@ -1,3 +1,13 @@
+# 2024.09.08 - 1.0.15
+
+- optimise: Rank module point, rank, next rank caching for performance
+- optimise: DetermineRanks cached now for 3 seconds due to it runs on every point change
+- optimise: KillStreak handling in rank points
+- optimise: Background tasks in ranks such as playtime points and cache cleaning
+- optimise: Ranks protobuf that ran every tick, now runs every 5 seconds
+- optimise: Rank displays update on every 3 tick instead of every tick (3 is the max, from 4 it blinks)
+- fix: Module hotReload removed the module player storage
+
 # 2024.09.08 - 1.0.14
 
 - fix: Transfer script column already exists issue

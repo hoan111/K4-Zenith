@@ -133,7 +133,6 @@ namespace Zenith
 
 			RemoveModuleCommands(callingPlugin);
 			RemoveModulePlaceholders(callingPlugin);
-			Player.DisposeModuleData(this, callingPlugin);
 		}
 
 		public void ListAllPlaceholders(string? pluginName = null, CCSPlayerController? player = null)

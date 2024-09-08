@@ -51,7 +51,6 @@ public static class CallerIdentifier
 	public static string GetCallingPluginName()
 	{
 		var stackTrace = new System.Diagnostics.StackTrace(true);
-		string callingPlugin = CurrentPluginName;
 
 		for (int i = 1; i < stackTrace.FrameCount; i++)
 		{
@@ -63,11 +62,10 @@ public static class CallerIdentifier
 
 			if (assemblyName != CurrentPluginName && assemblyName != null && !BlockAssemblies.Any(assemblyName.StartsWith))
 			{
-				callingPlugin = assemblyName;
-				break;
+				return assemblyName;
 			}
 		}
 
-		return callingPlugin;
+		return CurrentPluginName;
 	}
 }

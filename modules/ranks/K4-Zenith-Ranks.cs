@@ -4,6 +4,7 @@ using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Timers;
+using CounterStrikeSharp.API.Modules.UserMessages;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZenithAPI;
@@ -17,7 +18,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.3";
+	public override string ModuleVersion => "1.0.4";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -29,6 +30,11 @@ public sealed partial class Plugin : BasePlugin
 	private readonly HashSet<CCSPlayerController> _playerSpawned = [];
 	private readonly Dictionary<CCSPlayerController, IPlayerServices> _playerCache = [];
 	private bool _isGameEnd;
+
+	private readonly Dictionary<string, object> _configCache = [];
+	private Task? _backgroundTask;
+	private readonly TimeSpan _playerCacheExpiration = TimeSpan.FromSeconds(3);
+	private readonly CancellationTokenSource _cancellationTokenSource = new();
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
@@ -47,9 +53,13 @@ public sealed partial class Plugin : BasePlugin
 		SetupZenithEvents();
 		SetupGameRules(hotReload);
 
+		_backgroundTask = RunBackgroundTasks(_cancellationTokenSource.Token);
+
 		if (hotReload)
 		{
-			_moduleServices!.LoadAllOnlinePlayerData(); var players = Utilities.GetPlayers();
+			_moduleServices!.LoadAllOnlinePlayerData();
+
+			var players = Utilities.GetPlayers();
 			foreach (var player in players)
 			{
 				if (player != null && player.IsValid && !player.IsBot && !player.IsHLTV)
@@ -57,9 +67,80 @@ public sealed partial class Plugin : BasePlugin
 			}
 		}
 
-		AddTimer(60.0f, CheckPlaytime, TimerFlags.REPEAT);
+		AddTimer(5.0f, () =>
+		{
+			UserMessage message = UserMessage.FromId(350);
+			message.Recipients.AddAllPlayers();
+			message.Send();
+		}, TimerFlags.REPEAT);
 
 		Logger.LogInformation("Zenith {0} module successfully registered.", MODULE_ID);
+	}
+
+	private async Task RunBackgroundTasks(CancellationToken cancellationToken)
+	{
+		try
+		{
+			while (!cancellationToken.IsCancellationRequested)
+			{
+				await Task.Delay(_cacheCleanupInterval, cancellationToken);
+				if (!cancellationToken.IsCancellationRequested)
+				{
+					CleanupCache();
+					CheckPlaytime();
+				}
+			}
+		}
+		catch (TaskCanceledException)
+		{
+			// We do cancel the task, so this is expected.
+		}
+		catch (Exception ex)
+		{
+			Logger.LogError($"Hiba történt a háttérfeladatok futtatása során: {ex.Message}");
+		}
+	}
+
+	private void CleanupCache()
+	{
+		var expiredTime = DateTime.Now - _playerCacheExpiration;
+		var expiredKeys = _playerRankCache.Where(kvp => kvp.Value.LastUpdate < expiredTime)
+										  .Select(kvp => kvp.Key)
+										  .ToList();
+		foreach (var key in expiredKeys)
+		{
+			_playerRankCache.Remove(key);
+		}
+	}
+
+	private void CheckPlaytime()
+	{
+		Server.NextWorldUpdate(() =>
+		{
+			int interval = GetCachedConfigValue<int>("Points", "PlaytimeInterval");
+			if (interval <= 0) return;
+
+			if ((DateTime.UtcNow - _lastPlaytimeCheck).TotalMinutes >= interval)
+			{
+				int playtimePoints = GetCachedConfigValue<int>("Points", "PlaytimePoints");
+				foreach (var player in GetValidPlayers())
+				{
+					ModifyPlayerPoints(player, playtimePoints, "k4.events.playtime");
+				}
+				_lastPlaytimeCheck = DateTime.UtcNow;
+			}
+		});
+	}
+
+	private T GetCachedConfigValue<T>(string section, string key) where T : notnull
+	{
+		string cacheKey = $"{section}:{key}";
+		if (!_configCache.TryGetValue(cacheKey, out var value))
+		{
+			value = _configAccessor.GetValue<T>(section, key);
+			_configCache[cacheKey] = value;
+		}
+		return (T)value;
 	}
 
 	private bool InitializeZenithAPI()
@@ -134,22 +215,6 @@ public sealed partial class Plugin : BasePlugin
 			GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
 	}
 
-	private void CheckPlaytime()
-	{
-		int interval = _configAccessor.GetValue<int>("Points", "PlaytimeInterval");
-		if (interval <= 0) return;
-
-		if ((DateTime.UtcNow - _lastPlaytimeCheck).TotalMinutes >= interval)
-		{
-			int playtimePoints = _configAccessor.GetValue<int>("Points", "PlaytimePoints");
-			foreach (var player in GetValidPlayers())
-			{
-				ModifyPlayerPoints(player, playtimePoints, "k4.events.playtime");
-			}
-			_lastPlaytimeCheck = DateTime.UtcNow;
-		}
-	}
-
 	private void OnZenithPlayerLoaded(CCSPlayerController player)
 	{
 		var handler = GetZenithPlayer(player);
@@ -165,6 +230,7 @@ public sealed partial class Plugin : BasePlugin
 
 	private void OnZenithPlayerUnloaded(CCSPlayerController player)
 	{
+		_playerRankCache.Remove(player.SteamID);
 		_playerCache.Remove(player);
 		_playerSpawned.Remove(player);
 	}
@@ -183,6 +249,10 @@ public sealed partial class Plugin : BasePlugin
 
 	public override void Unload(bool hotReload)
 	{
+		_cancellationTokenSource.Cancel();
+		_backgroundTask?.Wait();
+		_cancellationTokenSource.Dispose();
+
 		_moduleServicesCapability?.Get()?.DisposeModule(this.GetType().Assembly);
 	}
 
@@ -202,8 +272,8 @@ public sealed partial class Plugin : BasePlugin
 	{
 		if (_playerCache.TryGetValue(p, out var player))
 		{
-			var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
-			return determinedRank?.ChatColor.ToString() ?? ChatColors.Default.ToString();
+			var playerData = GetOrUpdatePlayerRankInfo(player);
+			return playerData.Rank?.ChatColor.ToString() ?? ChatColors.Default.ToString();
 		}
 
 		return ChatColors.Default.ToString();
@@ -213,8 +283,8 @@ public sealed partial class Plugin : BasePlugin
 	{
 		if (_playerCache.TryGetValue(p, out var player))
 		{
-			var (determinedRank, _) = DetermineRanks(player.GetStorage<long>("Points"));
-			return determinedRank?.Name ?? Localizer["k4.phrases.rank.none"];
+			var playerData = GetOrUpdatePlayerRankInfo(player);
+			return playerData.Rank?.Name ?? Localizer["k4.phrases.rank.none"];
 		}
 
 		return Localizer["k4.phrases.rank.none"];
@@ -226,5 +296,20 @@ public sealed partial class Plugin : BasePlugin
 			return player.GetStorage<long>("Points").ToString();
 
 		return "0";
+	}
+
+	private class PlayerRankInfo
+	{
+		public Rank? Rank { get; set; }
+		public Rank? NextRank { get; set; }
+		public long Points { get; set; }
+		public DateTime LastUpdate { get; set; }
+		public KillStreakInfo KillStreak { get; set; } = new KillStreakInfo();
+	}
+
+	private class KillStreakInfo
+	{
+		public int KillCount { get; set; }
+		public long LastKillTime { get; set; }
 	}
 }
