@@ -8,7 +8,7 @@ namespace Zenith
 {
 	public sealed partial class Plugin : BasePlugin
 	{
-		private async void MigrateOldData()
+		private async Task MigrateOldData()
 		{
 			try
 			{

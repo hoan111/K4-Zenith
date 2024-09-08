@@ -6,6 +6,7 @@ using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
 using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Utils;
+using Microsoft.Extensions.Logging;
 
 namespace Zenith_ExtendedCommands;
 
@@ -415,8 +416,8 @@ public sealed partial class Plugin : BasePlugin
 				if (target.PlayerPawn.Value != null)
 				{
 					bool godModeEnabled = !target.PlayerPawn.Value.TakesDamage;
-					target.PlayerPawn.Value.TakesDamage = !godModeEnabled;
-					ShowActivityToPlayers(player?.SteamID, godModeEnabled ? "commands.god.enable" : "commands.god.disable", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName);
+					target.PlayerPawn.Value.TakesDamage = godModeEnabled;
+					ShowActivityToPlayers(player?.SteamID, godModeEnabled ? "commands.god.disable" : "commands.god.enable", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName);
 				}
 			}, true);
 		}, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith-commands/god");

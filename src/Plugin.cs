@@ -34,14 +34,13 @@ namespace Zenith
 					await Player.CreateTablesAsync(this);
 					await Database.MigrateDatabaseAsync();
 					await Database.PurgeOldData();
+					await MigrateOldData();
 				}
 				catch (Exception ex)
 				{
 					Logger.LogError($"Database migration failed: {ex.Message}");
 				}
 			}).Wait();
-
-			MigrateOldData();
 
 			Menu = new Menu.KitsuneMenu(this);
 

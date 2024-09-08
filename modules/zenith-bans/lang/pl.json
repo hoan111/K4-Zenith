@@ -54,7 +54,6 @@
   "k4.punishment.expired.mute": "{gold}Twoje wyciszenie wygasło. Możesz teraz używać komunikacji głosowej.",
   "k4.punishment.expired.gag": "{gold}Twój knebel wygasł. Możesz teraz używać czatu tekstowego.",
   "k4.punishment.expired.silence": "{gold}Twoje wyciszenie wygasło. Możesz teraz używać zarówno komunikacji głosowej, jak i tekstowej.",
-  "k4.punishment.expired.ban": "{gold}Twój ban wygasł. Możesz teraz ponownie dołączyć do serwera.",
 
   "k4.addadmin.invalid-group": "{lightred}Nieprawidłowa grupa admina: {0}",
   "k4.addadmin.success": "{gold}{0} dodał {1} do grupy adminów {2}.",

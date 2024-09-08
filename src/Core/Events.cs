@@ -22,8 +22,11 @@ namespace Zenith
 			if (player == null || !player.IsValid)
 				return HookResult.Continue;
 
-			if (player.IsGagged || !GetCoreConfig<bool>("Core", "HookChatMessages"))
+			if (player.IsGagged)
 				return HookResult.Stop;
+
+			if (!GetCoreConfig<bool>("Core", "HookChatMessages"))
+				return HookResult.Continue;
 
 			bool enabledChatModifier = player.GetSetting<bool>("ShowChatTags");
 

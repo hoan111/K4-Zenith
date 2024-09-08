@@ -343,9 +343,13 @@ namespace Zenith_Bans
 
 		private void BroadcastPunishment(PunishmentType type, string targetName, ulong targetSteamId, int? duration, string reason, string callerName, ulong? callerSteamId)
 		{
-			string durationString = duration == 0 || duration == null ?
-				Localizer["k4.general.permanent"] :
-				$"{duration} {Localizer["k4.general.minutes"]}";
+			string durationString = "";
+			if (type != PunishmentType.Kick && type != PunishmentType.Warn)
+			{
+				durationString = duration == 0 || duration == null ?
+					Localizer["k4.general.permanent"] :
+					$"{duration} {Localizer["k4.general.minutes"]}";
+			}
 
 			string localizationKey = GetLocalizationKey(type, duration);
 
@@ -382,6 +386,10 @@ namespace Zenith_Bans
 		private void BroadcastToPlayer(CCSPlayerController player, string localizationKey, string adminName, string targetName, string durationString, string reason)
 		{
 			if (localizationKey.EndsWith(".permanent"))
+			{
+				_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, adminName, targetName, reason]);
+			}
+			else if (localizationKey.Contains("kick") || localizationKey.Contains("warn"))
 			{
 				_moduleServices?.PrintForPlayer(player, Localizer[localizationKey, adminName, targetName, reason]);
 			}

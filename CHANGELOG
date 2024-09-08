@@ -1,4 +1,12 @@
-# 2024.09.05 - 1.0.13
+# 2024.09.08 - 1.0.14
+
+- fix: Transfer script column already exists issue
+- fix: Kick shown wrong reason in chat
+- fix: God mode didnt apply properly
+- fix: Messages not shown if UseMessageHooking is disabled
+- remove: Unused translation in bans
+
+# 2024.09.07 - 1.0.13
 
 - feat: Added ChatMenu option to core config. Supported in stats, custom tags, core and bans
 - feat: Added validations to commands that should be executed only while dead

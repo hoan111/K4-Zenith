@@ -59,7 +59,6 @@
   "k4.punishment.expired.mute": "{gold}Your mute has expired. You can now use voice communication.",
   "k4.punishment.expired.gag": "{gold}Your gag has expired. You can now use text chat.",
   "k4.punishment.expired.silence": "{gold}Your silence has expired. You can now use both voice and text communication.",
-  "k4.punishment.expired.ban": "{gold}Your ban has expired. You can now rejoin the server.",
 
   "k4.addadmin.invalid-group": "{lightred}Invalid admin group: {0}",
   "k4.addadmin.success": "{gold}{0} has added {1} to the {2} admin group.",
