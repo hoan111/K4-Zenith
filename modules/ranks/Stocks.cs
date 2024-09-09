@@ -42,6 +42,12 @@ public sealed partial class Plugin : BasePlugin
 		playerData.Points = newPoints;
 		playerData.LastUpdate = DateTime.Now;
 
+		if (_playerRankCache.TryGetValue(player.SteamID, out var rankInfo))
+		{
+			rankInfo.Points = newPoints;
+			rankInfo.LastUpdate = DateTime.Now;
+		}
+
 		if (GetCachedConfigValue<bool>("Settings", "ScoreboardScoreSync"))
 		{
 			player.Controller.Score = (int)newPoints;
@@ -150,17 +156,8 @@ public sealed partial class Plugin : BasePlugin
 		return (int)Math.Round(pointsRatio * basePoints);
 	}
 
-	private static readonly int _tickShouldSkip = 3;
-	private int _tickCounter = _tickShouldSkip;
 	private void UpdateScoreboards()
 	{
-		_tickCounter++;
-
-		if (_tickCounter < _tickShouldSkip)
-			return;
-
-		_tickCounter = 0;
-
 		if (!GetCachedConfigValue<bool>("Settings", "UseScoreboardRanks"))
 			return;
 
@@ -174,6 +171,5 @@ public sealed partial class Plugin : BasePlugin
 			var playerData = GetOrUpdatePlayerRankInfo(player);
 			SetCompetitiveRank(player, mode, playerData.Rank?.Id ?? 0, playerData.Points, rankMax, rankBase, rankMargin);
 		}
-
 	}
 }

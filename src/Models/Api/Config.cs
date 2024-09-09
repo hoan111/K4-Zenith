@@ -330,6 +330,39 @@ namespace Zenith
 						return (true, (T)(object)intList);
 					}
 
+					if (typeof(T) == typeof(List<double>) && configItem.CurrentValue is List<object> doubleObjectList)
+					{
+						var doubleList = doubleObjectList.Select(o => Convert.ToDouble(o)).ToList();
+						return (true, (T)(object)doubleList);
+					}
+
+					if (typeof(T) == typeof(List<float>) && configItem.CurrentValue is List<object> floatObjectList)
+					{
+						var floatList = floatObjectList.Select(o => Convert.ToSingle(o)).ToList();
+						return (true, (T)(object)floatList);
+					}
+
+					if (typeof(T) == typeof(List<decimal>) && configItem.CurrentValue is List<object> decimalObjectList)
+					{
+						var decimalList = decimalObjectList.Select(o => Convert.ToDecimal(o)).ToList();
+						return (true, (T)(object)decimalList);
+					}
+
+					if (typeof(T) == typeof(double) && configItem.CurrentValue is object doubleValue)
+					{
+						return (true, (T)(object)Convert.ToDouble(doubleValue));
+					}
+
+					if (typeof(T) == typeof(float) && configItem.CurrentValue is object floatValue)
+					{
+						return (true, (T)(object)Convert.ToSingle(floatValue));
+					}
+
+					if (typeof(T) == typeof(decimal) && configItem.CurrentValue is object decimalValue)
+					{
+						return (true, (T)(object)Convert.ToDecimal(decimalValue));
+					}
+
 					return (true, (T)Convert.ChangeType(configItem.CurrentValue, typeof(T)));
 				}
 				catch (InvalidCastException ex)
