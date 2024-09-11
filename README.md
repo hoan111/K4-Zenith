@@ -84,6 +84,15 @@ To install the Zenith Core, follow these steps:
 
 <!-- CORE COMMANDS -->
 
+<!-- Panels -->
+
+### Officially Supported Web Panels
+
+These web based panels support Zenith data to be shown. Give some appreciation to them!
+
+- [CSS-Bans](https://github.com/counterstrikesharp-panel/css-bans): CSS-BANS is an admin web panel for Counter-Strike 2, powered by CounterStrikeSharp. It allows for comprehensive management of bans, mutes, VIP statuses, skins, ranks, and more on your CS2 servers.
+- [GameCMS](https://gamecms.org): Everything in one place for your dedicated  game server! 
+
 ### Core Commands
 
 Most of the commands can be set in the configuration files, but here are some of the core commands that are available by default:
