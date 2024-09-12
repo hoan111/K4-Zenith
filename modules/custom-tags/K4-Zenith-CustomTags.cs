@@ -21,11 +21,10 @@ public class Plugin : BasePlugin
 	private const string MODULE_ID = "CustomTags";
 
 	private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
-	private readonly Dictionary<ulong, string> _playerSelectedConfigs = [];
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.4";
+	public override string ModuleVersion => "1.0.5";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -235,23 +234,28 @@ public class Plugin : BasePlugin
 
 	private void ApplySelectedConfig(CCSPlayerController player, string selectedConfigKey)
 	{
-		var zenithPlayer = _playerCache[player];
+		var zenithPlayer = GetZenithPlayer(player);
+		if (zenithPlayer == null)
+		{
+			Logger.LogError($"Failed to get player services for {player.PlayerName}");
+			return;
+		}
 
 		if (selectedConfigKey == "default")
 		{
-			_playerSelectedConfigs.Remove(player.SteamID);
+			zenithPlayer.SetStorage("ChoosenTag", "Default");
 			ApplyTagConfig(player);
 			_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.default"]);
 		}
 		else if (selectedConfigKey == "none")
 		{
-			_playerSelectedConfigs[player.SteamID] = "none";
+			zenithPlayer.SetStorage("ChoosenTag", "None");
 			ApplyNullConfig(zenithPlayer);
 			_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.none"]);
 		}
 		else if (_predefinedConfigs?.TryGetValue(selectedConfigKey, out var selectedPredefinedConfig) == true)
 		{
-			_playerSelectedConfigs[player.SteamID] = selectedConfigKey;
+			zenithPlayer.SetStorage("ChoosenTag", selectedConfigKey);
 			ApplyConfig(zenithPlayer, selectedPredefinedConfig);
 			_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.config", selectedPredefinedConfig.Name]);
 		}
@@ -426,19 +430,31 @@ public class Plugin : BasePlugin
 		return result.ToString();
 	}
 
-
 	private void ApplyTagConfig(CCSPlayerController player)
 	{
 		try
 		{
-			var zenithPlayer = _playerCache[player];
+			var zenithPlayer = GetZenithPlayer(player);
+			if (zenithPlayer == null)
+			{
+				Logger.LogError($"Failed to get player services for {player.PlayerName}");
+				return;
+			}
 
 			_tagConfigs ??= GetTagConfigs();
 			_predefinedConfigs ??= GetPredefinedTagConfigs();
 
-			if (_playerSelectedConfigs.TryGetValue(player.SteamID, out var selectedConfig) && selectedConfig == "none")
+			string choosenTag = zenithPlayer.GetStorage<string>("ChoosenTag") ?? "Default";
+
+			if (choosenTag == "None")
 			{
 				ApplyNullConfig(zenithPlayer);
+				return;
+			}
+
+			if (choosenTag != "Default" && _predefinedConfigs.TryGetValue(choosenTag, out var chosenPredefinedConfig))
+			{
+				ApplyConfig(zenithPlayer, chosenPredefinedConfig);
 				return;
 			}
 
@@ -483,21 +499,14 @@ public class Plugin : BasePlugin
 			{
 				foreach (var configName in availableConfigs)
 				{
-					if (_predefinedConfigs.TryGetValue(configName, out var predefinedConfig))
+					if (_predefinedConfigs.TryGetValue(configName, out var availablePredefinedConfig))
 					{
-						ApplyConfig(zenithPlayer, predefinedConfig);
-						_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.default_predefined", predefinedConfig.Name]);
+						ApplyConfig(zenithPlayer, availablePredefinedConfig);
+						_moduleServices?.PrintForPlayer(player, Localizer["customtags.applied.default_predefined", availablePredefinedConfig.Name]);
+						zenithPlayer.SetStorage("ChoosenTag", configName);
 						configApplied = true;
 						break;
 					}
-				}
-			}
-
-			if (_playerSelectedConfigs.TryGetValue(player.SteamID, out selectedConfig))
-			{
-				if (_predefinedConfigs.TryGetValue(selectedConfig, out var predefinedConfig))
-				{
-					ApplyConfig(zenithPlayer, predefinedConfig);
 				}
 			}
 		}
@@ -573,27 +582,25 @@ public class Plugin : BasePlugin
 
 	private void OnZenithPlayerLoaded(CCSPlayerController player)
 	{
-		var handler = GetZenithPlayer(player);
-		if (handler == null)
+		var zenithPlayer = GetZenithPlayer(player);
+		if (zenithPlayer == null)
 		{
 			Logger.LogError($"Failed to get player services for {player.PlayerName}");
 			return;
 		}
 
-		_playerCache[player] = handler;
+		_playerCache[player] = zenithPlayer;
 		ApplyTagConfig(player);
 	}
 
 	private void OnZenithPlayerUnloaded(CCSPlayerController player)
 	{
 		_playerCache.Remove(player);
-		_playerSelectedConfigs.Remove(player.SteamID);
 	}
 
 	public override void Unload(bool hotReload)
 	{
 		_playerCache.Clear();
-		_playerSelectedConfigs.Clear();
 
 		_moduleServicesCapability?.Get()?.DisposeModule(this.GetType().Assembly);
 	}
@@ -601,7 +608,6 @@ public class Plugin : BasePlugin
 	private void OnZenithCoreUnload(bool hotReload)
 	{
 		_playerCache.Clear();
-		_playerSelectedConfigs.Clear();
 
 		if (hotReload)
 		{

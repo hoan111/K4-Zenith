@@ -1,3 +1,11 @@
+# 2024.09.12 - 1.0.17
+
+- fix: CustomTags didnt save selected tag
+- fix: Menu last option jumped back
+- fix: Menu cursor movements was not working properly
+- fix: Menu back and exit button fired twice
+- optimise: Replaced all menu LINQ operation to regular statements
+
 # 2024.09.09 - 1.0.16
 
 - fix: Points shifted with a few modifications
