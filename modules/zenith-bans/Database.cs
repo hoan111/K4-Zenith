@@ -186,7 +186,7 @@ namespace Zenith_Bans
 
 					DateTime? rankExpiry = playerData.RankExpiry?.IsValidDateTime == true ? (DateTime?)playerData.RankExpiry : null;
 
-					if (rankExpiry <= DateTime.UtcNow)
+					if (rankExpiry <= DateTime.Now)
 					{
 						playerData.Groups = new List<string>();
 						playerData.Permissions = new List<string>();
@@ -493,7 +493,7 @@ namespace Zenith_Bans
 						var player = Utilities.GetPlayerFromSteamId(steamId);
 						if (player != null && _playerCache.TryGetValue(steamId, out var playerData))
 						{
-							playerData.Punishments.RemoveAll(p => p.Type.ToString().Equals(type, StringComparison.CurrentCultureIgnoreCase) && p.ExpiresAt?.GetDateTime() <= DateTime.UtcNow);
+							playerData.Punishments.RemoveAll(p => p.Type.ToString().Equals(type, StringComparison.CurrentCultureIgnoreCase) && p.ExpiresAt?.GetDateTime() <= DateTime.Now);
 							RemovePunishmentEffect(player, Enum.Parse<PunishmentType>(type, true));
 
 							_moduleServices?.PrintForPlayer(player, Localizer[$"k4.punishment.expired.{type.ToLower()}"]);

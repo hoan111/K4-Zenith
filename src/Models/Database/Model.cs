@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;

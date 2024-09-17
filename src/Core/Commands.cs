@@ -2,6 +2,7 @@ namespace Zenith
 {
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Modules.Commands;
+	using Zenith.Models;
 
 	public sealed partial class Plugin : BasePlugin
 	{
@@ -20,6 +21,7 @@ namespace Zenith
 			RegisterZenithCommand("css_zreload", "Reload Zenith configurations manually", (CCSPlayerController? player, CommandInfo command) =>
 			{
 				ConfigManager.ReloadAllConfigs();
+				Player.Find(player)?.Print("Zenith configurations reloaded.");
 			}, CommandUsage.CLIENT_AND_SERVER, permission: "@zenith/reload");
 		}
 	}

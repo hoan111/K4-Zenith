@@ -47,6 +47,7 @@ public static class CallerIdentifier
 {
 	private static readonly string CurrentPluginName = Assembly.GetExecutingAssembly().GetName().Name!;
 	private static readonly string[] BlockAssemblies = ["System.", "K4-ZenithAPI", "KitsuneMenu"];
+	public static readonly List<string> ModuleList = [];
 
 	public static string GetCallingPluginName()
 	{
@@ -62,6 +63,9 @@ public static class CallerIdentifier
 
 			if (assemblyName != CurrentPluginName && assemblyName != null && !BlockAssemblies.Any(assemblyName.StartsWith))
 			{
+				if (!ModuleList.Contains(assemblyName))
+					ModuleList.Add(assemblyName);
+
 				return assemblyName;
 			}
 		}

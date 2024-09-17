@@ -1,9 +1,6 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Events;
-using CounterStrikeSharp.API.Modules.UserMessages;
 using CounterStrikeSharp.API.Modules.Utils;
-using Microsoft.Extensions.Logging;
 using ZenithAPI;
 
 namespace Zenith_Ranks
@@ -39,6 +36,25 @@ namespace Zenith_Ranks
 
 		private HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
 		{
+			bool resetKillStreaks = GetCachedConfigValue<bool>("Points", "RoundEndKillStreakReset");
+
+			foreach (var player in GetValidPlayers())
+			{
+				if (player.Controller.TeamNum == @event.Winner)
+				{
+					ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "RoundWin"), "k4.events.roundwin");
+				}
+				else
+				{
+					ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "RoundLose"), "k4.events.roundlose");
+				}
+
+				player.SetStorage("Rank", GetRankName(player.Controller));
+
+				if (resetKillStreaks)
+					_eventManager?.ResetKillStreak(player);
+			}
+
 			if (_configAccessor.GetValue<bool>("Settings", "PointSummaries"))
 			{
 				foreach (var player in GetValidPlayers())
@@ -88,7 +104,6 @@ namespace Zenith_Ranks
 			RegisterEventHandler<EventBombDropped>(OnBombDropped, HookMode.Post);
 			RegisterEventHandler<EventBombExploded>(OnBombExploded, HookMode.Post);
 			RegisterEventHandler<EventHostageRescuedAll>(OnHostageRescuedAll, HookMode.Post);
-			RegisterEventHandler<EventRoundEnd>(OnRoundEnd, HookMode.Post);
 		}
 
 		private HookResult OnRoundMvp(EventRoundMvp @event, GameEventInfo info)
@@ -407,7 +422,7 @@ namespace Zenith_Ranks
 			public void HandleKillStreak(IPlayerServices attacker)
 			{
 				var playerData = _plugin.GetOrUpdatePlayerRankInfo(attacker);
-				long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+				long currentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
 
 				int timeBetweenKills = _plugin.GetCachedConfigValue<int>("Points", "SecondsBetweenKills");
 				bool isValidStreak = timeBetweenKills <= 0 || (currentTime - playerData.KillStreak.LastKillTime <= timeBetweenKills);
@@ -417,10 +432,9 @@ namespace Zenith_Ranks
 					playerData.KillStreak.KillCount++;
 					playerData.KillStreak.LastKillTime = currentTime;
 
-					string streakKey = $"Points:KillStreak{playerData.KillStreak.KillCount}";
-					if (_plugin._configCache.TryGetValue(streakKey, out var streakPoints) && (int)streakPoints != 0)
+					if (_killStreakPoints.TryGetValue(playerData.KillStreak.KillCount, out var streakPoints) && streakPoints != 0)
 					{
-						_plugin.ModifyPlayerPoints(attacker, (int)streakPoints, $"k4.events.killstreak{playerData.KillStreak.KillCount}");
+						_plugin.ModifyPlayerPoints(attacker, streakPoints, $"k4.events.killstreak{playerData.KillStreak.KillCount}");
 					}
 				}
 				else

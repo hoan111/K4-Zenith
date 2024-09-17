@@ -71,6 +71,24 @@ namespace Zenith.Models
 					},
 				}
 			},
+			{ "1.12", new List<MigrationStep>
+				{
+					new MigrationStep
+					{
+						TableName = "zenith_player_settings",
+						SqlQuery = @"
+						ALTER TABLE `{prefix}zenith_player_settings`
+						ADD COLUMN `name` VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL;"
+					},
+					new MigrationStep
+					{
+						TableName = "zenith_player_storage",
+						SqlQuery = @"
+						ALTER TABLE `{prefix}zenith_player_storage`
+						ADD COLUMN `name` VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL;"
+					},
+				}
+			},
 			// Add other migrations here as needed
 		};
 
@@ -110,7 +128,7 @@ namespace Zenith.Models
 
 		private async Task CreateDatabaseBackupAsync()
 		{
-			string fileName = $"db_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.sql";
+			string fileName = $"db_backup_{DateTime.Now:yyyyMMdd_HHmmss}.sql";
 			var backupFilePath = Path.Combine(plugin.ModuleDirectory, fileName);
 			plugin.Logger.LogInformation($"Creating database backup: {fileName}");
 

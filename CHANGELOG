@@ -1,3 +1,20 @@
+# 2024.09.17 - 1.0.18
+
+- feat: Added option to reset player kill streaks on round end aswell
+- feat: Added option to disable globally the rank change center messages
+- feat: Added player names to storage and settings table for easier search
+- fix: Random double parsing errors
+- fix: Added compatibility check to enforce internal muted states
+- fix: Round win and loss rank points didnt counted
+- fix: Ranks initial rank name was null, not Unranked
+- fix: Some code parts wrongly used UtcNow instead of Now that caused some issues
+- fix: Rank name didnt update properly
+- fix: Rare cases of printing to invalid player from modules
+- fix: Rank module killstreaks didnt count properly
+- fix: Added chat reponse to commands, which print to console
+- fix: Ban menu player list spammed error due to formatting issue
+- fix: Menu didnt close after punishment center menus
+
 # 2024.09.12 - 1.0.17
 
 - fix: CustomTags didnt save selected tag

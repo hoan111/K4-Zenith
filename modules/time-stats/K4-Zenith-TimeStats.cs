@@ -19,7 +19,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.3";
+	public override string ModuleVersion => "1.0.4";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -98,7 +98,7 @@ public class Plugin : BasePlugin
 		{
 			_moduleServices.LoadAllOnlinePlayerData();
 			var players = Utilities.GetPlayers();
-			long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+			long currentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
 
 			foreach (var player in players)
 			{
@@ -129,7 +129,7 @@ public class Plugin : BasePlugin
 		_playerTimes[player] = new PlayerTimeData
 		{
 			Zenith = zenithPlayer,
-			LastUpdateTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+			LastUpdateTime = DateTimeOffset.Now.ToUnixTimeSeconds(),
 			CurrentTeam = CsTeam.Spectator,
 			IsAlive = false
 		};
@@ -205,7 +205,7 @@ public class Plugin : BasePlugin
 
 	private void UpdatePlaytime(PlayerTimeData data)
 	{
-		long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+		long currentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
 		double sessionDurationMinutes = Math.Round((currentTime - data.LastUpdateTime) / 60.0, 1);
 
 		double totalPlaytime = data.Zenith.GetStorage<double>("TotalPlaytime");
@@ -235,7 +235,7 @@ public class Plugin : BasePlugin
 		bool showPlaytime = playerServices.GetSetting<bool>("ShowPlaytime");
 		if (!showPlaytime) return;
 
-		long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+		long currentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
 		long lastNotification = playerServices.GetStorage<long>("LastNotification");
 
 		if (currentTime - lastNotification >= interval)

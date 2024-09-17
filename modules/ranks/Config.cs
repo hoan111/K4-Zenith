@@ -26,6 +26,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Settings", "DynamicDeathPointsMaxMultiplier", "Max multiplier for dynamic death points", 3.00);
 		_moduleServices.RegisterModuleConfig("Settings", "DynamicDeathPointsMinMultiplier", "Min multiplier for dynamic death points", 0.5);
 		_moduleServices.RegisterModuleConfig("Settings", "UseScoreboardRanks", "Use of ranks on scoreboard", true);
+		_moduleServices.RegisterModuleConfig("Settings", "ShowRankChanges", "Globally enable or disable rank change center messages", true);
 		_moduleServices.RegisterModuleConfig("Settings", "ScoreboardMode", "Scoreboard mode (1 - premier, 2 - competitive, 3 - wingman, 4 - danger zone, 0 - custom)", 1);
 		_moduleServices.RegisterModuleConfig("Settings", "RankBase", "Base rank value for custom ranks", 0);
 		_moduleServices.RegisterModuleConfig("Settings", "RankMax", "Maximum rank value for custom ranks", 0);
@@ -63,6 +64,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Points", "LongDistanceKill", "Extra points for long-distance kill", 8);
 		_moduleServices.RegisterModuleConfig("Points", "LongDistance", "Distance for long-distance kill (units)", 30);
 		_moduleServices.RegisterModuleConfig("Points", "SecondsBetweenKills", "Seconds between kills for multi-kill bonuses", 0);
+		_moduleServices.RegisterModuleConfig("Points", "RoundEndKillStreakReset", "Reset kill streak on round end", true);
 		_moduleServices.RegisterModuleConfig("Points", "DoubleKill", "Points for double kill", 5);
 		_moduleServices.RegisterModuleConfig("Points", "TripleKill", "Points for triple kill", 10);
 		_moduleServices.RegisterModuleConfig("Points", "Domination", "Points for domination (4 kills)", 15);

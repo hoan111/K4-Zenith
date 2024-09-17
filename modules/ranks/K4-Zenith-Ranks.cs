@@ -18,11 +18,11 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.5";
+	public override string ModuleVersion => "1.0.6";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
-	private DateTime _lastPlaytimeCheck = DateTime.UtcNow;
+	private DateTime _lastPlaytimeCheck = DateTime.Now;
 
 	public CCSGameRules? GameRules { get; private set; }
 	private IZenithEvents? _zenithEvents;
@@ -120,14 +120,14 @@ public sealed partial class Plugin : BasePlugin
 			int interval = GetCachedConfigValue<int>("Points", "PlaytimeInterval");
 			if (interval <= 0) return;
 
-			if ((DateTime.UtcNow - _lastPlaytimeCheck).TotalMinutes >= interval)
+			if ((DateTime.Now - _lastPlaytimeCheck).TotalMinutes >= interval)
 			{
 				int playtimePoints = GetCachedConfigValue<int>("Points", "PlaytimePoints");
 				foreach (var player in GetValidPlayers())
 				{
 					ModifyPlayerPoints(player, playtimePoints, "k4.events.playtime");
 				}
-				_lastPlaytimeCheck = DateTime.UtcNow;
+				_lastPlaytimeCheck = DateTime.Now;
 			}
 		});
 	}
@@ -178,7 +178,7 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices!.RegisterModuleStorage(new Dictionary<string, object?>
 		{
 			{ "Points", _configAccessor.GetValue<long>("Settings", "StartPoints") },
-			{ "Rank", null }
+			{ "Rank", Localizer["k4.phrases.rank.none"] }
 		});
 	}
 

@@ -803,7 +803,7 @@ namespace Zenith_Bans
 						return;
 					}
 
-					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Ban && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.UtcNow))
+					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Ban && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.Now))
 					{
 						player.Disconnect(NetworkDisconnectionReason.NETWORK_DISCONNECT_REJECT_BANNED);
 						return;
@@ -824,10 +824,10 @@ namespace Zenith_Bans
 					AdminManager.AddPlayerPermissions(player, playerData.Permissions.Select(p => p.StartsWith("@") ? p : "@" + p).Select(p => p.Replace(" ", "-")).ToArray());
 
 					IPlayerServices? playerServices = GetZenithPlayer(player);
-					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Mute && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.UtcNow))
+					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Mute && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.Now))
 						playerServices?.SetMute(true, ActionPriority.High);
 
-					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Gag && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.UtcNow))
+					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Gag && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.Now))
 						playerServices?.SetGag(true, ActionPriority.High);
 
 					_playerCache[steamId] = playerData;
@@ -993,7 +993,7 @@ namespace Zenith_Bans
 				jsonPayload = jsonPayload.Replace($"{{{kvp.Key}}}", kvp.Value);
 			}
 
-			jsonPayload = jsonPayload.Replace("{timestamp}", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+			jsonPayload = jsonPayload.Replace("{timestamp}", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
 
 			var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
@@ -1054,7 +1054,9 @@ namespace Zenith_Bans
 
 				void StopTimer()
 				{
-					_disconnectTImers[player]?.Kill();
+					if (_disconnectTImers.ContainsKey(player))
+						_disconnectTImers[player]?.Kill();
+
 					_disconnectTImers.Remove(player);
 				}
 			}, TimerFlags.REPEAT);

@@ -349,13 +349,13 @@ namespace Zenith_Bans
 			foreach (var player in _disconnectedPlayers)
 			{
 				string timeSinceDisconnect = (DateTime.Now - player.DisconnectedAt).TotalMinutes.ToString("F0");
-				items.Add(new MenuItem(MenuItemType.Button, new List<MenuValue> {
+				items.Add(new MenuItem(MenuItemType.Button, [
 					new MenuValue(Localizer["k4.banoffline.player-info",
 						player.PlayerName,
 						player.SteamId,
 						Localizer["k4.general.time-ago", timeSinceDisconnect]
 					])
-				}));
+				]));
 				playerMap[index] = player;
 				index++;
 			}

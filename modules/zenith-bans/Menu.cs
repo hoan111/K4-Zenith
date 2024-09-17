@@ -34,7 +34,7 @@ namespace Zenith_Bans
 			for (int i = 0; i < players.Count; i++)
 			{
 				var player = players[i];
-				items.Add(new MenuItem(MenuItemType.Button, new MenuValue($"#{player.UserId} | {player.PlayerName}")));
+				items.Add(new MenuItem(MenuItemType.Button, [new MenuValue($"#{player.UserId} | {player.PlayerName}")]));
 				playerMap[i] = player;
 			}
 
@@ -152,6 +152,7 @@ namespace Zenith_Bans
 				if (buttons == MenuButtons.Select)
 				{
 					callback(reasonList[menu.Option]);
+					Menu.ClearMenus(caller);
 				}
 			}, false, _coreAccessor.GetValue<bool>("Core", "FreezeInMenu"), disableDeveloper: !_coreAccessor.GetValue<bool>("Core", "ShowDevelopers"));
 		}

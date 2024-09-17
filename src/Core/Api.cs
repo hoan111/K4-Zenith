@@ -14,8 +14,6 @@ namespace Zenith
 	{
 		public ModuleServices? _moduleServices;
 
-
-
 		public PlayerCapability<IPlayerServices> Capability_PlayerServices = null!;
 		public PluginCapability<IModuleServices> Capability_ModuleServices = null!;
 
