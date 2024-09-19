@@ -297,7 +297,7 @@ namespace Zenith_Bans
 				// Check self
 				CheckPlayerComms(caller, caller);
 			}
-			else if (AdminManager.PlayerHasPermissions(caller, "@zenith-admin/commscheck"))
+			else if (AdminManager.PlayerHasPermissions(caller, "@zenith-admin/commscheck") || AdminManager.PlayerHasPermissions(caller, "@zenith/root") || AdminManager.PlayerHasPermissions(caller, "@css/root"))
 			{
 				// Admin checking another player
 				ProcessTargetAction(caller, info.GetArgTargetResult(1), (target) => CheckPlayerComms(caller, target));
@@ -316,7 +316,7 @@ namespace Zenith_Bans
 				// Check self
 				CheckPlayerWarns(caller, caller);
 			}
-			else if (AdminManager.PlayerHasPermissions(caller, "@zenith-admin/warncheck"))
+			else if (AdminManager.PlayerHasPermissions(caller, "@zenith-admin/warncheck") || AdminManager.PlayerHasPermissions(caller, "@zenith/root") || AdminManager.PlayerHasPermissions(caller, "@css/root"))
 			{
 				// Admin checking another player
 				ProcessTargetAction(caller, info.GetArgTargetResult(1), (target) => CheckPlayerWarns(caller, target));

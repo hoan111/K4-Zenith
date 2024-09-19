@@ -3,6 +3,7 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Commands.Targeting;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.UserMessages;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -18,7 +19,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.6";
+	public override string ModuleVersion => "1.0.7";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -192,6 +193,10 @@ public sealed partial class Plugin : BasePlugin
 	private void RegisterCommands()
 	{
 		_moduleServices!.RegisterModuleCommands(_configAccessor.GetValue<List<string>>("Commands", "RankCommands"), "Show the rank informations.", OnRankCommand, CommandUsage.CLIENT_ONLY);
+		_moduleServices!.RegisterModuleCommands(new List<string>() { "zgivepoint", "zgivepoints" }, "Gives Zenith Rank point to the player.", OnGivePoints, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <amount>", "@zenith/point-admin");
+		_moduleServices!.RegisterModuleCommands(new List<string>() { "ztakepoint", "ztakepoints" }, "Takes Zenith Rank point from the player.", OnTakePoints, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <amount>", "@zenith/point-admin");
+		_moduleServices!.RegisterModuleCommands(new List<string>() { "zsetpoint", "zsetpoints" }, "Sets Zenith Rank point for the player.", OnSetPoints, CommandUsage.CLIENT_AND_SERVER, 2, "<target> <amount>", "@zenith/point-admin");
+		_moduleServices!.RegisterModuleCommands(new List<string>() { "zresetpoint", "zresetpoints" }, "Resets Zenith Rank point for the player.", OnResetPoints, CommandUsage.CLIENT_AND_SERVER, 1, "<target>", "@zenith/point-admin");
 	}
 
 	private void SetupZenithEvents()

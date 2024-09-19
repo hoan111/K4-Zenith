@@ -1,3 +1,15 @@
+# 2024.09.18 - 1.0.19
+
+- feat: Added possibility to print expired bans to admins on server
+- feat: Added compatibility for K4-Missions
+- feat: Added admin commands to set / take / give / reset rank points
+- feat: Added new config to separate ban module's discord webhooks for "bans" and "all other"
+- fix: Some statistics was not counted due to spawn check (such as rounds)
+- fix: Ban checking had a mistake that caused rare cases of bypassing
+- fix: Warn ban didnt counted as active
+- fix: Some places didnt recognise @css/root nor @zenith/root
+- fix: Round end points counted not spawned players aswell
+
 # 2024.09.17 - 1.0.18
 
 - feat: Added option to reset player kill streaks on round end aswell

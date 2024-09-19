@@ -37,36 +37,36 @@ namespace Zenith_Ranks
 		private HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
 		{
 			bool resetKillStreaks = GetCachedConfigValue<bool>("Points", "RoundEndKillStreakReset");
+			bool pointSummary = GetCachedConfigValue<bool>("Settings", "PointSummaries");
 
 			foreach (var player in GetValidPlayers())
 			{
-				if (player.Controller.TeamNum == @event.Winner)
-				{
-					ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "RoundWin"), "k4.events.roundwin");
-				}
-				else
-				{
-					ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "RoundLose"), "k4.events.roundlose");
-				}
-
-				player.SetStorage("Rank", GetRankName(player.Controller));
-
 				if (resetKillStreaks)
 					_eventManager?.ResetKillStreak(player);
-			}
 
-			if (_configAccessor.GetValue<bool>("Settings", "PointSummaries"))
-			{
-				foreach (var player in GetValidPlayers())
+				if (_playerSpawned.Contains(player.Controller))
 				{
-					if (player.GetSetting<bool>("ShowRankChanges") && _roundPoints.TryGetValue(player.Controller, out int points))
+					if (player.Controller.TeamNum == @event.Winner)
 					{
-						string message = points > 0 ? Localizer["k4.phrases.round-summary-earn", points] : Localizer["k4.phrases.round-summary-lose", points];
-						player.Print(message);
+						ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "RoundWin"), "k4.events.roundwin");
+					}
+					else
+					{
+						ModifyPlayerPoints(player, _configAccessor.GetValue<int>("Points", "RoundLose"), "k4.events.roundlose");
+					}
+
+					if (pointSummary)
+					{
+						if (player.GetSetting<bool>("ShowRankChanges") && _roundPoints.TryGetValue(player.Controller, out int points))
+						{
+							string message = points > 0 ? Localizer["k4.phrases.round-summary-earn", points] : Localizer["k4.phrases.round-summary-lose", points];
+							player.Print(message);
+						}
 					}
 				}
-				_roundPoints.Clear();
 			}
+
+			_roundPoints.Clear();
 			return HookResult.Continue;
 		}
 

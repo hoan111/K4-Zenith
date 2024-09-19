@@ -12,6 +12,15 @@
   "k4.phrases.newrank": "Your new rank is: {0}",
   "k4.phrases.rank.none": "Unranked",
 
+  "k4.phrases.no-target": "{lightred}Target not found.",
+  "k4.phrases.invalid-amount": "{lightred}Invalid amount.",
+  "k4.phrases.cant-target": "{lightred}{0} cannot be targeted currently.",
+
+  "k4.phrases.points-given": "{gold}{0} {green}has given you {red}{1} {green}rank points.",
+  "k4.phrases.points-taken": "{gold}{0} {green}has taken {red}{1} {green}rank points from you.",
+  "k4.phrases.points-reset": "{gold}{0} {lightred}has reset your rank points.",
+  "k4.phrases.points-set": "{gold}{0} {green}has set your rank points to {red}{1}{green}.",
+
   "k4.events.roundmvp": "being the MVP",
   "k4.events.hostagerescued": "rescuing a hostage",
   "k4.events.bombdefused": "defusing the bomb",

@@ -405,7 +405,7 @@ namespace Zenith_Bans
 				Localizer["k4.general.permanent"] :
 				$"{duration} {Localizer["k4.general.minutes"]}";
 
-			SendDiscordWebhookAsync("k4.discord.punishment", new Dictionary<string, string>
+			SendDiscordWebhookAsync("k4.discord.punishment", type == PunishmentType.Ban, new Dictionary<string, string>
 			{
 				["player"] = $"[{targetName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 				["type"] = type.ToString(),
@@ -596,7 +596,7 @@ namespace Zenith_Bans
 
 					BroadcastRemovePunishment(callerName, callerSteamId, targetName, type, removeReason);
 
-					SendDiscordWebhookAsync("k4.discord.unpunishment", new Dictionary<string, string>
+					SendDiscordWebhookAsync("k4.discord.unpunishment", type == PunishmentType.Ban, new Dictionary<string, string>
 					{
 						["player"] = $"[{targetName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 						["type"] = type.ToString(),
@@ -803,7 +803,7 @@ namespace Zenith_Bans
 						return;
 					}
 
-					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Ban && p.ExpiresAt.HasValue && p.ExpiresAt.Value.GetDateTime() > DateTime.Now))
+					if (playerData.Punishments.Any(p => p.Type == PunishmentType.Ban))
 					{
 						player.Disconnect(NetworkDisconnectionReason.NETWORK_DISCONNECT_REJECT_BANNED);
 						return;
@@ -861,7 +861,7 @@ namespace Zenith_Bans
 						playerData.Permissions = permissions;
 					}
 
-					SendDiscordWebhookAsync("k4.discord.addadmin", new Dictionary<string, string>
+					SendDiscordWebhookAsync("k4.discord.addadmin", false, new Dictionary<string, string>
 					{
 						["player"] = $"[{target.PlayerName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 						["group"] = group,
@@ -912,7 +912,7 @@ namespace Zenith_Bans
 						playerData.Immunity = null;
 					}
 
-					SendDiscordWebhookAsync("k4.discord.removeadmin", new Dictionary<string, string>
+					SendDiscordWebhookAsync("k4.discord.removeadmin", false, new Dictionary<string, string>
 					{
 						["player"] = $"[{target.PlayerName}](https://steamcommunity.com/profiles/{targetSteamId}) ({targetSteamId})",
 						["admin"] = callerName
@@ -980,9 +980,9 @@ namespace Zenith_Bans
 			}
 		}
 
-		private void SendDiscordWebhookAsync(string localizerKey, Dictionary<string, string> replacements)
+		private void SendDiscordWebhookAsync(string localizerKey, bool isBan, Dictionary<string, string> replacements)
 		{
-			string _webhookUrl = _coreAccessor.GetValue<string>("Config", "DiscordWebhookUrl");
+			string _webhookUrl = isBan ? _coreAccessor.GetValue<string>("Config", "BanDiscordWebhookUrl") : _coreAccessor.GetValue<string>("Config", "OtherDiscordWebhookUrl");
 			if (string.IsNullOrEmpty(_webhookUrl))
 				return;
 

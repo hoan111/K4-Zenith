@@ -18,7 +18,7 @@ public sealed partial class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.5";
+	public override string ModuleVersion => "1.0.6";
 
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
 	private PluginCapability<IModuleServices>? _moduleServicesCapability;
@@ -103,9 +103,12 @@ public sealed partial class Plugin : BasePlugin
 		_moduleServices.RegisterModuleConfig("Config", "GlobalPunishments", "Whether to apply punishments globally on all your servers", false);
 		_moduleServices.RegisterModuleConfig("Config", "ConnectAdminInfo", "Whether to show admin info on player connect (With @zenith/admin permission)", true);
 		_moduleServices.RegisterModuleConfig("Config", "ApplyIPBans", "(NOT RECOMMENDED )Whether to apply IP bans along with player bans. Not recommended due to Cloud Gaming, you ban everyone who use that data center.", false);
-		_moduleServices.RegisterModuleConfig("Config", "DiscordWebhookUrl", "Discord webhook URL for sending notifications", "", ConfigFlag.Protected);
 		_moduleServices.RegisterModuleConfig("Config", "DelayPlayerRemoval", "Delay in seconds before removing a player from the server on kick / ban to show a message about it. (0 - Instantly)", 5);
 		_moduleServices.RegisterModuleConfig("Config", "FetchAdminGroups", "Fetches admin groups from your CSS files to the database to use in menus", true);
+		_moduleServices.RegisterModuleConfig("Config", "NotifyAdminsOnBanExpire", "Whether to notify admins (@zenith/admin) when a player's ban expires", true);
+
+		_moduleServices.RegisterModuleConfig("Config", "BanDiscordWebhookUrl", "Discord webhook URL for sending ban notifications", "", ConfigFlag.Protected);
+		_moduleServices.RegisterModuleConfig("Config", "OtherDiscordWebhookUrl", "Discord webhook URL for sending notifications, except bans", "", ConfigFlag.Protected);
 
 		_zenithEvents = _moduleServices.GetEventHandler();
 		if (_zenithEvents != null)
