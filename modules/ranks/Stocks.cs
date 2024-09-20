@@ -75,6 +75,9 @@ public sealed partial class Plugin : BasePlugin
 			string newRankName = determinedRank?.Name ?? Localizer["k4.phrases.rank.none"];
 			player.SetStorage("Rank", newRankName);
 
+			if (!GetCachedConfigValue<bool>("Settings", "ShowRankChanges"))
+				return;
+
 			bool isRankUp = playerData.Rank is null || CompareRanks(determinedRank, playerData.Rank) > 0;
 			string messageKey = isRankUp ? "k4.phrases.rankup" : "k4.phrases.rankdown";
 			string colorCode = isRankUp ? "#00FF00" : "#FF0000";
@@ -100,8 +103,7 @@ public sealed partial class Plugin : BasePlugin
 
 	private PlayerRankInfo GetOrUpdatePlayerRankInfo(IPlayerServices player)
 	{
-		if (!_playerRankCache.TryGetValue(player.SteamID, out var rankInfo) ||
-			(DateTime.Now - rankInfo.LastUpdate) >= _cacheCleanupInterval)
+		if (!_playerRankCache.TryGetValue(player.SteamID, out var rankInfo) || (DateTime.Now - rankInfo.LastUpdate) >= _cacheCleanupInterval)
 		{
 			long currentPoints = player.GetStorage<long>("Points");
 			var (determinedRank, nextRank) = DetermineRanks(currentPoints);

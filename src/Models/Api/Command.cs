@@ -114,6 +114,8 @@ namespace Zenith
 					PrintPluginCommands(pluginEntry.Key, player);
 				}
 			}
+
+			Player.Find(player)?.Print("Command list has been printed to your console.");
 		}
 
 		private void PrintPluginCommands(string pluginName, CCSPlayerController? player)

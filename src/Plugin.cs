@@ -12,7 +12,7 @@ namespace Zenith
 	{
 		public Menu.KitsuneMenu Menu { get; private set; } = null!;
 		public Database Database { get; private set; } = null!;
-		public DateTime _lastStorageSave = DateTime.UtcNow;
+		public DateTime _lastStorageSave = DateTime.Now;
 
 		public override void Load(bool hotReload)
 		{
@@ -111,9 +111,9 @@ namespace Zenith
 				if (interval <= 0)
 					return;
 
-				if ((DateTime.UtcNow - _lastStorageSave).TotalMinutes >= interval)
+				if ((DateTime.Now - _lastStorageSave).TotalMinutes >= interval)
 				{
-					_lastStorageSave = DateTime.UtcNow;
+					_lastStorageSave = DateTime.Now;
 					_ = Task.Run(() => Player.SaveAllOnlinePlayerDataWithTransaction(this));
 				}
 			}, TimerFlags.REPEAT);

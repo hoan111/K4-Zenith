@@ -48,6 +48,8 @@
   "k4.commscheck.gag": "{lightred}⚠ Gag:{default} Issued by {lightblue}{0}{default}, Remaining: {yellow}{1}",
   "k4.commscheck.no-gag": "{green}✓ Not gagged {default}- Text chat allowed",
 
+  "k4.admin.ban_expired": "{gold}The ban for player {0} ({1}) has expired.",
+
   "k4.warncheck.header": "{lightred}Warning status for {0} (Total: {1}):",
   "k4.warncheck.warn": "{lightred}⚠ Warn {0}:{default} Issued by {lightblue}{1}{default}, Reason: {yellow}{2}",
   "k4.warncheck.no-warns": "{green}✓ No active warnings {default}- Clean record",

@@ -148,6 +148,8 @@ namespace Zenith
 					ListPlaceholdersForPlugin(plugin, player);
 				}
 			}
+
+			Player.Find(player)?.Print("Placeholder list has been printed to your console.");
 		}
 
 		private void ListPlaceholdersForPlugin(string pluginName, CCSPlayerController? player = null)

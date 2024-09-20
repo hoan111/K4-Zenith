@@ -34,7 +34,7 @@ namespace Zenith_Bans
 					{
 						SteamId = steamID,
 						PlayerName = player.PlayerName,
-						DisconnectedAt = DateTime.UtcNow
+						DisconnectedAt = DateTime.Now
 					});
 					_playerCache.Remove(steamID);
 				}

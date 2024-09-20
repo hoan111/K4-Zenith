@@ -93,6 +93,12 @@ public sealed partial class Player
 
 	public void Print(string message, bool showPrefix = true)
 	{
+		if (Controller == null || !Controller.IsValid)
+		{
+			RemoveFromList(SteamID);
+			return;
+		}
+
 		string prefix = showPrefix ? $" {_plugin.Localizer["k4.general.prefix"]}" : "";
 		Controller?.PrintToChat($"{prefix}{message}");
 	}
@@ -258,15 +264,9 @@ public sealed partial class Player
 
 	public void EnforcePluginValues(string coreFormat)
 	{
-		if (IsMuted)
+		if (IsMuted && Controller?.VoiceFlags.HasFlag(VoiceFlags.Muted) == false)
 		{
-			if (!Controller!.VoiceFlags.HasFlag(VoiceFlags.Muted))
-				Controller!.VoiceFlags |= VoiceFlags.Muted;
-		}
-		else
-		{
-			if (Controller!.VoiceFlags.HasFlag(VoiceFlags.Muted))
-				Controller!.VoiceFlags &= ~VoiceFlags.Muted;
+			Controller!.VoiceFlags |= VoiceFlags.Muted;
 		}
 
 		if (GetSetting<bool>("ShowClanTags"))
@@ -275,7 +275,7 @@ public sealed partial class Player
 
 			if (!string.IsNullOrEmpty(clanTag))
 			{
-				Controller.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);
+				Controller!.Clan = _plugin.ReplacePlayerPlaceholders(Controller, clanTag);
 				Utilities.SetStateChanged(Controller, "CCSPlayerController", "m_szClan");
 			}
 		}

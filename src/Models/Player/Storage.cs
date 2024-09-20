@@ -32,6 +32,7 @@ public sealed partial class Player
 			var createSettingsTableQuery = $@"
 				CREATE TABLE IF NOT EXISTS `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}` (
 					`steam_id` VARCHAR(32) NOT NULL,
+					`name` VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
 					`last_online` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 					PRIMARY KEY (`steam_id`)
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
@@ -41,6 +42,7 @@ public sealed partial class Player
 			var createStorageTableQuery = $@"
 				CREATE TABLE IF NOT EXISTS `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}` (
 					`steam_id` VARCHAR(32) NOT NULL,
+					`name` VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
 					`last_online` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 					PRIMARY KEY (`steam_id`)
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
@@ -371,13 +373,13 @@ public sealed partial class Player
 			using var connection = _plugin.Database.CreateConnection();
 			await connection.OpenAsync();
 			var query = $@"
-				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}` (`steam_id`, `last_online`)
-				VALUES (@SteamID, NOW())
-				ON DUPLICATE KEY UPDATE `last_online` = NOW();
+				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}` (`steam_id`, `name`, `last_online`)
+				VALUES (@SteamID, '{Name}', NOW())
+				ON DUPLICATE KEY UPDATE `name` = '{Name}', `last_online` = NOW();
 
-				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}` (`steam_id`, `last_online`)
-				VALUES (@SteamID, NOW())
-				ON DUPLICATE KEY UPDATE `last_online` = NOW();";
+				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}` (`steam_id`, `name`, `last_online`)
+				VALUES (@SteamID, '{Name}', NOW())
+				ON DUPLICATE KEY UPDATE `name` = '{Name}', `last_online` = NOW();";
 			await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString() });
 		}
 		catch (Exception ex)
@@ -451,9 +453,9 @@ public sealed partial class Player
 			var updateStatements = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}` = @p_{k.Replace("-", "_")}"));
 
 			var query = $@"
-                INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, {columns})
-                VALUES (@p_SteamID, {parameters})
-                ON DUPLICATE KEY UPDATE {updateStatements};";
+                INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `name`, {columns})
+                VALUES (@p_SteamID, '{Name}', {parameters})
+                ON DUPLICATE KEY UPDATE `name` = '{Name}', {updateStatements};";
 
 			var queryParams = new DynamicParameters();
 			queryParams.Add("@p_SteamID", SteamID.ToString());
@@ -502,9 +504,9 @@ public sealed partial class Player
 			var updateStatements = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}` = @p_{k.Replace("-", "_")}"));
 
 			var query = $@"
-				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, {columns})
-				VALUES (@p_SteamID, {parameters})
-				ON DUPLICATE KEY UPDATE {updateStatements};";
+				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `name`, {columns})
+				VALUES (@p_SteamID, {Name}, {parameters})
+				ON DUPLICATE KEY UPDATE `name` = {Name}, {updateStatements};";
 
 			var queryParams = new DynamicParameters();
 			queryParams.Add("@p_SteamID", SteamID.ToString());

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using CounterStrikeSharp.API;
 using System.Reflection;
 using ZenithAPI;
+using System.Globalization;
 
 namespace Zenith
 {
@@ -104,8 +105,8 @@ namespace Zenith
 	public class ModuleConfig
 	{
 		public required string ModuleName { get; set; }
-		public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-		public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+		public DateTime CreatedAt { get; set; } = DateTime.Now;
+		public DateTime LastUpdated { get; set; } = DateTime.Now;
 		public ConcurrentDictionary<string, ConfigGroup> Groups { get; set; } = new ConcurrentDictionary<string, ConfigGroup>();
 	}
 
@@ -290,7 +291,6 @@ namespace Zenith
 		{
 			var group = config.Groups.FirstOrDefault(g => g.Key == groupName);
 			var configItem = group.Value?.Items.GetValueOrDefault(configName);
-
 			if (configItem != null)
 			{
 				if (checkGlobalOnly && !configItem.Flags.HasFlag(ConfigFlag.Global))
@@ -298,71 +298,63 @@ namespace Zenith
 					Logger.LogWarning($"Config '{groupName}.{configName}' not allowed to be accessed globally");
 					return (false, default!);
 				}
-
 				if (callerModule != CoreModuleName && callerModule != config.ModuleName && !configItem.Flags.HasFlag(ConfigFlag.Global))
 				{
 					Logger.LogWarning($"Attempt to access non-global config '{groupName}.{configName}' from module '{callerModule}'");
 					return (false, default!);
 				}
-
 				if (configItem.CurrentValue == null)
 				{
 					Logger.LogWarning($"Config '{groupName}.{configName}' has a null value for module '{config.ModuleName}'");
 					throw new InvalidOperationException($"Configuration '{groupName}.{configName}' has null value for module '{config.ModuleName}'");
 				}
-
 				try
 				{
 					if (typeof(T) == typeof(string) && configItem.CurrentValue is string currentString && string.IsNullOrEmpty(currentString))
 					{
 						return (true, (T)(object)"");
 					}
-
 					if (typeof(T) == typeof(List<string>) && configItem.CurrentValue is List<object> objectList)
 					{
 						var stringList = objectList.Select(o => o.ToString() ?? string.Empty).ToList();
 						return (true, (T)(object)stringList);
 					}
-
 					if (typeof(T) == typeof(List<int>) && configItem.CurrentValue is List<object> intObjectList)
 					{
-						var intList = intObjectList.Select(o => Convert.ToInt32(o)).ToList();
+						var intList = intObjectList.Select(o => Convert.ToInt32(o, CultureInfo.InvariantCulture)).ToList();
 						return (true, (T)(object)intList);
 					}
-
 					if (typeof(T) == typeof(List<double>) && configItem.CurrentValue is List<object> doubleObjectList)
 					{
-						var doubleList = doubleObjectList.Select(o => Convert.ToDouble(o)).ToList();
+						var doubleList = doubleObjectList.Select(o => Convert.ToDouble(o, CultureInfo.InvariantCulture)).ToList();
 						return (true, (T)(object)doubleList);
 					}
-
 					if (typeof(T) == typeof(List<float>) && configItem.CurrentValue is List<object> floatObjectList)
 					{
-						var floatList = floatObjectList.Select(o => Convert.ToSingle(o)).ToList();
+						var floatList = floatObjectList.Select(o => Convert.ToSingle(o, CultureInfo.InvariantCulture)).ToList();
 						return (true, (T)(object)floatList);
 					}
-
 					if (typeof(T) == typeof(List<decimal>) && configItem.CurrentValue is List<object> decimalObjectList)
 					{
-						var decimalList = decimalObjectList.Select(o => Convert.ToDecimal(o)).ToList();
+						var decimalList = decimalObjectList.Select(o => Convert.ToDecimal(o, CultureInfo.InvariantCulture)).ToList();
 						return (true, (T)(object)decimalList);
 					}
-
 					if (typeof(T) == typeof(double) && configItem.CurrentValue is object doubleValue)
 					{
-						return (true, (T)(object)Convert.ToDouble(doubleValue));
+						return (true, (T)(object)Convert.ToDouble(doubleValue, CultureInfo.InvariantCulture));
 					}
-
 					if (typeof(T) == typeof(float) && configItem.CurrentValue is object floatValue)
 					{
-						return (true, (T)(object)Convert.ToSingle(floatValue));
+						return (true, (T)(object)Convert.ToSingle(floatValue, CultureInfo.InvariantCulture));
 					}
-
 					if (typeof(T) == typeof(decimal) && configItem.CurrentValue is object decimalValue)
 					{
-						return (true, (T)(object)Convert.ToDecimal(decimalValue));
+						return (true, (T)(object)Convert.ToDecimal(decimalValue, CultureInfo.InvariantCulture));
 					}
-
+					if (typeof(T).IsPrimitive || typeof(T) == typeof(decimal))
+					{
+						return (true, (T)Convert.ChangeType(configItem.CurrentValue, typeof(T), CultureInfo.InvariantCulture));
+					}
 					return (true, (T)Convert.ChangeType(configItem.CurrentValue, typeof(T)));
 				}
 				catch (InvalidCastException ex)
@@ -370,8 +362,12 @@ namespace Zenith
 					Logger.LogError($"Failed to cast config value for '{groupName}.{configName}' to type {typeof(T)}. Stored type: {configItem.CurrentValue.GetType()}. Error: {ex.Message}");
 					throw;
 				}
+				catch (FormatException ex)
+				{
+					Logger.LogError($"Failed to parse config value '{configItem.CurrentValue}' for '{groupName}.{configName}' to type {typeof(T)}. Error: {ex.Message}");
+					throw;
+				}
 			}
-
 			return (false, default!);
 		}
 

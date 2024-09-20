@@ -24,7 +24,7 @@ public class Plugin : BasePlugin
 
 	public override string ModuleName => $"K4-Zenith | {MODULE_ID}";
 	public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
-	public override string ModuleVersion => "1.0.3";
+	public override string ModuleVersion => "1.0.4";
 
 	public KitsuneMenu Menu { get; private set; } = null!;
 	private PlayerCapability<IPlayerServices>? _playerServicesCapability;
@@ -35,22 +35,6 @@ public class Plugin : BasePlugin
 	private IModuleServices? _moduleServices;
 	private readonly Dictionary<ulong, PlayerStats> _playerStats = [];
 	private readonly HashSet<CCSPlayerController> playerSpawned = [];
-
-	private readonly Dictionary<string, List<string>> _eventTargets = new()
-	{
-		{ "EventPlayerDeath", new List<string> { "Userid", "Attacker", "Assister" } },
-		{ "EventGrenadeThrown", new List<string> { "Userid" } },
-		{ "EventPlayerHurt", new List<string> { "Userid", "Attacker" } },
-		{ "EventRoundStart", new List<string>() },
-		{ "EventBombPlanted", new List<string> { "Userid" } },
-		{ "EventHostageRescued", new List<string> { "Userid" } },
-		{ "EventHostageKilled", new List<string> { "Userid" } },
-		{ "EventBombDefused", new List<string> { "Userid" } },
-		{ "EventRoundEnd", new List<string> { "winner" } },
-		{ "EventWeaponFire", new List<string> { "Userid" } },
-		{ "EventRoundMvp", new List<string> { "Userid" } },
-		{ "EventCsWinPanelMatch", new List<string>() }
-	};
 
 	public override void OnAllPluginsLoaded(bool hotReload)
 	{
@@ -416,7 +400,7 @@ public class Plugin : BasePlugin
 		RegisterEventHandler<EventRoundEnd>(OnRoundEnd, HookMode.Post);
 		RegisterEventHandler<EventWeaponFire>(OnWeaponFire, HookMode.Post);
 		RegisterEventHandler<EventRoundMvp>(OnRoundMvp, HookMode.Post);
-		RegisterEventHandler<EventCsWinPanelMatch>(OnCsWinPanelMatch, HookMode.Post);
+		RegisterEventHandler<EventCsWinPanelMatch>(OnCsWinPanelMatch, HookMode.Pre);
 	}
 
 	private HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
@@ -939,19 +923,18 @@ public class Plugin : BasePlugin
 		{
 			foreach (var playerStats in _plugin._playerStats.Values)
 			{
-				if (_plugin.playerSpawned.Contains(playerStats.ZenithPlayer.Controller))
+				if (!_plugin.playerSpawned.Contains(playerStats.ZenithPlayer.Controller))
 					continue;
 
 				CsTeam team = playerStats.ZenithPlayer.Controller.Team;
+				if (team <= CsTeam.Spectator)
+					continue;
 
 				playerStats.IncrementStat("RoundsOverall");
 				if (team == CsTeam.Terrorist)
 					playerStats.IncrementStat("RoundsT");
 				else if (team == CsTeam.CounterTerrorist)
 					playerStats.IncrementStat("RoundsCT");
-
-				if (team <= CsTeam.Spectator)
-					continue;
 
 				if ((int)team == @event.Winner)
 					playerStats.IncrementStat("RoundWin");
@@ -1011,10 +994,7 @@ public class Plugin : BasePlugin
 				}
 			}
 
-			if (winner != null)
-			{
-				winner.IncrementStat("GameWin");
-			}
+			winner?.IncrementStat("GameWin");
 
 			foreach (var player in players)
 			{

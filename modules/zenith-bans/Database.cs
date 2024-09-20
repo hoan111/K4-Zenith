@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Entities;
 using Dapper;
 using Microsoft.Extensions.Logging;
@@ -138,7 +139,7 @@ namespace Zenith_Bans
 					LEFT JOIN `{prefix}zenith_bans_players` admin ON pun.`admin_steam_id` = admin.`steam_id`
 					WHERE pun.`steam_id` = @SteamId
 					AND (pun.`server_ip` = 'all' OR pun.`server_ip` = @ServerIp)
-					AND pun.`status` = 'active'
+					AND pun.`status` IN ('active', 'warn_ban')
 					AND (
 						pun.`type` = 'warn'
 						OR (pun.`type` IN ('mute', 'gag', 'silence', 'ban') AND (pun.`expires_at` > NOW() OR pun.`expires_at` IS NULL))
@@ -186,7 +187,7 @@ namespace Zenith_Bans
 
 					DateTime? rankExpiry = playerData.RankExpiry?.IsValidDateTime == true ? (DateTime?)playerData.RankExpiry : null;
 
-					if (rankExpiry <= DateTime.UtcNow)
+					if (rankExpiry <= DateTime.Now)
 					{
 						playerData.Groups = new List<string>();
 						playerData.Permissions = new List<string>();
@@ -486,6 +487,8 @@ namespace Zenith_Bans
 				using var multi = await connection.QueryMultipleAsync(query);
 				var removedPunishments = await multi.ReadAsync<(ulong SteamId, string Type, string PlayerName, string CurrentServer)>();
 
+				bool notifyAdmins = _coreAccessor.GetValue<bool>("Config", "NotifyAdminsOnBanExpire");
+
 				Server.NextWorldUpdate(async () =>
 				{
 					foreach (var (steamId, type, playerName, currentServer) in removedPunishments)
@@ -493,10 +496,15 @@ namespace Zenith_Bans
 						var player = Utilities.GetPlayerFromSteamId(steamId);
 						if (player != null && _playerCache.TryGetValue(steamId, out var playerData))
 						{
-							playerData.Punishments.RemoveAll(p => p.Type.ToString().Equals(type, StringComparison.CurrentCultureIgnoreCase) && p.ExpiresAt?.GetDateTime() <= DateTime.UtcNow);
+							playerData.Punishments.RemoveAll(p => p.Type.ToString().Equals(type, StringComparison.CurrentCultureIgnoreCase) && p.ExpiresAt?.GetDateTime() <= DateTime.Now);
 							RemovePunishmentEffect(player, Enum.Parse<PunishmentType>(type, true));
 
 							_moduleServices?.PrintForPlayer(player, Localizer[$"k4.punishment.expired.{type.ToLower()}"]);
+						}
+
+						if (notifyAdmins && type.Equals("ban", StringComparison.OrdinalIgnoreCase))
+						{
+							NotifyAdminsAboutExpiredBan(playerName, steamId);
 						}
 					}
 
@@ -506,6 +514,18 @@ namespace Zenith_Bans
 			catch (Exception ex)
 			{
 				Logger.LogError($"Error in RemoveExpiredPunishmentsAsync: {ex.Message}");
+			}
+		}
+
+		private void NotifyAdminsAboutExpiredBan(string playerName, ulong steamId)
+		{
+			var players = Utilities.GetPlayers();
+			foreach (var admin in players)
+			{
+				if (admin.IsValid && !admin.IsBot && !admin.IsHLTV && (AdminManager.PlayerHasPermissions(admin, "@zenith/admin") || AdminManager.PlayerHasPermissions(admin, "@zenith/root") || AdminManager.PlayerHasPermissions(admin, "@css/root")))
+				{
+					_moduleServices?.PrintForPlayer(admin, Localizer["k4.admin.ban_expired", playerName, steamId]);
+				}
 			}
 		}
 
