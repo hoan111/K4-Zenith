@@ -19,14 +19,18 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src-api\K4-ZenithAPI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="DamageManagementAPI">
+      <HintPath>..\..\..\..\CS2-DamageManagement-master\SharedAPI\bin\Release\net8.0\DamageManagementAPI.dll</HintPath>
+    </Reference>
+    <Reference Include="KitsuneMenu">
+      <HintPath>..\..\KitsuneMenu\KitsuneMenu.dll</HintPath>
+    </Reference>
     <Reference Include="ZenithAPI">
       <HintPath>$(ProjectDir)\..\..\src-api\bin\K4-ZenithAPI\K4-ZenithAPI.dll</HintPath>
       <Private>false</Private>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="KitsuneMenu">
-      <HintPath>/Users/sples/Projects/CS2_Random/Menu-main/src/bin/Release/net8.0/publish/KitsuneMenu.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
