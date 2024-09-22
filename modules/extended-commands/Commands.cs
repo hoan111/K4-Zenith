@@ -104,7 +104,7 @@ public sealed partial class Plugin : BasePlugin
 			ProcessTargetAction(player, info.GetArgTargetResult(1), target =>
 			{
 				EnableOriginalOnTakeDamageMethod = true;
-				target?.PlayerPawn.Value?.CommitSuicide(false, false);
+				target?.PlayerPawn.Value?.CommitSuicide	(false, false);
                 EnableOriginalOnTakeDamageMethod = false;
                 ShowActivityToPlayers(player?.SteamID, "commands.slay.success", player?.PlayerName ?? Localizer["k4.general.console"], target!.PlayerName);
 			}, true);

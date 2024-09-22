@@ -36,6 +36,7 @@ md Zenith\shared
 :: Copy main plugin folder to plugins folder, ignoring specific file names
 call :echo_message "%YELLOW%" "[ INFO ] Copying main plugin files..."
 robocopy src\bin\K4-Zenith\plugins\K4-Zenith Zenith\plugins\K4-Zenith /mir /xf "K4-ZenithAPI.dll" "KitsuneMenu.dll" "KitsuneMenu.pdb" /NDL /NFL /NJH /NJS /NP >nul
+rsync -a --quiet ./GeoLite2-Country.mmdb ./Zenith/plugins/K4-Zenith/
 
 :: Copy shared folder's dirs to shared folder
 call :echo_message "%YELLOW%" "[ INFO ] Copying shared files..."
@@ -49,16 +50,17 @@ call :echo_message "%YELLOW%" "[ INFO ] Copying Ranks module..."
 robocopy modules\ranks\bin\K4-Zenith-Ranks Zenith\plugins\K4-Zenith-Ranks /mir /NDL /NFL /NJH /NJS /NP >nul
 
 call :echo_message "%YELLOW%" "[ INFO ] Copying Statistics module..."
-robocopy modules\statistics\bin\K4-Zenith-Stats Zenith\plugins\K4-Zenith-Stats /mir /NDL /NFL /NJH /NJS /NP >nul
+:: robocopy modules\statistics\bin\K4-Zenith-Stats Zenith\plugins\K4-Zenith-Stats /mir /NDL /NFL /NJH /NJS /NP >nul
+rsync -a --quiet --exclude="KitsuneMenu.dll" ./modules/statistics/bin/K4-Zenith-Stats/ ./Zenith/plugins/K4-Zenith-Stats/
 
 call :echo_message "%YELLOW%" "[ INFO ] Copying Admin module..."
 rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modules/zenith-bans/bin/K4-Zenith-Bans/ ./Zenith/plugins/K4-Zenith-Bans/
 
 call :echo_message "%YELLOW%" "[ INFO ] Copying Extended Commands module..."
-rsync -a --quiet ./modules/extended-commands/bin/K4-Zenith-ExtendedCommands/ ./Zenith/plugins/K4-Zenith-ExtendedCommands/
+rsync -a --quiet --exclude="DamageManagementAPI.dll" ./modules/extended-commands/bin/K4-Zenith-ExtendedCommands/ ./Zenith/plugins/K4-Zenith-ExtendedCommands/
 
 call :echo_message "%YELLOW%" "[ INFO ] Copying Custom Tags module..."
-rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" ./modules/custom-tags/bin/K4-Zenith-CustomTags/ ./Zenith/plugins/K4-Zenith-CustomTags/
+rsync -a --quiet --exclude="KitsuneMenu.dll" --exclude="KitsuneMenu.pdb" --exclude="DamageManagementAPI.dll" ./modules/custom-tags/bin/K4-Zenith-CustomTags/ ./Zenith/plugins/K4-Zenith-CustomTags/
 
 :: Delete files with a specific extension from Zenith and sub-folders
 call :echo_message "%BLUE%" "[ INFO ] Cleaning up unnecessary files..."
