@@ -24,7 +24,7 @@ public sealed partial class Plugin : BasePlugin
 
 	private IZenithEvents? _zenithEvents;
 	private IModuleServices? _moduleServices;
-	private IDamageManagementAPI damageManagementAPI;
+	private IDamageManagementAPI? damageManagementAPI;
 	public static bool EnableOriginalOnTakeDamageMethod = false;
 
 
@@ -80,16 +80,17 @@ public sealed partial class Plugin : BasePlugin
         try
         {
             _damageManagementCapability = new("damagemanagement:api");
+
+            damageManagementAPI = _damageManagementCapability.Get();
+            if (damageManagementAPI != null)
+            {
+                damageManagementAPI.Hook_OnTakeDamage(CallOriginalOnTakeDamageMethod);
+                Logger.LogInformation("Successfully get DamageManagementAPI instance and hook OnTakeDamage");
+            }
         }
         catch (Exception ex)
         {
             Logger.LogError("Failed to initialize CS2-DamageManagement API: {@msg}\nIgnore this message if you are not using CS2-DamagementPlugin", ex.Message);
-        }
-        damageManagementAPI = _damageManagementCapability.Get();
-        if (damageManagementAPI != null)
-        {
-            damageManagementAPI.Hook_OnTakeDamage(CallOriginalOnTakeDamageMethod);
-            Logger.LogInformation("Successfully get DamageManagementAPI instance and hook OnTakeDamage");
         }
 
         Initialize_Commands();

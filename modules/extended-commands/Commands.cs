@@ -341,7 +341,9 @@ public sealed partial class Plugin : BasePlugin
 
 					if (pawn.Health - damage <= 0)
 					{
+						EnableOriginalOnTakeDamageMethod = true;
 						pawn.CommitSuicide(false, false);
+						EnableOriginalOnTakeDamageMethod = false;
 						ShowActivityToPlayers(player?.SteamID, "commands.slay.success", player?.PlayerName ?? Localizer["k4.general.console"], target.PlayerName);
 						return;
 					}
