@@ -1,3 +1,10 @@
+# 2024.09.19 - 1.0.20
+
+- fix: Rank module round end gave points even if it was blocked
+- fix: Escaped player names properly to prevent issues
+- fix: Double running of removing offline players from db (bans)
+- fix: Query issue of removing offline players from db (bans)
+
 # 2024.09.18 - 1.0.19
 
 - feat: Added possibility to print expired bans to admins on server
