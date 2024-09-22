@@ -372,14 +372,16 @@ public sealed partial class Player
 			string tablePrefix = _plugin.Database.TablePrefix;
 			using var connection = _plugin.Database.CreateConnection();
 			await connection.OpenAsync();
+			string escapedName = MySqlHelper.EscapeString(Name);
+
 			var query = $@"
 				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_SETTINGS}` (`steam_id`, `name`, `last_online`)
-				VALUES (@SteamID, '{Name}', NOW())
-				ON DUPLICATE KEY UPDATE `name` = '{Name}', `last_online` = NOW();
+				VALUES (@SteamID, '{escapedName}', NOW())
+				ON DUPLICATE KEY UPDATE `name` = '{escapedName}', `last_online` = NOW();
 
 				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{TABLE_PLAYER_STORAGE}` (`steam_id`, `name`, `last_online`)
-				VALUES (@SteamID, '{Name}', NOW())
-				ON DUPLICATE KEY UPDATE `name` = '{Name}', `last_online` = NOW();";
+				VALUES (@SteamID, '{escapedName}', NOW())
+				ON DUPLICATE KEY UPDATE `name` = '{escapedName}', `last_online` = NOW();";
 			await connection.ExecuteAsync(query, new { SteamID = SteamID.ToString() });
 		}
 		catch (Exception ex)
@@ -452,10 +454,11 @@ public sealed partial class Player
 			var parameters = string.Join(", ", dataToSave.Keys.Select(k => $"@p_{k.Replace("-", "_")}"));
 			var updateStatements = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}` = @p_{k.Replace("-", "_")}"));
 
+			string escapedName = MySqlHelper.EscapeString(Name);
 			var query = $@"
                 INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `name`, {columns})
-                VALUES (@p_SteamID, '{Name}', {parameters})
-                ON DUPLICATE KEY UPDATE `name` = '{Name}', {updateStatements};";
+                VALUES (@p_SteamID, '{escapedName}', {parameters})
+                ON DUPLICATE KEY UPDATE `name` = '{escapedName}', {updateStatements};";
 
 			var queryParams = new DynamicParameters();
 			queryParams.Add("@p_SteamID", SteamID.ToString());
@@ -503,10 +506,11 @@ public sealed partial class Player
 			var parameters = string.Join(", ", dataToSave.Keys.Select(k => $"@p_{k.Replace("-", "_")}"));
 			var updateStatements = string.Join(", ", dataToSave.Keys.Select(k => $"`{MySqlHelper.EscapeString(k)}` = @p_{k.Replace("-", "_")}"));
 
+			string escapedName = MySqlHelper.EscapeString(Name);
 			var query = $@"
 				INSERT INTO `{MySqlHelper.EscapeString(tablePrefix)}{tableName}` (`steam_id`, `name`, {columns})
-				VALUES (@p_SteamID, {Name}, {parameters})
-				ON DUPLICATE KEY UPDATE `name` = {Name}, {updateStatements};";
+				VALUES (@p_SteamID, {escapedName}, {parameters})
+				ON DUPLICATE KEY UPDATE `name` = {escapedName}, {updateStatements};";
 
 			var queryParams = new DynamicParameters();
 			queryParams.Add("@p_SteamID", SteamID.ToString());

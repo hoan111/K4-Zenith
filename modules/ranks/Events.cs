@@ -36,6 +36,8 @@ namespace Zenith_Ranks
 
 		private HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
 		{
+			if (!ShouldProcessEvent()) return HookResult.Continue;
+
 			bool resetKillStreaks = GetCachedConfigValue<bool>("Points", "RoundEndKillStreakReset");
 			bool pointSummary = GetCachedConfigValue<bool>("Settings", "PointSummaries");
 

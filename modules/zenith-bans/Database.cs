@@ -443,12 +443,12 @@ namespace Zenith_Bans
 				await connection.OpenAsync();
 
 				var query = $@"
-					UPDATE `{prefix}zenith_bans_players`
-					SET `current_server` = NULL
-					WHERE `current_server` = @ServerIp
-					AND `steam_id` NOT IN @OnlineSteamIds;";
+					UPDATE {prefix}zenith_bans_players
+					SET current_server = NULL
+					WHERE current_server = @ServerIp
+					AND steam_id NOT IN @OnlineSteamIds;";
 
-				await connection.ExecuteAsync(query, new { ServerIp = _serverIp, OnlineSteamIds = onlineSteamIds });
+				await connection.ExecuteAsync(query, new { ServerIp = _serverIp, OnlineSteamIds = onlineSteamIds.ToList() });
 			}
 			catch (Exception ex)
 			{
@@ -489,7 +489,7 @@ namespace Zenith_Bans
 
 				bool notifyAdmins = _coreAccessor.GetValue<bool>("Config", "NotifyAdminsOnBanExpire");
 
-				Server.NextWorldUpdate(async () =>
+				Server.NextWorldUpdate(() =>
 				{
 					foreach (var (steamId, type, playerName, currentServer) in removedPunishments)
 					{
@@ -507,8 +507,6 @@ namespace Zenith_Bans
 							NotifyAdminsAboutExpiredBan(playerName, steamId);
 						}
 					}
-
-					await RemoveOfflinePlayersFromServerAsync(onlineSteamIds);
 				});
 			}
 			catch (Exception ex)
